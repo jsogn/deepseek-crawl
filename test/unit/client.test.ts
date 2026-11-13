@@ -79,6 +79,30 @@ describe("DeepSeekClient", () => {
     expect(requestUrl).toBe("https://api.deepseek.com/v1/tools/fetch");
   });
 
+  it("rejects Fetch bodies above the configured byte limit", async () => {
+    const { client } = createClient(
+      async () =>
+        new Response(JSON.stringify({ title: "Large", content: "x".repeat(100) }), {
+          headers: { "content-type": "application/json" },
+        }),
+      { fetchResponseByteLimit: 32 },
+    );
+
+    await expect(client.fetch({ url: "https://example.com" })).rejects.toMatchObject({
+      kind: "resource_limit",
+    });
+  });
+
+  it("does not apply the Fetch byte limit to Search", async () => {
+    const { client } = createClient(async () => Response.json(searchResponse), {
+      fetchResponseByteLimit: 1,
+    });
+
+    await expect(client.search({ query: "test", count: 1, need_content: false })).resolves.toEqual(
+      searchResponse,
+    );
+  });
+
   it.each([408, 429, 500, 502, 503, 504])("retries HTTP %s", async (status) => {
     let calls = 0;
     const { client, delays } = createClient(async () => {
@@ -190,6 +214,28 @@ describe("DeepSeekClient", () => {
     await expect(
       client.search({ query: "test", count: 1, need_content: false }),
     ).rejects.toMatchObject({ kind: "timeout" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the timeout active while reading a bounded Fetch body", async () => {
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, options?: RequestInit) => {
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            options?.signal?.addEventListener(
+              "abort",
+              () => controller.error(new DOMException("Aborted", "AbortError")),
+              { once: true },
+            );
+          },
+        }),
+      );
+    }) as unknown as typeof fetch;
+    const { client } = createClient(fetchImpl, { timeoutMs: 10 });
+
+    await expect(client.fetch({ url: "https://example.com/page" })).rejects.toMatchObject({
+      kind: "timeout",
+    });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 

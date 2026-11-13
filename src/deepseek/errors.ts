@@ -10,6 +10,7 @@ export type DeepSeekErrorKind =
   | "network"
   | "timeout"
   | "cancelled"
+  | "resource_limit"
   | "invalid_response";
 
 export interface DeepSeekErrorOptions {

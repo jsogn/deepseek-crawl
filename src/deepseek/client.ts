@@ -1,3 +1,4 @@
+import type { ReadableStreamDefaultReader } from "node:stream/web";
 import type { z } from "zod";
 import type { FetchInput, RawFetchResponse, RawSearchResponse, SearchInput } from "../types.js";
 import { DeepSeekError, type DeepSeekErrorKind } from "./errors.js";
@@ -14,6 +15,7 @@ export interface DeepSeekClientOptions {
   fetchImpl?: typeof fetch;
   sleep?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
   random?: () => number;
+  fetchResponseByteLimit?: number;
 }
 
 function cancellationError(): DeepSeekError {
@@ -145,6 +147,71 @@ function jitteredDelay(attempt: number, random: () => number): number {
   return Math.round(base * factor);
 }
 
+function responseTooLargeError(): DeepSeekError {
+  return new DeepSeekError("DeepSeek Fetch response exceeded the configured byte limit.", {
+    kind: "resource_limit",
+  });
+}
+
+function readChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+): ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      reader.cancel().catch(() => undefined);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    reader.read().then(
+      (result) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(result);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function readJsonWithByteLimit<T>(
+  response: Response,
+  maxBytes: number,
+  schema: z.ZodType<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  const contentLength = response.headers.get("content-length");
+  if (contentLength !== null && Number(contentLength) > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw responseTooLargeError();
+  }
+
+  if (!response.body) {
+    return schema.parse(JSON.parse(await response.text()));
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const chunk = await readChunk(reader, signal);
+    if (chunk.done) {
+      break;
+    }
+    total += chunk.value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw responseTooLargeError();
+    }
+    chunks.push(chunk.value);
+  }
+
+  return schema.parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+}
+
 export class DeepSeekClient {
   readonly #apiKey: string;
   readonly #baseUrl: URL;
@@ -153,6 +220,7 @@ export class DeepSeekClient {
   readonly #fetchImpl: typeof fetch;
   readonly #sleep: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
   readonly #random: () => number;
+  readonly #fetchResponseByteLimit: number;
 
   constructor(options: DeepSeekClientOptions) {
     this.#apiKey = options.apiKey;
@@ -162,6 +230,7 @@ export class DeepSeekClient {
     this.#fetchImpl = options.fetchImpl ?? globalThis.fetch;
     this.#sleep = options.sleep ?? defaultSleep;
     this.#random = options.random ?? Math.random;
+    this.#fetchResponseByteLimit = options.fetchResponseByteLimit ?? 8 * 1024 * 1024;
   }
 
   search(input: SearchInput, signal?: AbortSignal): Promise<RawSearchResponse> {
@@ -221,6 +290,14 @@ export class DeepSeekClient {
           throw error;
         }
 
+        if (operation === "fetch") {
+          return await readJsonWithByteLimit(
+            response,
+            this.#fetchResponseByteLimit,
+            schema,
+            requestSignal,
+          );
+        }
         return schema.parse(await response.json());
       } catch (error) {
         if (signal?.aborted) {

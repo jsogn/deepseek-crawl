@@ -42,6 +42,7 @@ Version `0.7.0` provides:
 - Batch Fetch from URL lists and Map JSON with per-page failure records.
 - Crawl include/exclude paths and query-parameter deduplication.
 - Crawl Plan previews the initial frontier before child pages are fetched.
+- Batch Fetch and Crawl can retry only failed items from an existing report.
 
 The project is open source under the MIT License.
 
@@ -240,6 +241,22 @@ Output contains `fetch.json` and stable `pages/*.md` files. A partial failure
 keeps successful pages. An all-failed batch still publishes its diagnostic report
 and exits with code `1`.
 
+Retry only the URLs that failed:
+
+```bash
+deepseek-crawl fetch \
+  --retry-failed .deepseek-crawl/pages-docs/fetch.json \
+  --output-dir .deepseek-crawl/pages-docs-retry \
+  --concurrency 3 \
+  --delay-ms 250 \
+  --json
+```
+
+Retry reads the existing `fetch.json`, ignores successful pages, and requests
+only normalized failed URLs. Output goes to a new directory and preserves
+`retry_of`, original indexes, and previous failure reasons. Invalid URLs are
+recorded under `retry_of.skipped`.
+
 ### Map
 
 ```text
@@ -370,6 +387,21 @@ paths. It does not duplicate page bodies. Page sources distinguish `seed_url`,
 `markdown`, and `sitemap`. Prefer `map --search` followed by Batch Fetch for
 known URL lists; use Crawl when a bounded section must be traversed.
 
+Retry only failed Crawl pages:
+
+```bash
+deepseek-crawl crawl \
+  --retry-failed .deepseek-crawl/crawl-deepseek-guides/crawl.json \
+  -o .deepseek-crawl/crawl-deepseek-guides-retry \
+  --json
+```
+
+Crawl Retry does not fetch the seed or previously successful pages. It retries
+only failed URLs that remain same-origin and within the report's depth limit.
+Original `index`, `depth`, `sources`, and failure reasons are preserved, and the
+original `max_pages` remains a hard bound. Cross-origin, invalid, and over-limit
+items are recorded under `retry_of.skipped`.
+
 ### Doctor
 
 ```bash
@@ -487,7 +519,7 @@ The server exposes exactly four tools:
 character limits. MCP never writes local files.
 
 For compatibility, `0.7.0` MCP Crawl remains Markdown-only. Sitemap-assisted
-discovery is available only through the CLI.
+discovery is available only through the CLI. Failed-item retry is also CLI-only.
 
 MCP structured content also has a 100,000-code-point aggregate cap.
 

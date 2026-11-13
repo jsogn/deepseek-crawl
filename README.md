@@ -36,6 +36,7 @@ CLI + Skill。
 - Map JSON 直接驱动的批量 Fetch，以及逐页失败记录。
 - Crawl 路径 include/exclude 和 query 参数去重。
 - Crawl Plan 预览初始 frontier，避免在确认 URL 列表前读取所有子页面。
+- Batch Fetch 和 Crawl 可从既有报告只重试失败项，避免重复读取成功页面。
 - macOS Keychain 或其他平台私有文件凭据存储。
 - `auth set`、`auth status`、`auth remove`。
 - 可选的四个 MCP 工具。
@@ -255,6 +256,21 @@ deepseek-crawl fetch \
 输出包含 `fetch.json` 和稳定的 `pages/*.md`。部分失败不会丢弃成功页面；全部
 失败时仍会发布诊断报告，但命令退出码为 `1`。
 
+只重试上次失败的 URL：
+
+```bash
+deepseek-crawl fetch \
+  --retry-failed .deepseek-crawl/pages-docs/fetch.json \
+  --output-dir .deepseek-crawl/pages-docs-retry \
+  --concurrency 3 \
+  --delay-ms 250 \
+  --json
+```
+
+Retry 会读取既有 `fetch.json`，忽略已成功页面，只请求可规范化的失败 URL。输出仍
+写入一个全新的目录，并保留 `retry_of`、原始索引和上次失败原因；无效 URL 会进入
+`retry_of.skipped`。
+
 ## Map
 
 ```text
@@ -378,6 +394,19 @@ SIGINT 会中止请求、清理 staging，并以代码 `130` 退出。
 `map --search` 后接批量 Fetch；需要遍历一个文档区域时再使用 Crawl，可减少不必
 要的整站发现开销。
 
+只重试 Crawl 失败页面：
+
+```bash
+deepseek-crawl crawl \
+  --retry-failed .deepseek-crawl/crawl-deepseek-guides/crawl.json \
+  -o .deepseek-crawl/crawl-deepseek-guides-retry \
+  --json
+```
+
+Crawl Retry 不读取种子页或已成功页面，只重试同一 origin 且仍在原报告 depth 范围内
+的失败 URL。原始 `index`、`depth`、`sources` 和失败原因会保留，并受原报告的
+`max_pages` 限制。跨域、无效或超出限制的项目进入 `retry_of.skipped`。
+
 ## 计费
 
 - Search 按成功请求计费。
@@ -405,7 +434,7 @@ deepseek-crawl mcp
 
 MCP 不写本地文件。结构化内容有总长度限制，页面正文被视为不可信数据。为保持
 兼容，`0.7.0` 的 MCP Crawl 仍只使用 Markdown 链接；Sitemap 辅助发现仅在 CLI
-提供。
+提供。失败重试同样只在 CLI 提供。
 
 ## 限制
 

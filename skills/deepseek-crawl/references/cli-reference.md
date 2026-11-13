@@ -73,6 +73,13 @@ deepseek-crawl fetch --input <path|->
   [--delay-ms <0..5000>]
   [--max-chars <0..1000000>]
   [--json]
+
+deepseek-crawl fetch --retry-failed <fetch.json>
+  --output-dir <dir>
+  [--concurrency <1..5>]
+  [--delay-ms <0..5000>]
+  [--max-chars <0..1000000>]
+  [--json]
 ```
 
 Defaults:
@@ -92,6 +99,11 @@ Input formats:
 The output directory must be new. It contains `fetch.json` and
 `pages/NNNN-slug.md`. Partial failures remain successful; an all-failed batch
 publishes the report and exits `1`.
+
+Retry mode reads an existing `fetch.json`, retries only its failed URLs, and
+preserves each available original index and previous failure under `retry_of`.
+Invalid or unsupported failures are listed in `retry_of.skipped`. The retry
+output directory must be new.
 
 ## Map
 
@@ -152,6 +164,10 @@ deepseek-crawl crawl <url>
   [--plan-only]
   --output, -o <dir>
   [--json]
+
+deepseek-crawl crawl --retry-failed <crawl.json>
+  --output, -o <dir>
+  [--json]
 ```
 
 Defaults:
@@ -206,6 +222,24 @@ The plan contains:
 
 Plan covers the initial frontier only. Deeper pages require fetching the
 selected child pages.
+
+### Crawl Retry
+
+Crawl retry reads settings from an existing `crawl.json` and retries only its
+failed pages:
+
+```bash
+deepseek-crawl crawl --retry-failed crawl.json -o retry-output --json
+```
+
+- The seed and successful pages are not requested again.
+- Retry requests remain same-origin and within the original depth limit.
+- Original `index`, `depth`, `sources`, and failure reason are retained.
+- The original `max_pages` bounds the number of retry requests.
+- Invalid, cross-origin, depth-exceeding, or over-limit failures are listed in
+  `retry_of.skipped`; `retry_of.truncated` reports the page-limit case.
+- `--concurrency`, `--delay-ms`, filters, Sitemap mode, and plan mode cannot be
+  combined with `--retry-failed`.
 
 Path filters match the URL pathname. Prefix matching is used without `*` or `?`;
 includes are ORed, excludes win, and the seed bypasses filters.

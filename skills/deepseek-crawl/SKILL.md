@@ -124,6 +124,18 @@ The input can be Map JSON, a JSON URL array, objects containing `url`, or a
 newline-separated list. Use `--input -` for stdin. Read `fetch.json` first and
 then only the page files relevant to the task.
 
+When `fetch.json` contains failures, retry only those URLs:
+
+```bash
+deepseek-crawl fetch \
+  --retry-failed .deepseek-crawl/pages-site/fetch.json \
+  --output-dir .deepseek-crawl/pages-site-retry \
+  --json
+```
+
+Retry does not request previously successful pages. Use a new output directory
+and inspect `retry_of.skipped` for invalid or otherwise non-retryable entries.
+
 ## Map
 
 Use Map to locate the right page on a known site. `--search` applies a
@@ -192,12 +204,27 @@ Crawl warnings mean partial discovery, not automatic command failure. If the
 task only needs known pages, use Map plus Batch Fetch rather than walking a
 larger frontier.
 
+When `crawl.json` contains failed pages, retry only those pages:
+
+```bash
+deepseek-crawl crawl \
+  --retry-failed .deepseek-crawl/crawl-site-section/crawl.json \
+  -o .deepseek-crawl/crawl-site-section-retry \
+  --json
+```
+
+Crawl Retry uses the existing report settings, skips the seed and successful
+pages, and preserves the original page index, depth, sources, and failure
+reason. It is bounded by the report's `max_pages`; inspect `retry_of.skipped`.
+
 ## Billing and Safety
 
 - Search, the seed page used by Map, and every successfully read Crawl page can
   be billable DeepSeek requests.
 - Crawl Plan fetches the seed page and may read its public Sitemap, but it does
   not call DeepSeek Fetch for discovered child pages.
+- Failed-item retry only calls DeepSeek Fetch for URLs listed in the report's
+  failures; previously successful pages are reused from the original output.
 - This implementation does not fetch or enforce `robots.txt`. Confirm the user
   is authorized to crawl the target and that its terms permit the operation.
 - CLI Map and Crawl Sitemap access is public-network-only. MCP Crawl remains

@@ -39,8 +39,14 @@ function dependencies(
 ) {
   const stdout = writer();
   const stderr = writer();
+  const credentialStore = {
+    name: "keychain" as const,
+    get: () => undefined,
+    set: () => undefined,
+    remove: () => undefined,
+  };
   return {
-    deps: { env, fetchImpl, stdout, stderr },
+    deps: { env, fetchImpl, stdout, stderr, credentialStore },
     stdout,
     stderr,
   };
@@ -366,6 +372,7 @@ describe("runCli", () => {
     expect(JSON.parse(stdout.value())).toMatchObject({
       ok: true,
       api_key: "configured",
+      credential_source: "environment",
       connectivity: "reachable",
       live: "not_requested",
     });

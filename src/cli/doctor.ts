@@ -1,5 +1,6 @@
 import { type DeepSeekGateway, executeSearch } from "../application/index.js";
 import { loadConfig } from "../config.js";
+import type { CredentialStore } from "../credentials/store.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 
 export interface DoctorOptions {
@@ -9,11 +10,13 @@ export interface DoctorOptions {
   json: boolean;
   stdout: { write(value: string): unknown };
   stderr: { write(value: string): unknown };
+  credentialStore?: CredentialStore;
 }
 
 function formatDoctorHuman(result: Record<string, unknown>): string {
   return [
     `DeepSeek API key: ${String(result.api_key)}`,
+    `Credential source: ${String(result.credential_source)}`,
     `Base URL: ${String(result.base_url)}`,
     `Connectivity: ${String(result.connectivity)}`,
     `Live request: ${String(result.live)}`,
@@ -24,11 +27,12 @@ function formatDoctorHuman(result: Record<string, unknown>): string {
 export async function runDoctor(options: DoctorOptions): Promise<number> {
   let config: ReturnType<typeof loadConfig>;
   try {
-    config = loadConfig(options.env);
+    config = loadConfig(options.env, options.credentialStore);
   } catch (error) {
     const result = {
       ok: false,
       api_key: options.env.DEEPSEEK_API_KEY ? "invalid" : "missing",
+      credential_source: "missing",
       error: error instanceof Error ? error.message : String(error),
       node: process.version,
     };
@@ -85,6 +89,7 @@ export async function runDoctor(options: DoctorOptions): Promise<number> {
   const result = {
     ok,
     api_key: "configured",
+    credential_source: config.credentialSource,
     base_url: config.baseUrl.href,
     connectivity,
     live,

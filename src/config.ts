@@ -1,7 +1,16 @@
 import { isIP } from "node:net";
+import { createCredentialStore, type CredentialStore } from "./credentials/store.js";
+
+export type CredentialSource = "environment" | "keychain" | "file";
+
+export interface ResolvedCredential {
+  apiKey: string;
+  source: CredentialSource;
+}
 
 export interface RuntimeConfig {
   apiKey: string;
+  credentialSource: CredentialSource;
   baseUrl: URL;
   timeoutMs: number;
   maxRetries: number;
@@ -73,19 +82,42 @@ function parseBaseUrl(value: string | undefined): URL {
   return url;
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
-  const apiKey = env.DEEPSEEK_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("DEEPSEEK_API_KEY is required.");
-  }
-  if (/[\r\n]/.test(apiKey)) {
-    throw new Error("DEEPSEEK_API_KEY must not contain a newline.");
-  }
+export function loadConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  store?: CredentialStore,
+): RuntimeConfig {
+  const credential = resolveCredential(env, store);
 
   return {
-    apiKey,
+    apiKey: credential.apiKey,
+    credentialSource: credential.source,
     baseUrl: parseBaseUrl(env.DEEPSEEK_BASE_URL),
     timeoutMs: readInteger(env.DEEPSEEK_TIMEOUT_MS, 60000, "DEEPSEEK_TIMEOUT_MS", 1000, 120000),
     maxRetries: readInteger(env.DEEPSEEK_MAX_RETRIES, 2, "DEEPSEEK_MAX_RETRIES", 0, 5),
   };
+}
+
+export function resolveCredential(
+  env: NodeJS.ProcessEnv,
+  store?: CredentialStore,
+): ResolvedCredential {
+  const environmentKey = env.DEEPSEEK_API_KEY?.trim();
+  if (environmentKey) {
+    if (/[\r\n]/.test(environmentKey)) {
+      throw new Error("DEEPSEEK_API_KEY must not contain a newline.");
+    }
+    return { apiKey: environmentKey, source: "environment" };
+  }
+
+  const credentialStore = store ?? createCredentialStore({ env });
+  const storedKey = credentialStore.get()?.trim();
+  if (!storedKey) {
+    throw new Error(
+      "DeepSeek API key is required. Run deepseek-crawl auth set or set DEEPSEEK_API_KEY.",
+    );
+  }
+  if (/[\r\n]/.test(storedKey)) {
+    throw new Error("Stored DeepSeek API key must not contain a newline.");
+  }
+  return { apiKey: storedKey, source: credentialStore.name };
 }

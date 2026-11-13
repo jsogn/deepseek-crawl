@@ -10,6 +10,7 @@ import {
   type MapSitemapReader,
 } from "../application/index.js";
 import { loadConfig } from "../config.js";
+import type { CredentialStore } from "../credentials/store.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
@@ -39,6 +40,7 @@ export interface CliDependencies {
     env: NodeJS.ProcessEnv;
     packageRoot: string;
   };
+  credentialStore?: CredentialStore;
 }
 
 const MAIN_HELP = `deepseek-crawl ${packageVersion}
@@ -124,6 +126,9 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     ...(dependencies.setupEnvironment === undefined
       ? {}
       : { setupEnvironment: dependencies.setupEnvironment }),
+    ...(dependencies.credentialStore === undefined
+      ? {}
+      : { credentialStore: dependencies.credentialStore }),
   };
 }
 
@@ -146,7 +151,7 @@ async function runSearch(
   command: Extract<ParsedCommand, { kind: "search" }>,
   deps: CliDependencies,
 ) {
-  const config = loadConfig(deps.env);
+  const config = loadConfig(deps.env, deps.credentialStore);
   const client = new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
   const input: Record<string, unknown> = {
     query: command.query,
@@ -173,7 +178,7 @@ async function runSearch(
 }
 
 async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps: CliDependencies) {
-  const config = loadConfig(deps.env);
+  const config = loadConfig(deps.env, deps.credentialStore);
   const client = new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
   const maxChars = command.output ? 0 : (command.maxChars ?? (command.json ? 0 : 30000));
   const output = await executeFetch(client, { url: command.url }, { maxChars });
@@ -194,7 +199,7 @@ async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps
 }
 
 async function runMap(command: Extract<ParsedCommand, { kind: "map" }>, deps: CliDependencies) {
-  const config = loadConfig(deps.env);
+  const config = loadConfig(deps.env, deps.credentialStore);
   const client = deps.mapClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
   const reader = deps.sitemapReader ?? new SitemapReader();
   const output = await executeMap(
@@ -233,7 +238,7 @@ async function runMap(command: Extract<ParsedCommand, { kind: "map" }>, deps: Cl
 }
 
 async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps: CliDependencies) {
-  const config = loadConfig(deps.env);
+  const config = loadConfig(deps.env, deps.credentialStore);
   const client = deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
   const writer = await createCrawlOutputWriter(command.output);
 
@@ -333,6 +338,9 @@ export async function runCli(
       case "doctor":
         return await runDoctor({
           env: deps.env,
+          ...(deps.credentialStore === undefined
+            ? {}
+            : { credentialStore: deps.credentialStore }),
           fetchImpl: deps.fetchImpl,
           live: command.live,
           json: command.json,
@@ -341,7 +349,10 @@ export async function runCli(
         });
       case "mcp":
         await runMcpServer({
-          client: new DeepSeekClient({ ...loadConfig(deps.env), fetchImpl: deps.fetchImpl }),
+          client: new DeepSeekClient({
+            ...loadConfig(deps.env, deps.credentialStore),
+            fetchImpl: deps.fetchImpl,
+          }),
           sitemapReader: deps.sitemapReader ?? new SitemapReader(),
         });
         return 0;

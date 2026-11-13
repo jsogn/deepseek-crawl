@@ -4,6 +4,7 @@ import { isIP } from "node:net";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { normalizeHttpUrl, sameOrigin } from "../crawl/links.js";
 import type { MapWarning } from "../crawl/types.js";
+import { errorMessage } from "../error-message.js";
 import { packageVersion } from "../version.js";
 import {
   isPublicIpAddress,
@@ -269,10 +270,6 @@ const sitemapParser = new XMLParser({
 
 function warning(code: MapWarning["code"], message: string): MapWarning {
   return { code, message };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function asArray(value: unknown): unknown[] {

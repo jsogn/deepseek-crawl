@@ -13,7 +13,8 @@ import type {
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { fetchInputSchema } from "../deepseek/schemas.js";
-import { boundFetchOutput } from "../output/bounds.js";
+import { errorMessage } from "../error-message.js";
+import { boundFetchOutput, codepointLength } from "../output/bounds.js";
 
 const CRAWL_MAX_DEPTH = 5;
 const CRAWL_MAX_PAGES = 100;
@@ -80,14 +81,6 @@ interface BoundedLinkCollector {
 
 function errorKind(error: unknown): string {
   return error instanceof DeepSeekError ? error.kind : "crawl";
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function codepointLength(value: string): number {
-  return [...value].length;
 }
 
 function summaryFor(page: CrawlPage): CrawlPageSummary {

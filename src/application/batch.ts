@@ -9,6 +9,7 @@ import { normalizeHttpUrl } from "../crawl/links.js";
 import { runLayeredTasks } from "../crawl/queue.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
+import { errorMessage } from "../error-message.js";
 import { boundFetchOutput } from "../output/bounds.js";
 
 const MAX_CONCURRENCY = 5;
@@ -114,10 +115,6 @@ function displayUrl(value: string, index: number): string {
 
 function errorKind(error: unknown): string {
   return error instanceof DeepSeekError ? error.kind : "fetch";
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function length(value: string): number {

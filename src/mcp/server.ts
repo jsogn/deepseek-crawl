@@ -13,7 +13,7 @@ import {
   type MapResult,
   type MapSitemapReader,
 } from "../application/index.js";
-import { truncateText } from "../output/bounds.js";
+import { codepointLength, truncateText } from "../output/bounds.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { formatMapUrls } from "../output/map.js";
 import { packageVersion } from "../version.js";
@@ -184,10 +184,6 @@ type CrawlMcpOutput = z.infer<typeof crawlOutputSchema>;
 
 function message(error: unknown): string {
   return truncateText(error instanceof Error ? error.message : String(error), 1_000).value;
-}
-
-function codepointLength(value: string): number {
-  return [...value].length;
 }
 
 function boundCrawlForMcp(

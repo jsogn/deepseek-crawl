@@ -16,7 +16,13 @@ export async function writeFileAtomic(outputPath: string, content: string): Prom
   }
 }
 
-export async function assertFileMissing(outputPath: string): Promise<void> {
+export function createExistingPathError(path: string): NodeJS.ErrnoException {
+  const error = new Error(`Output path already exists: ${path}`) as NodeJS.ErrnoException;
+  error.code = "EEXIST";
+  return error;
+}
+
+export async function assertPathMissing(outputPath: string): Promise<void> {
   try {
     await lstat(outputPath);
   } catch (error) {
@@ -25,13 +31,11 @@ export async function assertFileMissing(outputPath: string): Promise<void> {
     }
     throw error;
   }
-  const error = new Error(`Output path already exists: ${outputPath}`) as NodeJS.ErrnoException;
-  error.code = "EEXIST";
-  throw error;
+  throw createExistingPathError(outputPath);
 }
 
 export async function writeFileAtomicNoClobber(outputPath: string, content: string): Promise<void> {
-  await assertFileMissing(outputPath);
+  await assertPathMissing(outputPath);
   const directory = dirname(outputPath);
   const temporaryPath = join(directory, `.${basename(outputPath)}.${randomUUID()}.tmp`);
   await mkdir(directory, { recursive: true });

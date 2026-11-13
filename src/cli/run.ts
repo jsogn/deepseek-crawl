@@ -18,6 +18,7 @@ import { type CredentialStore, createCredentialStore } from "../credentials/stor
 import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
+import { errorMessage as genericErrorMessage } from "../error-message.js";
 import { runMcpServer } from "../mcp/server.js";
 import { createBatchFetchOutputWriter, formatBatchFetchHuman } from "../output/batch.js";
 import {
@@ -25,7 +26,7 @@ import {
   formatCrawlHuman,
   formatCrawlPlanHuman,
 } from "../output/crawl.js";
-import { assertFileMissing, writeFileAtomic, writeFileAtomicNoClobber } from "../output/files.js";
+import { assertPathMissing, writeFileAtomic, writeFileAtomicNoClobber } from "../output/files.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { formatMapUrls, formatMapWarnings } from "../output/map.js";
 import { type SkillSetupResult, setupSkills } from "../setup/skills.js";
@@ -181,7 +182,7 @@ function errorMessage(error: unknown): string {
   if (error instanceof z.ZodError) {
     return error.issues.map((issue) => issue.message).join("; ");
   }
-  return error instanceof Error ? error.message : String(error);
+  return genericErrorMessage(error);
 }
 
 async function runSearch(
@@ -279,7 +280,7 @@ async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps
 
 async function runMap(command: Extract<ParsedCommand, { kind: "map" }>, deps: CliDependencies) {
   if (command.output) {
-    await assertFileMissing(command.output);
+    await assertPathMissing(command.output);
   }
   const config = loadConfig(deps.env, deps.credentialStore);
   const client = deps.mapClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
@@ -338,7 +339,7 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
   };
 
   if (command.planOnly) {
-    await assertFileMissing(command.output);
+    await assertPathMissing(command.output);
     const plan = await executeCrawlPlan(client, { url: command.url }, crawlOptions, deps.signal);
     const json = `${JSON.stringify(plan, null, 2)}\n`;
     await writeFileAtomicNoClobber(command.output, json);

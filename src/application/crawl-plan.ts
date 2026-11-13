@@ -12,7 +12,8 @@ import type {
 } from "../crawl/types.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { fetchInputSchema } from "../deepseek/schemas.js";
-import { boundFetchOutput } from "../output/bounds.js";
+import { errorMessage } from "../error-message.js";
+import { boundFetchOutput, codepointLength } from "../output/bounds.js";
 import { normalizeCrawlOptions } from "./crawl.js";
 
 const PLAN_DIAGNOSTIC_LIMIT = 1_000;
@@ -22,14 +23,6 @@ interface MutablePlanCandidate {
   url: URL;
   sources: Set<CrawlUrlSource>;
   reason?: "cross_origin" | "path_filtered";
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function codepointLength(value: string): number {
-  return [...value].length;
 }
 
 function sourcesInOrder(sources: Set<CrawlUrlSource>): CrawlUrlSource[] {

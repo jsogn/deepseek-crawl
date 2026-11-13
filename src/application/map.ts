@@ -2,6 +2,7 @@ import { normalizeHttpUrl, sameOrigin, visitMarkdownLinks } from "../crawl/links
 import type { MapResult, MapUrl, MapUrlSource, MapWarning } from "../crawl/types.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { fetchInputSchema } from "../deepseek/schemas.js";
+import { errorMessage } from "../error-message.js";
 import { boundFetchOutput } from "../output/bounds.js";
 import type { SitemapDiscovery, SitemapReadOptions } from "../sitemap/reader.js";
 
@@ -20,10 +21,6 @@ export interface MapOptions {
   pageContentLimit?: number;
   search?: string;
   now?: () => Date;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function abortReason(signal: AbortSignal): unknown {

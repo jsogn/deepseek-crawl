@@ -6,6 +6,10 @@ export interface TextBound {
   originalLength: number;
 }
 
+export function codepointLength(value: string): number {
+  return Array.from(value).length;
+}
+
 function validateLimit(limit: number): void {
   if (!Number.isInteger(limit) || limit < 0 || limit > 1000000) {
     throw new Error("Content limit must be an integer from 0 to 1000000.");
@@ -14,18 +18,18 @@ function validateLimit(limit: number): void {
 
 export function truncateText(value: string, limit: number): TextBound {
   validateLimit(limit);
-  const characters = Array.from(value);
-  if (limit === 0 || characters.length <= limit) {
+  const originalLength = codepointLength(value);
+  if (limit === 0 || originalLength <= limit) {
     return {
       value,
       truncated: false,
-      originalLength: characters.length,
+      originalLength,
     };
   }
   return {
-    value: characters.slice(0, limit).join(""),
+    value: Array.from(value).slice(0, limit).join(""),
     truncated: true,
-    originalLength: characters.length,
+    originalLength,
   };
 }
 

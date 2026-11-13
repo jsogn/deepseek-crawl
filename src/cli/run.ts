@@ -5,6 +5,7 @@ import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { writeFileAtomic } from "../output/files.js";
+import { runMcpServer } from "../mcp/server.js";
 import { packageVersion } from "../version.js";
 import { runDoctor } from "./doctor.js";
 import { CliUsageError, parseCli, type ParsedCommand } from "./parse.js";
@@ -22,6 +23,7 @@ Usage:
   deepseek-websearch search <query> [options]
   deepseek-websearch fetch <url> [options]
   deepseek-websearch doctor [--live] [--json]
+  deepseek-websearch mcp
 
 Run "deepseek-websearch help <command>" for command details.
 `;
@@ -49,6 +51,7 @@ Options:
 
 Without --live, doctor does not make a billable DeepSeek request.
 `,
+  mcp: "Usage: deepseek-websearch mcp\n\nStart the MCP server over stdio.\n",
 };
 
 function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDependencies {
@@ -158,7 +161,10 @@ export async function runCli(
           stderr: deps.stderr,
         });
       case "mcp":
-        throw new CliUsageError("The mcp command is not available in this build.");
+        await runMcpServer({
+          client: new DeepSeekClient({ ...loadConfig(deps.env), fetchImpl: deps.fetchImpl }),
+        });
+        return 0;
     }
   } catch (error) {
     deps.stderr.write(`${errorMessage(error)}\n`);

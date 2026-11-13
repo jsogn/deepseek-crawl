@@ -30,6 +30,38 @@ const MCP_CRAWL_DISCOVERY_LIMIT = 2000;
 const MCP_CRAWL_PAGE_CONTENT_LIMIT = 1000000;
 const MCP_CRAWL_AGGREGATE_CONTENT_LIMIT = 100000;
 
+export interface ResolvedMcpCrawlLimits {
+  discoveryLimit: number;
+  pageContentLimit: number;
+  aggregateContentLimit: number;
+}
+
+function cappedLimit(value: number | undefined, name: string, maximum: number): number {
+  if (value === undefined) {
+    return maximum;
+  }
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative safe integer.`);
+  }
+  return Math.min(value, maximum);
+}
+
+export function resolveMcpCrawlLimits(config: McpCrawlConfig = {}): ResolvedMcpCrawlLimits {
+  return {
+    discoveryLimit: cappedLimit(config.discoveryLimit, "discoveryLimit", MCP_CRAWL_DISCOVERY_LIMIT),
+    pageContentLimit: cappedLimit(
+      config.pageContentLimit,
+      "pageContentLimit",
+      MCP_CRAWL_PAGE_CONTENT_LIMIT,
+    ),
+    aggregateContentLimit: cappedLimit(
+      config.aggregateContentLimit,
+      "aggregateContentLimit",
+      MCP_CRAWL_AGGREGATE_CONTENT_LIMIT,
+    ),
+  };
+}
+
 const searchOutputSchema = z.looseObject({
   results: z.array(
     z.looseObject({
@@ -213,6 +245,7 @@ function formatCrawlMcpHuman(output: CrawlMcpOutput): string {
 }
 
 export function createMcpServer(options: McpServerOptions): McpServer {
+  const crawlLimits = resolveMcpCrawlLimits(options.crawl);
   const server = new McpServer(
     { name: "deepseek-crawl", version: packageVersion },
     {
@@ -374,8 +407,8 @@ export function createMcpServer(options: McpServerOptions): McpServer {
           maxPages: args.max_pages,
           concurrency: args.concurrency,
           delayMs: args.delay_ms,
-          discoveryLimit: crawlConfig.discoveryLimit ?? MCP_CRAWL_DISCOVERY_LIMIT,
-          pageContentLimit: crawlConfig.pageContentLimit ?? MCP_CRAWL_PAGE_CONTENT_LIMIT,
+          discoveryLimit: crawlLimits.discoveryLimit,
+          pageContentLimit: crawlLimits.pageContentLimit,
         };
         if (crawlConfig.now !== undefined) {
           crawlOptions.now = crawlConfig.now;
@@ -394,7 +427,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
           result,
           pagesByIndex,
           args.max_chars,
-          crawlConfig.aggregateContentLimit ?? MCP_CRAWL_AGGREGATE_CONTENT_LIMIT,
+          crawlLimits.aggregateContentLimit,
         );
         return {
           content: [{ type: "text", text: formatCrawlMcpHuman(output) }],

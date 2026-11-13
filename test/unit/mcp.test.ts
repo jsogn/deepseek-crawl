@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
-import { createMcpServer } from "../../src/mcp/server.js";
+import { createMcpServer, resolveMcpCrawlLimits } from "../../src/mcp/server.js";
 
 const baseResult = {
   rerank_score: 2.4,
@@ -41,6 +41,28 @@ async function connectedServer() {
 }
 
 describe("MCP server", () => {
+  it("clamps oversized Crawl resource overrides to hard caps", () => {
+    expect(
+      resolveMcpCrawlLimits({
+        discoveryLimit: 5000,
+        pageContentLimit: 2000000,
+        aggregateContentLimit: 500000,
+      }),
+    ).toEqual({
+      discoveryLimit: 2000,
+      pageContentLimit: 1000000,
+      aggregateContentLimit: 100000,
+    });
+  });
+
+  it.each([
+    [{ discoveryLimit: -1 }, /discoveryLimit/i],
+    [{ pageContentLimit: 1.5 }, /pageContentLimit/i],
+    [{ aggregateContentLimit: Number.NaN }, /aggregateContentLimit/i],
+  ])("rejects invalid Crawl resource overrides", (crawl, message) => {
+    expect(() => resolveMcpCrawlLimits(crawl)).toThrow(message);
+  });
+
   it("lists exactly the DeepSeek tools with read-only annotations", async () => {
     const { client } = await connectedServer();
     const { tools } = await client.listTools();

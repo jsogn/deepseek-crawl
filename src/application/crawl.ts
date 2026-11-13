@@ -14,9 +14,14 @@ import { boundFetchOutput } from "../output/bounds.js";
 
 interface PageOutcome {
   url: string;
-  page: CrawlPage | null;
+  summary: CrawlPageSummary | null;
   links: string[];
   error: unknown | null;
+}
+
+interface BoundedLinkCollector {
+  add(link: string): void;
+  finish(): { links: string[]; truncated: boolean };
 }
 
 function errorKind(error: unknown): string {
@@ -44,6 +49,44 @@ function summaryFor(page: CrawlPage): CrawlPageSummary {
     summary.content_original_length = page.content_original_length;
   }
   return summary;
+}
+
+function createBoundedLinkCollector(capacity: number, seen: Set<string>): BoundedLinkCollector {
+  let candidates = new Set<string>();
+  let truncated = false;
+
+  const trim = (): void => {
+    if (candidates.size <= capacity) {
+      return;
+    }
+    const retained = [...candidates].sort().slice(0, capacity);
+    candidates = new Set(retained);
+    truncated = true;
+  };
+
+  return {
+    add(link: string): void {
+      if (seen.has(link) || candidates.has(link)) {
+        return;
+      }
+      if (capacity === 0) {
+        truncated = true;
+        return;
+      }
+      candidates.add(link);
+      if (candidates.size >= capacity * 2) {
+        trim();
+      }
+    },
+    finish(): { links: string[]; truncated: boolean } {
+      trim();
+      const links = [...candidates].sort();
+      for (const link of links) {
+        seen.add(link);
+      }
+      return { links, truncated };
+    },
+  };
 }
 
 export async function executeCrawl(
@@ -102,8 +145,9 @@ export async function executeCrawl(
       if (crawlSignal.aborted) {
         throw error;
       }
-      return { url, page: null, links: [], error };
+      return { url, summary: null, links: [], error };
     }
+    const summary = summaryFor(page);
     if (onPage) {
       try {
         await onPage(page);
@@ -112,36 +156,30 @@ export async function executeCrawl(
         throw error;
       }
     }
-    return { url, page, links, error: null };
+    return { url, summary, links, error: null };
   };
 
   const seedOutcome = await fetchPage(seed.href, 0, nextIndex);
   nextIndex += 1;
-  if (!seedOutcome.page) {
+  if (!seedOutcome.summary) {
     throw seedOutcome.error;
   }
   fetched += 1;
-  contentTruncated += seedOutcome.page.content_truncated ? 1 : 0;
-  pages.push(summaryFor(seedOutcome.page));
+  contentTruncated += seedOutcome.summary.content_truncated ? 1 : 0;
+  pages.push(seedOutcome.summary);
 
-  const mergeLinks = (links: string[]): string[] => {
-    const candidates = [...new Set(links)].sort();
-    const nextFrontier: string[] = [];
-    for (const candidate of candidates) {
-      if (seen.has(candidate)) {
-        continue;
-      }
-      if (seen.size >= options.discoveryLimit) {
-        discoveryLimitReached = true;
-        continue;
-      }
-      seen.add(candidate);
-      nextFrontier.push(candidate);
-    }
-    return nextFrontier;
-  };
+  const seedLinks = createBoundedLinkCollector(
+    Math.max(0, options.discoveryLimit - seen.size),
+    seen,
+  );
+  for (const link of seedOutcome.links) {
+    seedLinks.add(link);
+  }
+  seedOutcome.links = [];
+  const seedCollection = seedLinks.finish();
+  discoveryLimitReached = discoveryLimitReached || seedCollection.truncated;
+  frontier = seedCollection.links;
 
-  frontier = mergeLinks(seedOutcome.links);
   let depth = 1;
   while (frontier.length > 0 && depth <= options.maxDepth && attemptedPages < options.maxPages) {
     const sorted = [...frontier].sort();
@@ -156,20 +194,28 @@ export async function executeCrawl(
       nextIndex += 1;
       return index;
     });
+    const layerLinks = createBoundedLinkCollector(
+      Math.max(0, options.discoveryLimit - seen.size),
+      seen,
+    );
     const outcomes = await runLayeredTasks<string, PageOutcome>(selected, {
       concurrency: options.concurrency,
       delayMs: options.delayMs,
       signal: crawlSignal,
-      run: async (url, index) => fetchPage(url, depth, selectedIndexes[index] ?? 0),
+      run: async (url, index) => {
+        const outcome = await fetchPage(url, depth, selectedIndexes[index] ?? 0);
+        for (const link of outcome.links) {
+          layerLinks.add(link);
+        }
+        return { ...outcome, links: [] };
+      },
     });
 
-    const nextLayerLinks: string[] = [];
     for (const outcome of outcomes) {
-      if (outcome.page) {
+      if (outcome.summary) {
         fetched += 1;
-        contentTruncated += outcome.page.content_truncated ? 1 : 0;
-        pages.push(summaryFor(outcome.page));
-        nextLayerLinks.push(...outcome.links);
+        contentTruncated += outcome.summary.content_truncated ? 1 : 0;
+        pages.push(outcome.summary);
       } else {
         failures.push({
           url: outcome.url,
@@ -180,7 +226,9 @@ export async function executeCrawl(
       }
     }
 
-    frontier = mergeLinks(nextLayerLinks);
+    const collected = layerLinks.finish();
+    discoveryLimitReached = discoveryLimitReached || collected.truncated;
+    frontier = collected.links;
     depth += 1;
   }
 

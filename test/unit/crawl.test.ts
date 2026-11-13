@@ -89,6 +89,48 @@ describe("executeCrawl", () => {
     expect(result.stats.discovery_limit_reached).toBe(true);
   });
 
+  it("retains the lexicographically smallest links across concurrent pages", async () => {
+    const fetch = vi.fn(async ({ url }: { url: string }) => {
+      const content =
+        url === "https://example.com/"
+          ? "[Z](/z) [A](/a)"
+          : url === "https://example.com/a"
+            ? "[N](/n) [C](/c)"
+            : url === "https://example.com/z"
+              ? "[M](/m) [B](/b)"
+              : "";
+      return { title: url, content };
+    });
+    const gateway = { search: vi.fn(), fetch };
+
+    const result = await executeCrawl(
+      gateway,
+      { url: "https://example.com/" },
+      {
+        ...options,
+        concurrency: 2,
+        discoveryLimit: 5,
+      },
+    );
+
+    expect(result.pages.map((page) => page.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/a",
+      "https://example.com/z",
+      "https://example.com/b",
+      "https://example.com/c",
+    ]);
+    expect(fetch.mock.calls.map(([input]) => input.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/a",
+      "https://example.com/z",
+      "https://example.com/b",
+      "https://example.com/c",
+    ]);
+    expect(result.stats.discovered).toBe(5);
+    expect(result.stats.discovery_limit_reached).toBe(true);
+  });
+
   it("records content truncation metadata", async () => {
     const result = await executeCrawl(
       client(),

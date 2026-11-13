@@ -1,7 +1,7 @@
 import type { z } from "zod";
-import { fetchResponseSchema, searchResponseSchema } from "./schemas.js";
-import { DeepSeekError, type DeepSeekErrorKind } from "./errors.js";
 import type { FetchInput, RawFetchResponse, RawSearchResponse, SearchInput } from "../types.js";
+import { DeepSeekError, type DeepSeekErrorKind } from "./errors.js";
+import { fetchResponseSchema, searchResponseSchema } from "./schemas.js";
 
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_UPSTREAM_MESSAGE_LENGTH = 500;
@@ -228,7 +228,9 @@ export class DeepSeekClient {
         const error = statusError(response, upstreamMessage);
         if (RETRYABLE_STATUSES.has(response.status) && attempt < this.#maxRetries) {
           const retryAfter =
-            response.status === 429 ? parseRetryAfter(response.headers.get("retry-after")) : undefined;
+            response.status === 429
+              ? parseRetryAfter(response.headers.get("retry-after"))
+              : undefined;
           await this.#sleep(retryAfter ?? jitteredDelay(attempt, this.#random), signal);
           continue;
         }

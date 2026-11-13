@@ -46,10 +46,7 @@ describe("boundFetchOutput", () => {
 
   it("preserves unknown fields", () => {
     expect(
-      boundFetchOutput(
-        { title: "T", url: "https://example.com", content: "x", extra: "kept" },
-        10,
-      ),
+      boundFetchOutput({ title: "T", url: "https://example.com", content: "x", extra: "kept" }, 10),
     ).toMatchObject({ extra: "kept" });
   });
 });

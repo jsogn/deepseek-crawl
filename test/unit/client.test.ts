@@ -163,9 +163,9 @@ describe("DeepSeekClient", () => {
     ) as unknown as typeof fetch;
     const { client, delays } = createClient(fetchImpl, { timeoutMs: 10 });
 
-    await expect(client.search({ query: "test", count: 1, need_content: false })).rejects.toMatchObject(
-      { kind: "timeout" },
-    );
+    await expect(
+      client.search({ query: "test", count: 1, need_content: false }),
+    ).rejects.toMatchObject({ kind: "timeout" });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(delays).toEqual([]);
   });

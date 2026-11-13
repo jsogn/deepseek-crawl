@@ -32,7 +32,10 @@ function writer() {
   };
 }
 
-function dependencies(fetchImpl: typeof fetch, env: NodeJS.ProcessEnv = { DEEPSEEK_API_KEY: "key" }) {
+function dependencies(
+  fetchImpl: typeof fetch,
+  env: NodeJS.ProcessEnv = { DEEPSEEK_API_KEY: "key" },
+) {
   const stdout = writer();
   const stderr = writer();
   return {

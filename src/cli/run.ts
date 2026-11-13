@@ -3,12 +3,12 @@ import { executeFetch, executeSearch } from "../application/index.js";
 import { loadConfig } from "../config.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
-import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
-import { writeFileAtomic } from "../output/files.js";
 import { runMcpServer } from "../mcp/server.js";
+import { writeFileAtomic } from "../output/files.js";
+import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { packageVersion } from "../version.js";
 import { runDoctor } from "./doctor.js";
-import { CliUsageError, parseCli, type ParsedCommand } from "./parse.js";
+import { CliUsageError, type ParsedCommand, parseCli } from "./parse.js";
 
 export interface CliDependencies {
   env: NodeJS.ProcessEnv;
@@ -78,7 +78,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function runSearch(command: Extract<ParsedCommand, { kind: "search" }>, deps: CliDependencies) {
+async function runSearch(
+  command: Extract<ParsedCommand, { kind: "search" }>,
+  deps: CliDependencies,
+) {
   const config = loadConfig(deps.env);
   const client = new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
   const input: Record<string, unknown> = {

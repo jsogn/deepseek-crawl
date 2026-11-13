@@ -30,7 +30,8 @@ function readInteger(
 }
 
 function isLoopbackHostname(hostname: string): boolean {
-  const value = hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
+  const value =
+    hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
   if (value === "localhost") {
     return true;
   }

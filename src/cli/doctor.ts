@@ -1,5 +1,5 @@
+import { type DeepSeekGateway, executeSearch } from "../application/index.js";
 import { loadConfig } from "../config.js";
-import { executeSearch, type DeepSeekGateway } from "../application/index.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 
 export interface DoctorOptions {
@@ -56,7 +56,9 @@ export async function runDoctor(options: DoctorOptions): Promise<number> {
 
   let live = "not_requested";
   if (options.live) {
-    options.stderr.write("Billable DeepSeek Search request: doctor --live performs one Search request.\n");
+    options.stderr.write(
+      "Billable DeepSeek Search request: doctor --live performs one Search request.\n",
+    );
     const client: DeepSeekGateway = new DeepSeekClient({
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
@@ -65,7 +67,11 @@ export async function runDoctor(options: DoctorOptions): Promise<number> {
       fetchImpl: options.fetchImpl,
     });
     try {
-      await executeSearch(client, { query: "DeepSeek API status", count: 1 }, { maxContentChars: 0 });
+      await executeSearch(
+        client,
+        { query: "DeepSeek API status", count: 1 },
+        { maxContentChars: 0 },
+      );
       live = "passed";
     } catch (error) {
       live = "failed";

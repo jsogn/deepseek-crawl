@@ -1,25 +1,15 @@
 import { isIP } from "node:net";
 import { z } from "zod";
-import type {
-  FetchInput,
-  RawFetchResponse,
-  RawSearchResponse,
-  SearchInput,
-} from "../types.js";
+import type { FetchInput, RawFetchResponse, RawSearchResponse, SearchInput } from "../types.js";
 
 function unicodeLength(value: string): number {
   return [...value].length;
 }
 
-const query = z
-  .string()
-  .refine(
-    (value) => {
-      const length = unicodeLength(value);
-      return value.trim().length > 0 && length >= 1 && length <= 128;
-    },
-    "Must contain 1 to 128 Unicode characters and cannot be all whitespace.",
-  );
+const query = z.string().refine((value) => {
+  const length = unicodeLength(value);
+  return value.trim().length > 0 && length >= 1 && length <= 128;
+}, "Must contain 1 to 128 Unicode characters and cannot be all whitespace.");
 
 export const searchInputSchema: z.ZodType<SearchInput> = z.object({
   query,

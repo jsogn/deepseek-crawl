@@ -1,0 +1,16 @@
+{
+  "results": [
+    {
+      "rerank_score": 2.4,
+      "title": "DeepSeek Search",
+      "url": "https://api-docs.deepseek.com/guides/search/",
+      "snippet": "Official Search and Fetch documentation.",
+      "summary": "DeepSeek documents its Search and Fetch APIs.",
+      "content": "# Search\n\nContent.",
+      "site_name": "DeepSeek API Docs",
+      "site_icon": null,
+      "date": null,
+      "authority": 4
+    }
+  ]
+}

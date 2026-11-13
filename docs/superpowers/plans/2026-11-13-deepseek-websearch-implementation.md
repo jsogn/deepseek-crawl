@@ -35,6 +35,7 @@
 ### Task 1: Create the Node.js and TypeScript Skeleton
 
 **Files:**
+
 - Create: `package.json`
 - Create: `tsconfig.json`
 - Create: `biome.json`
@@ -44,6 +45,7 @@
 - Create: `test/smoke.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: npm scripts `build`, `typecheck`, `test`, `lint`, `format`, `verify`, and a compileable ESM source tree.
 
@@ -65,10 +67,7 @@
   "exports": {
     ".": "./dist/index.js"
   },
-  "files": [
-    "dist",
-    "README.md"
-  ],
+  "files": ["dist", "README.md"],
   "engines": {
     "node": ">=22.12.0"
   },
@@ -211,12 +210,14 @@ git commit -m "build: scaffold TypeScript npm package"
 ### Task 2: Add Configuration and Stable Errors
 
 **Files:**
+
 - Create: `src/config.ts`
 - Create: `src/deepseek/errors.ts`
 - Create: `test/unit/config.test.ts`
 - Create: `test/unit/errors.test.ts`
 
 **Interfaces:**
+
 - Consumes: Node environment variables.
 - Produces:
 
@@ -362,11 +363,13 @@ git commit -m "feat: validate runtime configuration"
 ### Task 3: Define API and Application Types
 
 **Files:**
+
 - Create: `src/deepseek/schemas.ts`
 - Create: `src/types.ts`
 - Create: `test/unit/schemas.test.ts`
 
 **Interfaces:**
+
 - Consumes: Zod and `node:net` IP validation.
 - Produces:
 
@@ -502,12 +505,14 @@ git commit -m "feat: define DeepSeek request schemas"
 ### Task 4: Implement Bounded Output and Atomic Files
 
 **Files:**
+
 - Create: `src/output/bounds.ts`
 - Create: `src/output/files.ts`
 - Create: `test/unit/bounds.test.ts`
 - Create: `test/unit/files.test.ts`
 
 **Interfaces:**
+
 - Consumes: `SearchOutput`, `FetchOutput`.
 - Produces:
 
@@ -520,17 +525,11 @@ export interface TextBound {
 
 export function truncateText(value: string, limit: number): TextBound;
 
-export function boundSearchOutput(
-  output: SearchOutput,
-  maxContentChars: number,
-): SearchOutput;
+export function boundSearchOutput(output: SearchOutput, maxContentChars: number): SearchOutput;
 
 export function boundFetchOutput(output: FetchOutput, maxChars: number): FetchOutput;
 
-export async function writeFileAtomic(
-  outputPath: string,
-  content: string,
-): Promise<void>;
+export async function writeFileAtomic(outputPath: string, content: string): Promise<void>;
 ```
 
 **Step 1: Write failing truncation tests**
@@ -628,10 +627,12 @@ git commit -m "feat: bound output and write files atomically"
 ### Task 5: Implement the DeepSeek HTTP Client
 
 **Files:**
+
 - Create: `src/deepseek/client.ts`
 - Create: `test/unit/client.test.ts`
 
 **Interfaces:**
+
 - Consumes: `RuntimeConfig`, Zod response schemas, `DeepSeekError`.
 - Produces:
 
@@ -729,6 +730,7 @@ git commit -m "feat: add resilient DeepSeek client"
 ### Task 6: Add Search and Fetch Application Services
 
 **Files:**
+
 - Create: `src/application/search.ts`
 - Create: `src/application/fetch.ts`
 - Create: `src/output/format.ts`
@@ -736,6 +738,7 @@ git commit -m "feat: add resilient DeepSeek client"
 - Create: `test/unit/format.test.ts`
 
 **Interfaces:**
+
 - Consumes: `DeepSeekClient`, input schemas, output bounds.
 - Produces:
 
@@ -814,6 +817,7 @@ git commit -m "feat: add search and fetch services"
 ### Task 7: Implement the CLI
 
 **Files:**
+
 - Create: `src/cli/parse.ts`
 - Create: `src/cli/run.ts`
 - Create: `src/cli/doctor.ts`
@@ -823,6 +827,7 @@ git commit -m "feat: add search and fetch services"
 - Modify: `src/index.ts`
 
 **Interfaces:**
+
 - Consumes: application services, format functions, atomic file writer, `loadConfig`.
 - Produces:
 
@@ -935,12 +940,14 @@ git commit -m "feat: add command line interface"
 ### Task 8: Implement MCP over stdio
 
 **Files:**
+
 - Create: `src/mcp/server.ts`
 - Create: `test/unit/mcp.test.ts`
 - Modify: `src/cli/parse.ts`
 - Modify: `src/cli/run.ts`
 
 **Interfaces:**
+
 - Consumes: `DeepSeekClient`, application services, Zod input schemas, formatting.
 - Produces:
 
@@ -1013,6 +1020,7 @@ git commit -m "feat: expose DeepSeek tools over MCP"
 ### Task 9: Add Package Documentation, Live Smoke, and CI
 
 **Files:**
+
 - Modify: `README.md`
 - Create: `scripts/live-smoke.mjs`
 - Create: `.github/workflows/ci.yml`
@@ -1021,6 +1029,7 @@ git commit -m "feat: expose DeepSeek tools over MCP"
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Consumes: built `dist/bin.js`.
 - Produces: user installation instructions, opt-in billable smoke test, and automated offline CI.
 
@@ -1078,11 +1087,13 @@ git commit -m "docs: add package usage and CI"
 ### Task 10: Complete End-to-End Verification
 
 **Files:**
+
 - Modify: `src/cli/run.ts`
 - Create: `test/unit/package.test.ts`
 - Create: `test/integration/mcp-stdio.test.ts`
 
 **Interfaces:**
+
 - Consumes: all previous modules.
 - Produces: verified package artifact and executable behavior.
 

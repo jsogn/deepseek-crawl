@@ -252,18 +252,18 @@ The client:
 
 HTTP status handling is explicit:
 
-| Status | Behavior |
-| --- | --- |
-| 400 | Invalid request; do not retry |
-| 401 | Invalid or missing key; do not retry |
-| 402 | DeepSeek balance insufficient; do not retry |
-| 403 | Fetch rejected by security policy; do not retry |
-| 404 | No usable fetched page; do not retry |
-| 408 | Retry with bounded backoff |
-| 413 | Request too large; do not retry |
-| 429 | Honor `Retry-After` when safe, otherwise bounded backoff |
-| 500, 502, 503, 504 | Retry with bounded backoff |
-| Other 4xx | Return a configuration/request error; do not retry |
+| Status             | Behavior                                                 |
+| ------------------ | -------------------------------------------------------- |
+| 400                | Invalid request; do not retry                            |
+| 401                | Invalid or missing key; do not retry                     |
+| 402                | DeepSeek balance insufficient; do not retry              |
+| 403                | Fetch rejected by security policy; do not retry          |
+| 404                | No usable fetched page; do not retry                     |
+| 408                | Retry with bounded backoff                               |
+| 413                | Request too large; do not retry                          |
+| 429                | Honor `Retry-After` when safe, otherwise bounded backoff |
+| 500, 502, 503, 504 | Retry with bounded backoff                               |
+| Other 4xx          | Return a configuration/request error; do not retry       |
 
 Network failures and local timeouts are reported without automatic retries
 because the request may still have reached DeepSeek. Only failures known by

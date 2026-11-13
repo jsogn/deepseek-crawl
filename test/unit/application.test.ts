@@ -25,19 +25,13 @@ function gateway() {
 describe("executeSearch", () => {
   it("validates input before calling the client", async () => {
     const client = gateway();
-    await expect(
-      executeSearch(client, { query: "" }, { maxContentChars: 4 }),
-    ).rejects.toThrow();
+    await expect(executeSearch(client, { query: "" }, { maxContentChars: 4 })).rejects.toThrow();
     expect(client.search).not.toHaveBeenCalled();
   });
 
   it("preserves unknown fields and bounds content", async () => {
     const client = gateway();
-    const output = await executeSearch(
-      client,
-      { query: "test" },
-      { maxContentChars: 4 },
-    );
+    const output = await executeSearch(client, { query: "test" }, { maxContentChars: 4 });
     expect(output).toMatchObject({ top_extra: true });
     expect(output.results[0]).toMatchObject({
       content: "1234",
@@ -53,9 +47,9 @@ describe("executeSearch", () => {
 
   it("returns empty results without error", async () => {
     const client = { ...gateway(), search: vi.fn(async () => ({ results: [] })) };
-    await expect(
-      executeSearch(client, { query: "test" }, { maxContentChars: 4 }),
-    ).resolves.toEqual({ results: [] });
+    await expect(executeSearch(client, { query: "test" }, { maxContentChars: 4 })).resolves.toEqual(
+      { results: [] },
+    );
   });
 });
 
@@ -70,11 +64,7 @@ describe("executeFetch", () => {
 
   it("adds the source URL and bounds content", async () => {
     const client = gateway();
-    const output = await executeFetch(
-      client,
-      { url: "https://example.com/page" },
-      { maxChars: 4 },
-    );
+    const output = await executeFetch(client, { url: "https://example.com/page" }, { maxChars: 4 });
     expect(output).toEqual({
       title: "Page",
       url: "https://example.com/page",

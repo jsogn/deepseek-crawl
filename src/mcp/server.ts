@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { executeFetch, executeSearch, type DeepSeekGateway } from "../application/index.js";
+import { type DeepSeekGateway, executeFetch, executeSearch } from "../application/index.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { packageVersion } from "../version.js";
 
@@ -62,7 +62,9 @@ export function createMcpServer(options: McpServerOptions): McpServer {
       description:
         "Search the web with DeepSeek and return ranked results, source URLs, summaries, and optional page content. No chat model is called.",
       inputSchema: {
-        query: z.string().describe("Search query. Supports site:, -site:, lang:, after:, and before:."),
+        query: z
+          .string()
+          .describe("Search query. Supports site:, -site:, lang:, after:, and before:."),
         count: z.number().int().min(1).max(50).default(10).describe("Number of results."),
         ori_question: z
           .string()
@@ -70,10 +72,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
           .optional()
           .describe("Original user question used to improve intent matching."),
         localization: z.string().optional().describe("IPv4 or IPv6 address used for localization."),
-        need_content: z
-          .boolean()
-          .default(false)
-          .describe("Include page content when available."),
+        need_content: z.boolean().default(false).describe("Include page content when available."),
         max_content_chars: z
           .number()
           .int()
@@ -92,9 +91,14 @@ export function createMcpServer(options: McpServerOptions): McpServer {
     },
     async (args, extra) => {
       try {
-        const output = await executeSearch(options.client, args, {
-          maxContentChars: args.max_content_chars,
-        }, extra.signal);
+        const output = await executeSearch(
+          options.client,
+          args,
+          {
+            maxContentChars: args.max_content_chars,
+          },
+          extra.signal,
+        );
         return {
           content: [{ type: "text", text: formatSearchHuman(output) }],
           structuredContent: output,
@@ -134,9 +138,14 @@ export function createMcpServer(options: McpServerOptions): McpServer {
     },
     async (args, extra) => {
       try {
-        const output = await executeFetch(options.client, args, {
-          maxChars: args.max_chars,
-        }, extra.signal);
+        const output = await executeFetch(
+          options.client,
+          args,
+          {
+            maxChars: args.max_chars,
+          },
+          extra.signal,
+        );
         return {
           content: [{ type: "text", text: formatFetchHuman(output) }],
           structuredContent: output,

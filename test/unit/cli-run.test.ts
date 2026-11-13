@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
+import { FileFetchCache } from "../../src/cache/file-cache.js";
 import { runCli } from "../../src/cli/run.js";
 
 const searchResponse = {
@@ -76,6 +77,23 @@ describe("runCli", () => {
     expect(stdout.value()).toContain("--sitemap <include|only|skip> (default: include)");
     expect(stdout.value()).toContain("--plan-only");
     expect(stdout.value()).toContain("--retry-failed");
+  });
+
+  it("clears the configured Fetch cache without an API key", async () => {
+    const fetchCache = {
+      location: "/tmp/deepseek-cache",
+      read: vi.fn(),
+      write: vi.fn(),
+      clear: vi.fn(async () => undefined),
+    };
+    const { deps, stdout } = dependencies(vi.fn() as unknown as typeof fetch, {});
+
+    expect(await runCli(["cache", "clear", "--json"], { ...deps, fetchCache })).toBe(0);
+    expect(fetchCache.clear).toHaveBeenCalledOnce();
+    expect(JSON.parse(stdout.value())).toEqual({
+      cleared: true,
+      location: "/tmp/deepseek-cache",
+    });
   });
 
   it("renders deduplicated Map URLs in sorted human order", async () => {
@@ -340,6 +358,55 @@ describe("runCli", () => {
     });
     expect(await readFile(join(output, "pages", "0001-a.md"), "utf8")).toContain("Source:");
     expect(stderr.value()).toBe("");
+  });
+
+  it("reuses cache across Batch Fetch runs", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-batch-cache-"));
+    const input = join(root, "urls.json");
+    const firstOutput = join(root, "first");
+    const secondOutput = join(root, "second");
+    const fetchCache = new FileFetchCache(join(root, "cache"));
+    await writeFile(input, JSON.stringify(["https://example.com/page"]));
+    const fetchClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => ({ title: "Page", content: "body" })),
+    };
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const invoke = async (output: string) => {
+      const { deps } = dependencies(fetchImpl);
+      return runCli(
+        [
+          "fetch",
+          "--input",
+          input,
+          "--output-dir",
+          output,
+          "--cache-ttl",
+          "60",
+          "--delay-ms",
+          "0",
+          "--json",
+        ],
+        {
+          ...deps,
+          fetchClient,
+          fetchCache,
+          cacheClock: () => new Date("2026-11-14T01:00:00.000Z"),
+        },
+      );
+    };
+
+    expect(await invoke(firstOutput)).toBe(0);
+    expect(await invoke(secondOutput)).toBe(0);
+    expect(fetchClient.fetch).toHaveBeenCalledOnce();
+    expect(JSON.parse(await readFile(join(firstOutput, "fetch.json"), "utf8"))).toMatchObject({
+      stats: { cache_hits: 0, cache_misses: 1 },
+      pages: [{ retrieved_from: "api" }],
+    });
+    expect(JSON.parse(await readFile(join(secondOutput, "fetch.json"), "utf8"))).toMatchObject({
+      stats: { cache_hits: 1, cache_misses: 0 },
+      pages: [{ retrieved_from: "cache" }],
+    });
   });
 
   it("retries only failed Batch Fetch URLs from an existing report", async () => {
@@ -937,6 +1004,60 @@ describe("runCli", () => {
     expect(await readFile(output, "utf8")).toBe(
       "# Page\n\nSource: https://example.com/page\n\nabcdef\n",
     );
+  });
+
+  it("reuses Fetch cache and bypasses it with fresh mode", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-cache-"));
+    const fetchCache = new FileFetchCache(join(root, "cache"));
+    const fetchClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => ({ title: "Cached page", content: "body" })),
+    };
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const invoke = async (args: string[]) => {
+      const { deps, stdout } = dependencies(fetchImpl);
+      const code = await runCli(args, {
+        ...deps,
+        fetchClient,
+        fetchCache,
+        cacheClock: () => new Date("2026-11-14T01:00:00.000Z"),
+      });
+      return { code, output: stdout.value() };
+    };
+
+    const first = await invoke([
+      "fetch",
+      "https://example.com/page",
+      "--cache-ttl",
+      "60",
+      "--json",
+    ]);
+    expect(first.code).toBe(0);
+    expect(JSON.parse(first.output)).toMatchObject({ retrieved_from: "api" });
+    expect(fetchClient.fetch).toHaveBeenCalledOnce();
+
+    const second = await invoke([
+      "fetch",
+      "https://example.com/page",
+      "--cache-ttl",
+      "60",
+      "--json",
+    ]);
+    expect(second.code).toBe(0);
+    expect(JSON.parse(second.output)).toMatchObject({ retrieved_from: "cache" });
+    expect(fetchClient.fetch).toHaveBeenCalledOnce();
+
+    const third = await invoke([
+      "fetch",
+      "https://example.com/page",
+      "--cache-ttl",
+      "60",
+      "--fresh",
+      "--json",
+    ]);
+    expect(third.code).toBe(0);
+    expect(JSON.parse(third.output)).toMatchObject({ retrieved_from: "api" });
+    expect(fetchClient.fetch).toHaveBeenCalledTimes(2);
   });
 
   it("prints API errors to stderr and exits 1", async () => {

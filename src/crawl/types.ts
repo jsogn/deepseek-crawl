@@ -1,4 +1,5 @@
 import type { RetryAttempt, RetrySummary } from "../retry/types.js";
+import type { FetchRetrievalSource } from "../types.js";
 
 export type MapWarningCode =
   | "sitemap_unavailable"
@@ -72,6 +73,7 @@ export interface CrawlPage {
   title: string;
   depth: number;
   content: string;
+  retrievedFrom?: FetchRetrievalSource;
   sources: CrawlPageSource[];
   content_truncated: boolean;
   content_original_length: number;
@@ -87,6 +89,7 @@ export interface CrawlPageSummary {
   content_length: number;
   content_truncated: boolean;
   content_original_length?: number;
+  retrieved_from?: FetchRetrievalSource;
   retry_of?: RetryAttempt;
 }
 
@@ -112,6 +115,7 @@ export interface CrawlPlanSeed {
   content_length: number;
   content_truncated: boolean;
   content_original_length?: number;
+  retrieved_from?: FetchRetrievalSource;
 }
 
 export interface CrawlPlanResult {
@@ -133,6 +137,9 @@ export interface CrawlPlanResult {
     page_limit_reached: boolean;
     discovery_limit_reached: boolean;
     sitemap_candidates?: number;
+    cache_hits?: number;
+    cache_misses?: number;
+    cache_errors?: number;
   };
   diagnostics_truncated: boolean;
   warnings: MapWarning[];
@@ -172,6 +179,9 @@ export interface CrawlRunResult {
     limit_reached: boolean;
     discovery_limit_reached: boolean;
     sitemap_candidates?: number;
+    cache_hits?: number;
+    cache_misses?: number;
+    cache_errors?: number;
   };
   pages: CrawlPageSummary[];
   failures: CrawlFailure[];

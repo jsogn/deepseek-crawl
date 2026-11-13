@@ -34,7 +34,11 @@ export function formatSearchHuman(output: SearchOutput): string {
 
 export function formatFetchHuman(output: FetchOutput): string {
   const title = output.title || "Untitled";
-  const lines = [`# ${title}`, "", `Source: ${output.url}`, "", output.content];
+  const lines = [`# ${title}`, "", `Source: ${output.url}`];
+  if (output.retrieved_from) {
+    lines.push(`Retrieved from: ${output.retrieved_from}`);
+  }
+  lines.push("", output.content);
   if (output.truncated && output.original_length !== undefined) {
     lines.push(
       "",

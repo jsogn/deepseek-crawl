@@ -1,3 +1,4 @@
+import { cacheStatsFor, fetchSourceFor } from "../cache/cached-gateway.js";
 import { canonicalizeCrawlUrl, createCrawlPathFilter } from "../crawl/filters.js";
 import { extractMarkdownLinks, sameOrigin } from "../crawl/links.js";
 import { runLayeredTasks } from "../crawl/queue.js";
@@ -90,6 +91,7 @@ function summaryFor(page: CrawlPage): CrawlPageSummary {
     title: page.title,
     depth: page.depth,
     sources: page.sources,
+    ...(page.retrievedFrom ? { retrieved_from: page.retrievedFrom } : {}),
     content_length: codepointLength(page.content),
     content_truncated: page.content_truncated,
   };
@@ -197,6 +199,7 @@ export async function executeCrawl(
     let links: string[];
     try {
       const response = await client.fetch({ url }, crawlSignal);
+      const retrievedFrom = fetchSourceFor(client, url);
       const bounded = boundFetchOutput({ ...response, url }, limits.pageContentLimit);
       page = {
         index,
@@ -204,6 +207,7 @@ export async function executeCrawl(
         title: bounded.title,
         depth,
         content: bounded.content,
+        ...(retrievedFrom ? { retrievedFrom } : {}),
         sources: pageSourcesInOrder(sourcesByUrl.get(url) ?? new Set<CrawlPageSource>()),
         content_truncated: bounded.truncated ?? false,
         content_original_length: bounded.original_length ?? codepointLength(bounded.content),
@@ -355,6 +359,7 @@ export async function executeCrawl(
   pages.sort((left, right) => left.index - right.index);
   failures.sort((left, right) => left.depth - right.depth || left.url.localeCompare(right.url));
 
+  const cacheStats = cacheStatsFor(client);
   return {
     version: 1,
     seed_url: seed.href,
@@ -374,6 +379,13 @@ export async function executeCrawl(
       content_truncated: contentTruncated,
       limit_reached: limitReached,
       discovery_limit_reached: discoveryLimitReached,
+      ...(cacheStats
+        ? {
+            cache_hits: cacheStats.hits,
+            cache_misses: cacheStats.misses,
+            cache_errors: cacheStats.errors,
+          }
+        : {}),
       ...(options.sitemapMode === undefined ? {} : { sitemap_candidates: sitemapCandidates }),
     },
     pages,

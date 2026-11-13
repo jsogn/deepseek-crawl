@@ -56,4 +56,14 @@ describe("formatFetchHuman", () => {
     });
     expect(output).toContain("truncated from 100 to 5 characters");
   });
+
+  it("reports cache retrieval provenance", () => {
+    const output = formatFetchHuman({
+      title: "Page",
+      url: "https://example.com/page",
+      content: "body",
+      retrieved_from: "cache",
+    });
+    expect(output).toContain("Retrieved from: cache");
+  });
 });

@@ -1,3 +1,4 @@
+import { cacheStatsFor, fetchSourceFor } from "../cache/cached-gateway.js";
 import { canonicalizeCrawlUrl, createCrawlPathFilter } from "../crawl/filters.js";
 import { sameOrigin, visitMarkdownLinks } from "../crawl/links.js";
 import type {
@@ -130,6 +131,7 @@ export async function executeCrawlPlan(
   };
 
   const response = await client.fetch({ url: seed.href }, planSignal);
+  const retrievedFrom = fetchSourceFor(client, seed.href);
   const bounded = boundFetchOutput({ ...response, url: seed.href }, limits.pageContentLimit);
   if (limits.maxDepth > 0) {
     if (sitemapMode !== "only") {
@@ -197,6 +199,7 @@ export async function executeCrawlPlan(
     .map((candidate) => filteredUrl(candidate, "discovery_limit"));
   const filteredCount = filtered.length + discoveryOmitted.length;
 
+  const cacheStats = cacheStatsFor(client);
   return {
     version: 1,
     seed_url: seed.href,
@@ -208,6 +211,7 @@ export async function executeCrawlPlan(
       depth: 0,
       content_length: codepointLength(bounded.content),
       content_truncated: bounded.truncated ?? false,
+      ...(retrievedFrom ? { retrieved_from: retrievedFrom } : {}),
       ...(bounded.truncated
         ? { content_original_length: bounded.original_length ?? codepointLength(bounded.content) }
         : {}),
@@ -224,6 +228,13 @@ export async function executeCrawlPlan(
       planned_pages: selectedSet.size + 1,
       page_limit_reached: deferred.length > 0,
       discovery_limit_reached: discoveryLimitReached || candidatesTruncated,
+      ...(cacheStats
+        ? {
+            cache_hits: cacheStats.hits,
+            cache_misses: cacheStats.misses,
+            cache_errors: cacheStats.errors,
+          }
+        : {}),
       ...(options.sitemapMode === undefined ? {} : { sitemap_candidates: sitemapCandidates }),
     },
     diagnostics_truncated:

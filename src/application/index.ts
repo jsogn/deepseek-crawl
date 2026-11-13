@@ -1,3 +1,4 @@
+import { fetchSourceFor } from "../cache/cached-gateway.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { fetchInputSchema, searchInputSchema } from "../deepseek/schemas.js";
 import { boundFetchOutput, boundSearchOutput } from "../output/bounds.js";
@@ -52,5 +53,9 @@ export async function executeFetch(
 ): Promise<FetchOutput> {
   const parsed = fetchInputSchema.parse(input);
   const response = await client.fetch(parsed, signal);
-  return boundFetchOutput({ ...response, url: parsed.url }, options.maxChars);
+  const source = fetchSourceFor(client, parsed.url);
+  return {
+    ...boundFetchOutput({ ...response, url: parsed.url }, options.maxChars),
+    ...(source ? { retrieved_from: source } : {}),
+  };
 }

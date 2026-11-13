@@ -5,6 +5,7 @@ import type {
   BatchFetchPageSummary,
   BatchFetchResult,
 } from "../batch/types.js";
+import { cacheStatsFor, fetchSourceFor } from "../cache/cached-gateway.js";
 import { normalizeHttpUrl } from "../crawl/links.js";
 import { runLayeredTasks } from "../crawl/queue.js";
 import { DeepSeekError } from "../deepseek/errors.js";
@@ -142,6 +143,9 @@ function summaryFor(page: BatchFetchPage): BatchFetchPageSummary {
   if (page.retryOf) {
     summary.retry_of = page.retryOf;
   }
+  if (page.retrievedFrom) {
+    summary.retrieved_from = page.retrievedFrom;
+  }
   return summary;
 }
 
@@ -179,6 +183,7 @@ async function executeBatchRequests(
     run: async (request) => {
       try {
         const response = await client.fetch({ url: request.url }, combinedSignal);
+        const retrievedFrom = fetchSourceFor(client, request.url);
         const bounded = boundFetchOutput({ ...response, url: request.url }, settings.maxChars);
         const page: BatchFetchPage = {
           index: request.index,
@@ -187,6 +192,7 @@ async function executeBatchRequests(
           content: bounded.content,
           contentTruncated: bounded.truncated ?? false,
           contentOriginalLength: bounded.original_length ?? codepointLength(bounded.content),
+          ...(retrievedFrom ? { retrievedFrom } : {}),
           ...(request.retryOf ? { retryOf: request.retryOf } : {}),
         };
         try {
@@ -224,6 +230,7 @@ async function executeBatchRequests(
   }
   pages.sort((left, right) => left.index - right.index);
 
+  const cacheStats = cacheStatsFor(client);
   return {
     version: 1,
     source,
@@ -239,6 +246,13 @@ async function executeBatchRequests(
       unique: requests.length,
       fetched: pages.length,
       failed: failures.length,
+      ...(cacheStats
+        ? {
+            cache_hits: cacheStats.hits,
+            cache_misses: cacheStats.misses,
+            cache_errors: cacheStats.errors,
+          }
+        : {}),
     },
     pages,
     failures,

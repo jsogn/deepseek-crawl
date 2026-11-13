@@ -12,6 +12,10 @@ import {
   executeSearch,
   type MapSitemapReader,
 } from "../application/index.js";
+import { CachedFetchGateway } from "../cache/cached-gateway.js";
+import { FileFetchCache } from "../cache/file-cache.js";
+import { resolveCacheDirectory } from "../cache/paths.js";
+import type { FetchCache } from "../cache/types.js";
 import { loadConfig } from "../config.js";
 import { readSecret } from "../credentials/input.js";
 import { type CredentialStore, createCredentialStore } from "../credentials/store.js";
@@ -54,6 +58,8 @@ export interface CliDependencies {
   };
   credentialStore?: CredentialStore;
   secretReader?: () => Promise<string>;
+  fetchCache?: FetchCache;
+  cacheClock?: () => Date;
   stdin: NodeJS.ReadableStream;
 }
 
@@ -66,6 +72,7 @@ Usage:
   deepseek-crawl map <url> [options]
   deepseek-crawl crawl <url> [options]
   deepseek-crawl crawl --retry-failed <crawl.json> -o <dir> [options]
+  deepseek-crawl cache clear [--json]
   deepseek-crawl doctor [--live] [--json]
   deepseek-crawl setup skills [options]
   deepseek-crawl auth set
@@ -96,6 +103,8 @@ Options:
 
 Options:
   --max-chars <0..1000000>
+  --cache-ttl <1..31536000>
+  --fresh
   --input <path|->
   --retry-failed <fetch.json>
   --output-dir <dir>
@@ -119,6 +128,8 @@ Options:
 Options:
   --max-depth <0..5>
   --max-pages <1..100>
+  --cache-ttl <1..31536000>
+  --fresh
   --concurrency <1..5>
   --delay-ms <0..5000>
   --include-paths <patterns>
@@ -156,6 +167,10 @@ Options:
   deepseek-crawl auth remove [--json]
 `,
   mcp: "Usage: deepseek-crawl mcp\n\nStart the MCP server over stdio.\n",
+  cache: `Usage: deepseek-crawl cache clear [--json]
+
+Clear the local DeepSeek Fetch cache.
+`,
 };
 
 function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDependencies {
@@ -178,6 +193,8 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
       ? {}
       : { credentialStore: dependencies.credentialStore }),
     ...(dependencies.secretReader === undefined ? {} : { secretReader: dependencies.secretReader }),
+    ...(dependencies.fetchCache === undefined ? {} : { fetchCache: dependencies.fetchCache }),
+    ...(dependencies.cacheClock === undefined ? {} : { cacheClock: dependencies.cacheClock }),
     stdin: dependencies.stdin ?? process.stdin,
   };
 }
@@ -195,6 +212,26 @@ function errorMessage(error: unknown): string {
     return error.issues.map((issue) => issue.message).join("; ");
   }
   return genericErrorMessage(error);
+}
+
+function resolvedFetchCache(deps: CliDependencies): FetchCache {
+  return deps.fetchCache ?? new FileFetchCache(resolveCacheDirectory(deps.env, homedir()));
+}
+
+function withFetchCache(
+  client: DeepSeekGateway,
+  cacheTtl: number | undefined,
+  fresh: boolean | undefined,
+  deps: CliDependencies,
+): DeepSeekGateway {
+  if (cacheTtl === undefined) {
+    return client;
+  }
+  return new CachedFetchGateway(client, resolvedFetchCache(deps), {
+    ttlMs: cacheTtl * 1_000,
+    fresh: fresh ?? false,
+    ...(deps.cacheClock ? { now: deps.cacheClock } : {}),
+  });
 }
 
 async function runSearch(
@@ -229,7 +266,12 @@ async function runSearch(
 
 async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps: CliDependencies) {
   const config = loadConfig(deps.env, deps.credentialStore);
-  const client = deps.fetchClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+  const client = withFetchCache(
+    deps.fetchClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl }),
+    command.cacheTtl,
+    command.fresh,
+    deps,
+  );
 
   if (command.input) {
     const source = command.input === "-" ? "stdin" : command.input;
@@ -292,7 +334,12 @@ async function runFetchRetry(
   deps: CliDependencies,
 ) {
   const config = loadConfig(deps.env, deps.credentialStore);
-  const client = deps.fetchClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+  const client = withFetchCache(
+    deps.fetchClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl }),
+    command.cacheTtl,
+    command.fresh,
+    deps,
+  );
   const report = await readJsonFileBounded(command.report, "Batch Fetch retry report");
   const writer = await createBatchFetchOutputWriter(command.outputDir);
   try {
@@ -367,7 +414,12 @@ async function runMap(command: Extract<ParsedCommand, { kind: "map" }>, deps: Cl
 
 async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps: CliDependencies) {
   const config = loadConfig(deps.env, deps.credentialStore);
-  const client = deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+  const client = withFetchCache(
+    deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl }),
+    command.cacheTtl,
+    command.fresh,
+    deps,
+  );
   const reader = deps.sitemapReader ?? new SitemapReader();
   const crawlOptions = {
     maxDepth: command.maxDepth,
@@ -422,7 +474,12 @@ async function runCrawlRetry(
   deps: CliDependencies,
 ) {
   const config = loadConfig(deps.env, deps.credentialStore);
-  const client = deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+  const client = withFetchCache(
+    deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl }),
+    command.cacheTtl,
+    command.fresh,
+    deps,
+  );
   const report = await readJsonFileBounded(command.report, "Crawl retry report");
   const writer = await createCrawlOutputWriter(command.output);
   try {
@@ -446,6 +503,20 @@ async function runCrawlRetry(
     await writer.abort().catch(() => undefined);
     throw error;
   }
+}
+
+async function runCacheClear(
+  command: Extract<ParsedCommand, { kind: "cache-clear" }>,
+  deps: CliDependencies,
+) {
+  const cache = resolvedFetchCache(deps);
+  await cache.clear();
+  deps.stdout.write(
+    command.json
+      ? `${JSON.stringify({ cleared: true, location: cache.location }, null, 2)}\n`
+      : `Cleared Fetch cache: ${cache.location}\n`,
+  );
+  return 0;
 }
 
 function formatSkillSetupHuman(result: SkillSetupResult): string {
@@ -570,6 +641,8 @@ export async function runCli(
         return await runCrawl(command, deps);
       case "crawl-retry":
         return await runCrawlRetry(command, deps);
+      case "cache-clear":
+        return await runCacheClear(command, deps);
       case "setup-skills":
         return await runSetupSkills(command, deps);
       case "auth-set":

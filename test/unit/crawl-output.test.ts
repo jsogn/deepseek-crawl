@@ -262,6 +262,23 @@ describe("formatCrawlHuman", () => {
     expect(output).toContain("Retry deduplicated: 0");
   });
 
+  it("reports cache statistics in the human summary", () => {
+    const output = formatCrawlHuman(
+      result({
+        stats: {
+          ...result().stats,
+          cache_hits: 2,
+          cache_misses: 1,
+          cache_errors: 0,
+        },
+      }),
+      "crawl-output",
+    );
+
+    expect(output).toContain("Cache hits: 2");
+    expect(output).toContain("Cache misses: 1");
+  });
+
   it("reports Sitemap mode, candidates, and warnings when present", () => {
     const output = formatCrawlHuman(
       result({

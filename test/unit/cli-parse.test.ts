@@ -79,6 +79,9 @@ describe("parseCli", () => {
         "0",
         "--max-chars",
         "5000",
+        "--cache-ttl",
+        "30",
+        "--fresh",
         "--json",
       ]),
     ).toEqual({
@@ -88,6 +91,18 @@ describe("parseCli", () => {
       maxChars: 5000,
       concurrency: 2,
       delayMs: 0,
+      cacheTtl: 30,
+      fresh: true,
+      json: true,
+    });
+
+    expect(
+      parseCli(["fetch", "https://example.com", "--cache-ttl", "60", "--fresh", "--json"]),
+    ).toEqual({
+      kind: "fetch",
+      url: "https://example.com",
+      cacheTtl: 60,
+      fresh: true,
       json: true,
     });
   });
@@ -195,10 +210,49 @@ describe("parseCli", () => {
       output: "plan.json",
     });
 
-    expect(parseCli(["crawl", "--retry-failed", "crawl.json", "-o", "retry", "--json"])).toEqual({
+    expect(
+      parseCli([
+        "crawl",
+        "--retry-failed",
+        "crawl.json",
+        "-o",
+        "retry",
+        "--cache-ttl",
+        "30",
+        "--fresh",
+        "--json",
+      ]),
+    ).toEqual({
       kind: "crawl-retry",
       report: "crawl.json",
       output: "retry",
+      cacheTtl: 30,
+      fresh: true,
+      json: true,
+    });
+
+    expect(
+      parseCli([
+        "crawl",
+        "https://example.com",
+        "--cache-ttl",
+        "120",
+        "--fresh",
+        "--output",
+        "out",
+      ]),
+    ).toMatchObject({
+      kind: "crawl",
+      cacheTtl: 120,
+      fresh: true,
+      output: "out",
+    });
+  });
+
+  it("parses cache clear", () => {
+    expect(parseCli(["cache", "clear"])).toEqual({ kind: "cache-clear", json: false });
+    expect(parseCli(["cache", "clear", "--json"])).toEqual({
+      kind: "cache-clear",
       json: true,
     });
   });
@@ -303,6 +357,11 @@ describe("parseCli", () => {
     [["auth", "set", "--json"], /unknown option/i],
     [["unknown"], /unknown command/i],
     [["search", "x", "--unknown"], /unknown option/i],
+    [["fetch", "https://example.com", "--cache-ttl", "0"], /cache-ttl/i],
+    [["fetch", "https://example.com", "--fresh"], /fresh|cache-ttl/i],
+    [["crawl", "https://example.com", "--output", "out", "--cache-ttl", "0"], /cache-ttl/i],
+    [["cache"], /clear|subcommand/i],
+    [["cache", "unknown"], /clear|subcommand/i],
   ])("rejects invalid input %#", (argv, message) => {
     expect(() => parseCli(argv as string[])).toThrow(CliUsageError);
     expect(() => parseCli(argv as string[])).toThrow(message);

@@ -32,6 +32,8 @@ export interface RawFetchResponse extends Record<string, unknown> {
   content: string;
 }
 
+export type FetchRetrievalSource = "api" | "cache";
+
 export interface SearchResultItem extends RawSearchResult {
   content_truncated?: boolean;
   content_original_length?: number;
@@ -47,6 +49,7 @@ export interface SearchOutput extends Record<string, unknown> {
 
 export interface FetchOutput extends RawFetchResponse {
   url: string;
+  retrieved_from?: FetchRetrievalSource;
   truncated?: boolean;
   original_length?: number;
 }

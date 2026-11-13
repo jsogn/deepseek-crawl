@@ -62,6 +62,13 @@ export function formatBatchFetchHuman(result: BatchFetchResult, outputDirectory:
       `Retry truncated: ${result.retry_of.truncated ? "yes" : "no"}`,
     );
   }
+  if (result.stats.cache_hits !== undefined || result.stats.cache_misses !== undefined) {
+    lines.push(
+      `Cache hits: ${result.stats.cache_hits ?? 0}`,
+      `Cache misses: ${result.stats.cache_misses ?? 0}`,
+      `Cache errors: ${result.stats.cache_errors ?? 0}`,
+    );
+  }
   lines.push(`Output: ${outputDirectory}`);
   return lines.join("\n");
 }

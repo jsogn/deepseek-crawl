@@ -22,6 +22,14 @@ export type {
   BatchFetchPageSummary,
   BatchFetchResult,
 } from "./batch/types.js";
+export {
+  CachedFetchGateway,
+  cacheStatsFor,
+  fetchSourceFor,
+} from "./cache/cached-gateway.js";
+export { FileFetchCache } from "./cache/file-cache.js";
+export { resolveCacheDirectory } from "./cache/paths.js";
+export type { FetchCache, FetchCacheEntry } from "./cache/types.js";
 export type {
   CrawlFailure,
   CrawlOptions,
@@ -51,3 +59,4 @@ export {
 export { DeepSeekClient } from "./deepseek/client.js";
 export { DeepSeekError } from "./deepseek/errors.js";
 export type { RetryAttempt, RetrySummary } from "./retry/types.js";
+export type { FetchRetrievalSource } from "./types.js";

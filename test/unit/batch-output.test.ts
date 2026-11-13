@@ -93,4 +93,22 @@ describe("batch fetch output", () => {
     expect(output).toContain("Retry attempted: 1 of 3 original failures");
     expect(output).toContain("Retry deduplicated: 0");
   });
+
+  it("reports cache statistics in the human summary", () => {
+    const output = formatBatchFetchHuman(
+      {
+        ...result(),
+        stats: {
+          ...result().stats,
+          cache_hits: 2,
+          cache_misses: 1,
+          cache_errors: 0,
+        },
+      },
+      "/tmp/batch",
+    );
+
+    expect(output).toContain("Cache hits: 2");
+    expect(output).toContain("Cache misses: 1");
+  });
 });

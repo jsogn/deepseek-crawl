@@ -1,4 +1,5 @@
 import type { RetryAttempt, RetrySummary } from "../retry/types.js";
+import type { FetchRetrievalSource } from "../types.js";
 
 export interface BatchFetchOptions {
   concurrency: number;
@@ -14,6 +15,7 @@ export interface BatchFetchPage {
   content: string;
   contentTruncated: boolean;
   contentOriginalLength: number;
+  retrievedFrom?: FetchRetrievalSource;
   retryOf?: RetryAttempt;
 }
 
@@ -24,6 +26,7 @@ export interface BatchFetchPageSummary {
   content_length: number;
   content_truncated: boolean;
   content_original_length?: number;
+  retrieved_from?: FetchRetrievalSource;
   retry_of?: RetryAttempt;
 }
 
@@ -54,6 +57,9 @@ export interface BatchFetchResult extends Record<string, unknown> {
     unique: number;
     fetched: number;
     failed: number;
+    cache_hits?: number;
+    cache_misses?: number;
+    cache_errors?: number;
   };
   pages: BatchFetchPageSummary[];
   failures: BatchFetchFailure[];

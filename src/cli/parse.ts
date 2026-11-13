@@ -29,6 +29,8 @@ export type ParsedCommand =
       maxChars?: number;
       concurrency?: number;
       delayMs?: number;
+      cacheTtl?: number;
+      fresh?: boolean;
       json: boolean;
       output?: string;
     }
@@ -39,6 +41,8 @@ export type ParsedCommand =
       maxChars?: number;
       concurrency: number;
       delayMs: number;
+      cacheTtl?: number;
+      fresh?: boolean;
       json: boolean;
     }
   | {
@@ -61,6 +65,8 @@ export type ParsedCommand =
       ignoreQueryParameters?: boolean;
       sitemapMode: CrawlSitemapMode;
       planOnly: boolean;
+      cacheTtl?: number;
+      fresh?: boolean;
       output: string;
       json: boolean;
     }
@@ -68,8 +74,11 @@ export type ParsedCommand =
       kind: "crawl-retry";
       report: string;
       output: string;
+      cacheTtl?: number;
+      fresh?: boolean;
       json: boolean;
     }
+  | { kind: "cache-clear"; json: boolean }
   | { kind: "doctor"; live: boolean; json: boolean }
   | {
       kind: "setup-skills";
@@ -121,6 +130,19 @@ function parsePatterns(value: string, name: string): string[] {
     throw new CliUsageError(`${name} patterns must not be empty.`);
   }
   return patterns;
+}
+
+function parseCacheOptions(
+  ttl: string | undefined,
+  fresh: boolean | undefined,
+): { cacheTtl?: number; fresh?: boolean } {
+  if (fresh && ttl === undefined) {
+    throw new CliUsageError("--fresh requires --cache-ttl.");
+  }
+  return {
+    ...(ttl === undefined ? {} : { cacheTtl: parseInteger(ttl, "cache-ttl", 1, 31_536_000) }),
+    ...(fresh ? { fresh: true } : {}),
+  };
 }
 
 function exactPositional(positionals: string[], name: string): string {
@@ -202,6 +224,8 @@ export function parseCli(argv: string[]): ParsedCommand {
           strict: true,
           options: {
             "max-chars": { type: "string" },
+            "cache-ttl": { type: "string" },
+            fresh: { type: "boolean" },
             input: { type: "string" },
             "retry-failed": { type: "string" },
             "output-dir": { type: "string" },
@@ -252,6 +276,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             ...(parsed.values["max-chars"] === undefined
               ? {}
               : { maxChars: parseContentLimit(parsed.values["max-chars"]) }),
+            ...parseCacheOptions(parsed.values["cache-ttl"], parsed.values.fresh),
             json: parsed.values.json ?? false,
           };
         }
@@ -290,6 +315,7 @@ export function parseCli(argv: string[]): ParsedCommand {
         if (parsed.values["max-chars"] !== undefined) {
           result.maxChars = parseContentLimit(parsed.values["max-chars"]);
         }
+        Object.assign(result, parseCacheOptions(parsed.values["cache-ttl"], parsed.values.fresh));
         if (parsed.values.output !== undefined) {
           result.output = parsed.values.output;
         }
@@ -340,6 +366,8 @@ export function parseCli(argv: string[]): ParsedCommand {
           options: {
             "max-depth": { type: "string" },
             "max-pages": { type: "string" },
+            "cache-ttl": { type: "string" },
+            fresh: { type: "boolean" },
             concurrency: { type: "string" },
             "delay-ms": { type: "string" },
             "include-paths": { type: "string" },
@@ -387,6 +415,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             kind: "crawl-retry",
             report: retryFailed,
             output,
+            ...parseCacheOptions(parsed.values["cache-ttl"], parsed.values.fresh),
             json: parsed.values.json ?? false,
           };
         }
@@ -421,9 +450,30 @@ export function parseCli(argv: string[]): ParsedCommand {
               ? "include"
               : parseSitemapMode(parsed.values.sitemap),
           planOnly: parsed.values["plan-only"] ?? false,
+          ...parseCacheOptions(parsed.values["cache-ttl"], parsed.values.fresh),
           output,
           json: parsed.values.json ?? false,
         };
+      }
+      case "cache": {
+        if (args[0] === "--help" || args[0] === "-h") {
+          return { kind: "help", command: "cache" };
+        }
+        if (args[0] !== "clear") {
+          throw new CliUsageError("cache subcommand clear is required.");
+        }
+        const parsed = parseArgs({
+          args: args.slice(1),
+          allowPositionals: false,
+          strict: true,
+          options: {
+            json: { type: "boolean" },
+            help: { type: "boolean", short: "h" },
+          },
+        });
+        return parsed.values.help
+          ? { kind: "help", command: "cache" }
+          : { kind: "cache-clear", json: parsed.values.json ?? false };
       }
       case "doctor": {
         const parsed = parseArgs({

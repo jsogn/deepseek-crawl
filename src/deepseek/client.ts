@@ -189,7 +189,7 @@ export class DeepSeekClient {
         ? AbortSignal.any([signal, timeoutController.signal])
         : timeoutController.signal;
 
-      let response: Response;
+      let response: Response | undefined;
       try {
         response = await this.#fetchImpl(new URL(`v1/tools/${operation}`, this.#baseUrl), {
           method: "POST",
@@ -202,6 +202,26 @@ export class DeepSeekClient {
           redirect: "error",
           signal: requestSignal,
         });
+
+        if (!response.ok) {
+          const upstreamMessage = await readUpstreamMessage(response);
+          if (timeoutController.signal.aborted) {
+            throw new DeepSeekError("DeepSeek request timed out.", { kind: "timeout" });
+          }
+          const error = statusError(response, upstreamMessage);
+          if (RETRYABLE_STATUSES.has(response.status) && attempt < this.#maxRetries) {
+            const retryAfter =
+              response.status === 429
+                ? parseRetryAfter(response.headers.get("retry-after"))
+                : undefined;
+            clearTimeout(timer);
+            await this.#sleep(retryAfter ?? jitteredDelay(attempt, this.#random), signal);
+            continue;
+          }
+          throw error;
+        }
+
+        return schema.parse(await response.json());
       } catch (error) {
         if (signal?.aborted) {
           throw cancellationError();
@@ -215,35 +235,18 @@ export class DeepSeekClient {
         if (error instanceof DeepSeekError) {
           throw error;
         }
+        if (response) {
+          throw new DeepSeekError("DeepSeek returned an invalid response.", {
+            kind: "invalid_response",
+            cause: error,
+          });
+        }
         throw new DeepSeekError("Could not reach the DeepSeek API.", {
           kind: "network",
           cause: error,
         });
       } finally {
         clearTimeout(timer);
-      }
-
-      if (!response.ok) {
-        const upstreamMessage = await readUpstreamMessage(response);
-        const error = statusError(response, upstreamMessage);
-        if (RETRYABLE_STATUSES.has(response.status) && attempt < this.#maxRetries) {
-          const retryAfter =
-            response.status === 429
-              ? parseRetryAfter(response.headers.get("retry-after"))
-              : undefined;
-          await this.#sleep(retryAfter ?? jitteredDelay(attempt, this.#random), signal);
-          continue;
-        }
-        throw error;
-      }
-
-      try {
-        return schema.parse(await response.json());
-      } catch (error) {
-        throw new DeepSeekError("DeepSeek returned an invalid response.", {
-          kind: "invalid_response",
-          cause: error,
-        });
       }
     }
 

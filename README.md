@@ -61,9 +61,9 @@ deepseek-websearch search <query>
 ```
 
 Human-readable output defaults to a 4000-character content limit per result.
-`--json` and `--output` preserve complete API content unless
-`--max-content-chars` is explicitly supplied. `--max-content-chars 0` disables
-truncation.
+`--json` preserves complete API content unless `--max-content-chars` is
+explicitly supplied. `--output` always writes the complete result.
+`--max-content-chars 0` disables truncation.
 
 ```bash
 deepseek-websearch search "Hyperf 3.1 queue" --count 5 --json
@@ -131,6 +131,23 @@ codex mcp add deepseek-websearch \
 Claude Desktop, Cursor, and other MCP clients can use the JSON configuration
 above. Keep the API key in user-level client configuration, never in a project
 repository.
+
+To use a local checkout before publication, point the client at the built
+entrypoint:
+
+```json
+{
+  "mcpServers": {
+    "deepseek-websearch": {
+      "command": "node",
+      "args": ["/absolute/path/to/deepseek-websearch/dist/bin.js", "mcp"],
+      "env": {
+        "DEEPSEEK_API_KEY": "YOUR_DEEPSEEK_API_KEY"
+      }
+    }
+  }
+}
+```
 
 The server exposes:
 

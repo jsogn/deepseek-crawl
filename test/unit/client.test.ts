@@ -170,6 +170,29 @@ describe("DeepSeekClient", () => {
     expect(delays).toEqual([]);
   });
 
+  it("keeps the timeout active while reading the response body", async () => {
+    const fetchImpl = vi.fn(
+      async (_url: string | URL | Request, options?: RequestInit) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              options?.signal?.addEventListener(
+                "abort",
+                () => controller.error(new DOMException("Aborted", "AbortError")),
+                { once: true },
+              );
+            },
+          }),
+        ),
+    ) as unknown as typeof fetch;
+    const { client } = createClient(fetchImpl, { timeoutMs: 10 });
+
+    await expect(
+      client.search({ query: "test", count: 1, need_content: false }),
+    ).rejects.toMatchObject({ kind: "timeout" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects malformed JSON and schema-invalid success bodies", async () => {
     for (const response of [
       new Response("not json"),

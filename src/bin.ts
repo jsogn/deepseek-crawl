@@ -2,12 +2,19 @@
 
 import { runCli } from "./cli/run.js";
 
-const controller = new AbortController();
-const onSigint = () => controller.abort();
-process.once("SIGINT", onSigint);
+const argv = process.argv.slice(2);
+const signalCommands = new Set(["crawl", "map"]);
 
-try {
-  process.exitCode = await runCli(process.argv.slice(2), { signal: controller.signal });
-} finally {
-  process.removeListener("SIGINT", onSigint);
+if (!signalCommands.has(argv[0] ?? "")) {
+  process.exitCode = await runCli(argv);
+} else {
+  const controller = new AbortController();
+  const onSigint = () => controller.abort();
+  process.once("SIGINT", onSigint);
+
+  try {
+    process.exitCode = await runCli(argv, { signal: controller.signal });
+  } finally {
+    process.removeListener("SIGINT", onSigint);
+  }
 }

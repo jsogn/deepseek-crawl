@@ -8,7 +8,7 @@ describe("package executable", () => {
       encoding: "utf8",
     });
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("0.4.0");
+    expect(result.stdout.trim()).toBe("0.5.0");
     expect(result.stderr).toBe("");
   });
 

@@ -11,6 +11,8 @@ export type {
   CrawlPageIndex,
   CrawlPageSummary,
   CrawlRunResult,
+  CrawlSitemapMode,
+  CrawlSitemapReader,
   MapResult,
   MapUrl,
   MapUrlSource,

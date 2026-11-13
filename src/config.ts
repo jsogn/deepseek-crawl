@@ -1,5 +1,5 @@
 import { isIP } from "node:net";
-import { createCredentialStore, type CredentialStore } from "./credentials/store.js";
+import { type CredentialStore, createCredentialStore } from "./credentials/store.js";
 
 export type CredentialSource = "environment" | "keychain" | "file";
 

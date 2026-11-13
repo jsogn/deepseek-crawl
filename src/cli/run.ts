@@ -11,7 +11,7 @@ import {
 } from "../application/index.js";
 import { loadConfig } from "../config.js";
 import { readSecret } from "../credentials/input.js";
-import { createCredentialStore, type CredentialStore } from "../credentials/store.js";
+import { type CredentialStore, createCredentialStore } from "../credentials/store.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
@@ -412,9 +412,7 @@ export async function runCli(
       case "doctor":
         return await runDoctor({
           env: deps.env,
-          ...(deps.credentialStore === undefined
-            ? {}
-            : { credentialStore: deps.credentialStore }),
+          ...(deps.credentialStore === undefined ? {} : { credentialStore: deps.credentialStore }),
           fetchImpl: deps.fetchImpl,
           live: command.live,
           json: command.json,

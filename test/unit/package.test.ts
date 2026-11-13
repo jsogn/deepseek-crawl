@@ -42,6 +42,11 @@ describe("package documentation", () => {
       "~/.agents/skills/deepseek-crawl",
       "--agent codex",
       "npx skills add jsogn/deepseek-crawl",
+      "deepseek-crawl auth set",
+      "deepseek-crawl auth status",
+      "deepseek-crawl auth remove",
+      "macOS Keychain",
+      "DEEPSEEK_API_KEY",
     ]) {
       expect(readme).toContain(text);
     }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CredentialStore } from "../../src/credentials/store.js";
 import { runCli } from "../../src/cli/run.js";
+import type { CredentialStore } from "../../src/credentials/store.js";
 
 function writer() {
   let value = "";

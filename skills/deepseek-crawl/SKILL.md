@@ -26,6 +26,9 @@ Confirm that the API key is configured without printing it. If the command is
 missing or the key is absent, report the setup failure instead of inventing a
 different provider.
 
+If authentication is missing, ask the user to run `deepseek-crawl auth set`.
+Never ask the user to paste an API key into the chat or pass it as an argument.
+
 If the CLI is installed but this Skill is unavailable in a new Agent session,
 run `deepseek-crawl setup skills` to install it into the common
 `.agents/skills` directory.

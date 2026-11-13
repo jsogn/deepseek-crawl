@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -8,7 +9,6 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -27,10 +27,7 @@ export interface SecurityCommandResult {
   stderr: string;
 }
 
-export type SecurityCommandRunner = (
-  args: string[],
-  input?: string,
-) => SecurityCommandResult;
+export type SecurityCommandRunner = (args: string[], input?: string) => SecurityCommandResult;
 
 export interface CredentialStoreOptions {
   platform?: NodeJS.Platform;
@@ -88,10 +85,14 @@ function createFileStore(path: string): CredentialStore {
       chmodSync(directory, 0o700);
       const temporary = join(directory, `.credentials.${randomUUID()}.tmp`);
       try {
-        writeFileSync(temporary, `${JSON.stringify({ api_key: validateStoredKey(apiKey) }, null, 2)}\n`, {
-          encoding: "utf8",
-          mode: 0o600,
-        });
+        writeFileSync(
+          temporary,
+          `${JSON.stringify({ api_key: validateStoredKey(apiKey) }, null, 2)}\n`,
+          {
+            encoding: "utf8",
+            mode: 0o600,
+          },
+        );
         chmodSync(temporary, 0o600);
         renameSync(temporary, path);
         chmodSync(path, 0o600);
@@ -144,15 +145,7 @@ function createKeychainStore(runCommand: SecurityCommandRunner): CredentialStore
     set(apiKey: string) {
       const key = validateStoredKey(apiKey);
       const result = runCommand(
-        [
-          "add-generic-password",
-          "-U",
-          "-a",
-          KEYCHAIN_ACCOUNT,
-          "-s",
-          KEYCHAIN_SERVICE,
-          "-w",
-        ],
+        ["add-generic-password", "-U", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE, "-w"],
         `${key}\n${key}\n`,
       );
       if (result.status !== 0) {
@@ -174,17 +167,12 @@ function createKeychainStore(runCommand: SecurityCommandRunner): CredentialStore
   };
 }
 
-export function createCredentialStore(
-  options: CredentialStoreOptions = {},
-): CredentialStore {
+export function createCredentialStore(options: CredentialStoreOptions = {}): CredentialStore {
   const platform = options.platform ?? process.platform;
   const home = options.home ?? homedir();
   const env = options.env ?? process.env;
   const securityPath = options.securityPath ?? "/usr/bin/security";
-  if (
-    platform === "darwin" &&
-    (options.runCommand !== undefined || existsSync(securityPath))
-  ) {
+  if (platform === "darwin" && (options.runCommand !== undefined || existsSync(securityPath))) {
     return createKeychainStore(options.runCommand ?? defaultSecurityRunner(securityPath));
   }
   return createFileStore(options.filePath ?? fileCredentialsPath(home, env));

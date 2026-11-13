@@ -25,7 +25,7 @@ but the CLI plus Skill is the preferred interface.
 
 ## Status
 
-Version `0.4.0` provides:
+Version `0.5.0` provides:
 
 - CLI-first Search, Fetch, Map, and Crawl.
 - A bundled Agent Skill with command routing and safe output conventions.
@@ -34,6 +34,7 @@ Version `0.4.0` provides:
 - Deterministic Crawl limits, partial failure records, and atomic output.
 - Built-in one-command Skill setup for the common `.agents/skills` directory or
   selected Agent-specific directories.
+- CLI-managed API credentials with macOS Keychain and private file fallback.
 
 The npm package remains `private` and `UNLICENSED`; it is not published to the
 npm registry.
@@ -41,7 +42,8 @@ npm registry.
 ## Requirements
 
 - Node.js 22.12 or newer.
-- A DeepSeek API key from <https://platform.deepseek.com/api_keys>.
+- A DeepSeek API key from <https://platform.deepseek.com/api_keys>, configured
+  once with `deepseek-crawl auth set`.
 - Network access to DeepSeek and, for Map, directly to the target Sitemap.
 
 ## Install
@@ -49,8 +51,9 @@ npm registry.
 Once the private package is available from your configured registry:
 
 ```bash
-npm install -g deepseek-crawl@0.4.0
+npm install -g deepseek-crawl@0.5.0
 deepseek-crawl setup skills
+deepseek-crawl auth set
 deepseek-crawl doctor
 ```
 
@@ -145,6 +148,9 @@ deepseek-crawl map <url> [--search <text>] [options]
 deepseek-crawl crawl <url> -o <dir> [options]
 deepseek-crawl doctor [--live] [--json]
 deepseek-crawl setup skills [options]
+deepseek-crawl auth set
+deepseek-crawl auth status [--json]
+deepseek-crawl auth remove [--json]
 deepseek-crawl mcp
 ```
 
@@ -279,6 +285,40 @@ deepseek-crawl doctor --live --json
 The default check is non-billable. `--live` performs one Search request and
 prints a billing warning.
 
+### Authentication
+
+Store the DeepSeek API Key once:
+
+```bash
+deepseek-crawl auth set
+```
+
+The CLI reads the key from a hidden terminal prompt or piped stdin. It is never
+accepted as a positional argument.
+
+Storage:
+
+- macOS: Keychain using service `deepseek-crawl`.
+- Linux and other platforms: private
+  `$XDG_CONFIG_HOME/deepseek-crawl/credentials.json` or
+  `~/.config/deepseek-crawl/credentials.json` with mode `0600`.
+
+Check or remove the stored credential:
+
+```bash
+deepseek-crawl auth status --json
+deepseek-crawl auth remove
+```
+
+`auth status` reports only `configured`, `source`, and `backend`; it never prints
+the key.
+
+Credential precedence is:
+
+1. `DEEPSEEK_API_KEY` environment variable.
+2. CLI credential store.
+3. Configuration error.
+
 ### Setup Skills
 
 ```text
@@ -401,7 +441,7 @@ public HTTP(S) targets:
 
 | Variable               | Default                    | Purpose                                 |
 | ---------------------- | -------------------------- | --------------------------------------- |
-| `DEEPSEEK_API_KEY`     | required                   | DeepSeek API authentication             |
+| `DEEPSEEK_API_KEY`     | optional override          | DeepSeek API authentication             |
 | `DEEPSEEK_BASE_URL`    | `https://api.deepseek.com` | Override for testing or gateways        |
 | `DEEPSEEK_TIMEOUT_MS`  | `60000`                    | Request timeout, 1000 to 120000         |
 | `DEEPSEEK_MAX_RETRIES` | `2`                        | Retries for 408, 429, and transient 5xx |

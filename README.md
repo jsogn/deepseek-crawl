@@ -12,9 +12,9 @@ The user or calling AI decides when DeepSeek should be used.
 
 ## Status
 
-The implementation is under development. The npm package is currently
-`private` and has no selected license, so it is not published to the npm
-registry yet.
+Version `0.1.0` is implemented and locally verified. The npm package is
+currently `private` and has no selected license, so it is not published to the
+npm registry yet.
 
 ## Requirements
 

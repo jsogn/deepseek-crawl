@@ -26,6 +26,10 @@ Confirm that the API key is configured without printing it. If the command is
 missing or the key is absent, report the setup failure instead of inventing a
 different provider.
 
+If the CLI is installed but this Skill is unavailable in a new Agent session,
+run `deepseek-crawl setup skills` to install it into the common
+`.agents/skills` directory.
+
 ## Choose the Narrowest Operation
 
 1. **No URL yet** — use `search`.

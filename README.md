@@ -25,13 +25,15 @@ but the CLI plus Skill is the preferred interface.
 
 ## Status
 
-Version `0.3.0` provides:
+Version `0.4.0` provides:
 
 - CLI-first Search, Fetch, Map, and Crawl.
 - A bundled Agent Skill with command routing and safe output conventions.
 - Optional MCP tools for the same four operations.
 - Public-network-only Sitemap access with DNS pinning and redirect validation.
 - Deterministic Crawl limits, partial failure records, and atomic output.
+- Built-in one-command Skill setup for the common `.agents/skills` directory or
+  selected Agent-specific directories.
 
 The npm package remains `private` and `UNLICENSED`; it is not published to the
 npm registry.
@@ -44,12 +46,21 @@ npm registry.
 
 ## Install
 
+Once the private package is available from your configured registry:
+
+```bash
+npm install -g deepseek-crawl@0.4.0
+deepseek-crawl setup skills
+deepseek-crawl doctor
+```
+
 From this repository:
 
 ```bash
 npm install
 npm run build
 npm link
+deepseek-crawl setup skills
 deepseek-crawl --version
 ```
 
@@ -58,22 +69,49 @@ not want a global link, use `node /absolute/path/to/deepseek-crawl/dist/bin.js`.
 
 ## Agent Skill
 
-The Skill is in:
+The Skill is bundled in:
 
 ```text
 skills/deepseek-crawl/
 ```
 
-Install it for Codex:
+The default install uses the common Agent Skills directory:
 
 ```bash
-mkdir -p ~/.codex/skills
-cp -R skills/deepseek-crawl ~/.codex/skills/
+deepseek-crawl setup skills
 ```
 
-For another Agent runtime, copy the same directory into that runtime's skills
-directory. Start a new Agent session after installation so the Skill is
-discovered.
+This creates:
+
+```text
+~/.agents/skills/deepseek-crawl
+```
+
+Install into the current project instead:
+
+```bash
+deepseek-crawl setup skills --project
+```
+
+Install only for selected Agents:
+
+```bash
+deepseek-crawl setup skills --agent codex
+deepseek-crawl setup skills --agent claude-code,cursor
+deepseek-crawl setup skills --agent all
+```
+
+Use `--copy` instead of the default absolute symlink, and `--force` only when
+intentionally replacing an existing `deepseek-crawl` Skill directory. Setup
+does not require a DeepSeek API key.
+
+The universal ecosystem installer also works:
+
+```bash
+npx skills add jsogn/deepseek-crawl --skill deepseek-crawl
+```
+
+Start a new Agent session after installation so the Skill is discovered.
 
 The Skill prefers the CLI and uses MCP only when the client requires it or the
 user explicitly asks. It directs reusable output to `.deepseek-crawl/`, which is
@@ -106,6 +144,7 @@ deepseek-crawl fetch <url> [options]
 deepseek-crawl map <url> [--search <text>] [options]
 deepseek-crawl crawl <url> -o <dir> [options]
 deepseek-crawl doctor [--live] [--json]
+deepseek-crawl setup skills [options]
 deepseek-crawl mcp
 ```
 
@@ -239,6 +278,39 @@ deepseek-crawl doctor --live --json
 
 The default check is non-billable. `--live` performs one Search request and
 prints a billing warning.
+
+### Setup Skills
+
+```text
+deepseek-crawl setup skills
+  [--global | --project]
+  [--agent <agents,codex,claude-code,cursor,all>]
+  [--copy]
+  [--force]
+  [--json]
+```
+
+Defaults:
+
+- Scope: global.
+- Agent target: `agents`, the common `.agents/skills` directory.
+- Mode: absolute symlink.
+
+Global paths:
+
+| Target        | Path                                                                    |
+| ------------- | ----------------------------------------------------------------------- |
+| Common Agents | `~/.agents/skills/deepseek-crawl`                                       |
+| Codex         | `$CODEX_HOME/skills/deepseek-crawl` or `~/.codex/skills/deepseek-crawl` |
+| Claude Code   | `~/.claude/skills/deepseek-crawl`                                       |
+| Cursor        | `~/.cursor/skills/deepseek-crawl`                                       |
+
+Project Codex, Cursor, and universal installs converge on
+`.agents/skills/deepseek-crawl`. Project Claude Code uses
+`.claude/skills/deepseek-crawl`.
+
+Repeating the same symlink setup is safe and reports `unchanged`. Existing
+unrelated content is not replaced unless `--force` is supplied.
 
 ## Billing
 

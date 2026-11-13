@@ -87,14 +87,10 @@ function resolveAgentBase(
   if (!configuredCodexHome) {
     return join(home, ".codex");
   }
-  return isAbsolute(configuredCodexHome)
-    ? configuredCodexHome
-    : resolve(home, configuredCodexHome);
+  return isAbsolute(configuredCodexHome) ? configuredCodexHome : resolve(home, configuredCodexHome);
 }
 
-export function resolveSkillTargets(
-  options: ResolveSkillTargetsOptions,
-): ResolvedSkillTarget[] {
+export function resolveSkillTargets(options: ResolveSkillTargetsOptions): ResolvedSkillTarget[] {
   const targets = new Map<string, SkillAgent[]>();
   for (const agent of options.agents) {
     const path = join(

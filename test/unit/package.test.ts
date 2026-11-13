@@ -38,6 +38,10 @@ describe("package documentation", () => {
       "map <url> [--search <text>]",
       "deepseek-crawl crawl <url> -o <dir>",
       "MCP is optional",
+      "deepseek-crawl setup skills",
+      "~/.agents/skills/deepseek-crawl",
+      "--agent codex",
+      "npx skills add jsogn/deepseek-crawl",
     ]) {
       expect(readme).toContain(text);
     }

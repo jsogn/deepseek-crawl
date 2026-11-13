@@ -18,8 +18,8 @@ import { createCrawlOutputWriter, formatCrawlHuman } from "../output/crawl.js";
 import { writeFileAtomic, writeFileAtomicNoClobber } from "../output/files.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { formatMapUrls, formatMapWarnings } from "../output/map.js";
+import { type SkillSetupResult, setupSkills } from "../setup/skills.js";
 import { SitemapReader } from "../sitemap/reader.js";
-import { setupSkills, type SkillSetupResult } from "../setup/skills.js";
 import { packageVersion } from "../version.js";
 import { runDoctor } from "./doctor.js";
 import { CliUsageError, type ParsedCommand, parseCli } from "./parse.js";
@@ -271,9 +271,7 @@ function formatSkillSetupHuman(result: SkillSetupResult): string {
   const lines = ["Installed DeepSeek Crawl Skill:"];
   for (const install of result.installs) {
     const status = install.status === "installed" ? "" : ` [${install.status}]`;
-    lines.push(
-      `- ${install.agents.join(",")}: ${install.path} (${install.mode})${status}`,
-    );
+    lines.push(`- ${install.agents.join(",")}: ${install.path} (${install.mode})${status}`);
   }
   lines.push("", "Start a new Agent session to use the Skill.");
   return lines.join("\n");
@@ -284,8 +282,7 @@ async function runSetupSkills(
   deps: CliDependencies,
 ) {
   const environment = deps.setupEnvironment;
-  const packageRoot =
-    environment?.packageRoot ?? fileURLToPath(new URL("../../", import.meta.url));
+  const packageRoot = environment?.packageRoot ?? fileURLToPath(new URL("../../", import.meta.url));
   const result = await setupSkills({
     agents: command.agents,
     scope: command.scope,

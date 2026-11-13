@@ -233,10 +233,7 @@ describe("runCli", () => {
     const home = await mkdtemp(join(tmpdir(), "deepseek-crawl-home-"));
     const cwd = await mkdtemp(join(tmpdir(), "deepseek-crawl-project-"));
     const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
-    const { deps, stdout, stderr } = dependencies(
-      vi.fn() as unknown as typeof fetch,
-      {},
-    );
+    const { deps, stdout, stderr } = dependencies(vi.fn() as unknown as typeof fetch, {});
 
     expect(
       await runCli(["setup", "skills"], {

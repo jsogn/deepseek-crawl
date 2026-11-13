@@ -2,11 +2,7 @@ import { lstat, mkdir, mkdtemp, readFile, readlink, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  parseSkillAgents,
-  resolveSkillTargets,
-  setupSkills,
-} from "../../src/setup/skills.js";
+import { parseSkillAgents, resolveSkillTargets, setupSkills } from "../../src/setup/skills.js";
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-setup-"));

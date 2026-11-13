@@ -69,6 +69,7 @@ describe("MCP over stdio", () => {
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       "deepseek_crawl",
       "deepseek_fetch",
+      "deepseek_map",
       "deepseek_search",
     ]);
 

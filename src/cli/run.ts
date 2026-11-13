@@ -1,13 +1,21 @@
 import { z } from "zod";
-import { executeCrawl, executeFetch, executeSearch } from "../application/index.js";
+import {
+  executeCrawl,
+  executeFetch,
+  executeMap,
+  executeSearch,
+  type MapSitemapReader,
+} from "../application/index.js";
 import { loadConfig } from "../config.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { runMcpServer } from "../mcp/server.js";
 import { createCrawlOutputWriter, formatCrawlHuman } from "../output/crawl.js";
-import { writeFileAtomic } from "../output/files.js";
+import { writeFileAtomic, writeFileAtomicNoClobber } from "../output/files.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
+import { formatMapUrls, formatMapWarnings } from "../output/map.js";
+import { SitemapReader } from "../sitemap/reader.js";
 import { packageVersion } from "../version.js";
 import { runDoctor } from "./doctor.js";
 import { CliUsageError, type ParsedCommand, parseCli } from "./parse.js";
@@ -19,6 +27,8 @@ export interface CliDependencies {
   stderr: { write(value: string): unknown };
   signal?: AbortSignal;
   crawlClient?: DeepSeekGateway;
+  mapClient?: DeepSeekGateway;
+  sitemapReader?: MapSitemapReader;
 }
 
 const MAIN_HELP = `deepseek-crawl ${packageVersion}
@@ -26,6 +36,7 @@ const MAIN_HELP = `deepseek-crawl ${packageVersion}
 Usage:
   deepseek-crawl search <query> [options]
   deepseek-crawl fetch <url> [options]
+  deepseek-crawl map <url> [options]
   deepseek-crawl crawl <url> [options]
   deepseek-crawl doctor [--live] [--json]
   deepseek-crawl mcp
@@ -49,6 +60,13 @@ Options:
 
 Options:
   --max-chars <0..1000000>
+  --json
+  --output, -o <path>
+`,
+  map: `Usage: deepseek-crawl map <url> [options]
+
+Options:
+  --limit <1..1000> (default: 500)
   --json
   --output, -o <path>
 `,
@@ -77,6 +95,10 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     stderr: dependencies.stderr ?? process.stderr,
     ...(dependencies.signal === undefined ? {} : { signal: dependencies.signal }),
     ...(dependencies.crawlClient === undefined ? {} : { crawlClient: dependencies.crawlClient }),
+    ...(dependencies.mapClient === undefined ? {} : { mapClient: dependencies.mapClient }),
+    ...(dependencies.sitemapReader === undefined
+      ? {}
+      : { sitemapReader: dependencies.sitemapReader }),
   };
 }
 
@@ -146,6 +168,44 @@ async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps
   return 0;
 }
 
+async function runMap(command: Extract<ParsedCommand, { kind: "map" }>, deps: CliDependencies) {
+  const config = loadConfig(deps.env);
+  const client = deps.mapClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+  const reader = deps.sitemapReader ?? new SitemapReader();
+  const output = await executeMap(
+    client,
+    reader,
+    { url: command.url },
+    {
+      limit: command.limit,
+      discoveryLimit: 10_000,
+      pageContentLimit: 1_000_000,
+    },
+    deps.signal,
+  );
+
+  const warnings = formatMapWarnings(output);
+  if (warnings) {
+    deps.stderr.write(`${warnings}\n`);
+  }
+
+  if (command.output) {
+    await writeFileAtomicNoClobber(command.output, `${JSON.stringify(output, null, 2)}\n`);
+    deps.stdout.write(`Wrote ${command.output}\n`);
+    return 0;
+  }
+
+  if (command.json) {
+    deps.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+  } else {
+    const urls = formatMapUrls(output);
+    if (urls) {
+      deps.stdout.write(`${urls}\n`);
+    }
+  }
+  return 0;
+}
+
 async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps: CliDependencies) {
   const config = loadConfig(deps.env);
   const client = deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
@@ -206,6 +266,8 @@ export async function runCli(
         return await runSearch(command, deps);
       case "fetch":
         return await runFetch(command, deps);
+      case "map":
+        return await runMap(command, deps);
       case "crawl":
         return await runCrawl(command, deps);
       case "doctor":
@@ -220,6 +282,7 @@ export async function runCli(
       case "mcp":
         await runMcpServer({
           client: new DeepSeekClient({ ...loadConfig(deps.env), fetchImpl: deps.fetchImpl }),
+          sitemapReader: deps.sitemapReader ?? new SitemapReader(),
         });
         return 0;
     }

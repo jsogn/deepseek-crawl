@@ -42,6 +42,25 @@ describe("parseCli", () => {
     });
   });
 
+  it("parses Map options and defaults", () => {
+    expect(
+      parseCli(["map", "https://example.com", "--limit", "25", "--output", "urls.json"]),
+    ).toEqual({
+      kind: "map",
+      url: "https://example.com",
+      limit: 25,
+      json: false,
+      output: "urls.json",
+    });
+
+    expect(parseCli(["map", "https://example.com", "--json"])).toEqual({
+      kind: "map",
+      url: "https://example.com",
+      limit: 500,
+      json: true,
+    });
+  });
+
   it("parses crawl options and defaults", () => {
     expect(
       parseCli([
@@ -99,6 +118,9 @@ describe("parseCli", () => {
     [["search", "x", "--count", "1.5"], /count/i],
     [["search", "x", "--max-content-chars=-1"], /content limit/i],
     [["fetch", "https://example.com", "--max-chars=1000001"], /content limit/i],
+    [["map", "https://example.com", "--limit", "0"], /limit/i],
+    [["map", "https://example.com", "--limit", "1001"], /limit/i],
+    [["map", "https://example.com", "--unknown"], /unknown option/i],
     [["crawl", "https://example.com"], /output is required/i],
     [["crawl", "https://example.com", "--output", "out", "--max-depth", "6"], /max-depth/i],
     [["crawl", "https://example.com", "--output", "out", "--max-pages", "0"], /max-pages/i],

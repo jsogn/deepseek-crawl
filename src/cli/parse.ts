@@ -27,6 +27,13 @@ export type ParsedCommand =
       output?: string;
     }
   | {
+      kind: "map";
+      url: string;
+      limit: number;
+      json: boolean;
+      output?: string;
+    }
+  | {
       kind: "crawl";
       url: string;
       maxDepth: number;
@@ -158,6 +165,35 @@ export function parseCli(argv: string[]): ParsedCommand {
         if (parsed.values["max-chars"] !== undefined) {
           result.maxChars = parseContentLimit(parsed.values["max-chars"]);
         }
+        if (parsed.values.output !== undefined) {
+          result.output = parsed.values.output;
+        }
+        return result;
+      }
+      case "map": {
+        const parsed = parseArgs({
+          args,
+          allowPositionals: true,
+          strict: true,
+          options: {
+            limit: { type: "string" },
+            json: { type: "boolean" },
+            output: { type: "string", short: "o" },
+            help: { type: "boolean", short: "h" },
+          },
+        });
+        if (parsed.values.help) {
+          return { kind: "help", command: "map" };
+        }
+        const result: ParsedCommand = {
+          kind: "map",
+          url: exactPositional(parsed.positionals, "url"),
+          limit:
+            parsed.values.limit === undefined
+              ? 500
+              : parseInteger(parsed.values.limit, "limit", 1, 1000),
+          json: parsed.values.json ?? false,
+        };
         if (parsed.values.output !== undefined) {
           result.output = parsed.values.output;
         }

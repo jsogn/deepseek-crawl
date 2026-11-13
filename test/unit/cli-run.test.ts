@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -46,6 +46,82 @@ function dependencies(
 }
 
 describe("runCli", () => {
+  it("renders deduplicated Map URLs in sorted human order", async () => {
+    const sitemapReader = {
+      read: vi.fn(async () => ({
+        urls: [new URL("https://example.com/a")],
+        warnings: [],
+        truncated: false,
+      })),
+    };
+    const mapClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => ({ title: "Seed", content: "[Docs](/docs)" })),
+    };
+    const { deps, stdout, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(["map", "https://example.com/"], { ...deps, mapClient, sitemapReader }),
+    ).toBe(0);
+    expect(stdout.value()).toBe(
+      "https://example.com/\nhttps://example.com/a\nhttps://example.com/docs\n",
+    );
+    expect(stderr.value()).toBe("");
+  });
+
+  it("prints complete Map JSON and maps warnings to stderr", async () => {
+    const sitemapReader = {
+      read: vi.fn(async () => Promise.reject(new Error("Sitemap missing"))),
+    };
+    const mapClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => ({ title: "Seed", content: "[Docs](/docs)" })),
+    };
+    const { deps, stdout, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(["map", "https://example.com/", "--limit", "1", "--json"], {
+        ...deps,
+        mapClient,
+        sitemapReader,
+      }),
+    ).toBe(0);
+    expect(JSON.parse(stdout.value())).toMatchObject({
+      version: 1,
+      seed_url: "https://example.com/",
+      limit: 1,
+      total: 1,
+      truncated: true,
+      urls: [{ url: "https://example.com/", sources: ["seed_url"] }],
+      warnings: [{ code: "sitemap_unavailable" }],
+    });
+    expect(stderr.value()).toBe("sitemap_unavailable: Could not read Sitemap: Sitemap missing\n");
+  });
+
+  it("writes Map JSON without overwriting an existing file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-map-"));
+    const output = join(root, "urls.json");
+    await writeFile(output, "original", "utf8");
+    const sitemapReader = {
+      read: vi.fn(async () => ({ urls: [], warnings: [], truncated: false })),
+    };
+    const mapClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => ({ title: "Seed", content: "No links" })),
+    };
+    const { deps, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(["map", "https://example.com/", "--output", output], {
+        ...deps,
+        mapClient,
+        sitemapReader,
+      }),
+    ).toBe(1);
+    expect(await readFile(output, "utf8")).toBe("original");
+    expect(stderr.value()).toContain("EEXIST");
+  });
+
   it("runs Crawl and writes the output directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-cli-"));
     const output = join(root, "crawl");

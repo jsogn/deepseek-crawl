@@ -28,7 +28,10 @@ async function connectedServer() {
     search: vi.fn(async () => ({ results: [baseResult] })),
     fetch: vi.fn(async () => ({ title: "Page", content: "# Body" })),
   };
-  const server = createMcpServer({ client: gateway });
+  const sitemapReader = {
+    read: vi.fn(async () => ({ urls: [], warnings: [], truncated: false })),
+  };
+  const server = createMcpServer({ client: gateway, sitemapReader });
   const client = new Client({ name: "test-client", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
@@ -37,7 +40,7 @@ async function connectedServer() {
     await client.close();
     await server.close();
   });
-  return { client, gateway };
+  return { client, gateway, sitemapReader };
 }
 
 describe("MCP server", () => {
@@ -69,6 +72,7 @@ describe("MCP server", () => {
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       "deepseek_crawl",
       "deepseek_fetch",
+      "deepseek_map",
       "deepseek_search",
     ]);
     expect(tools.every((tool) => tool.outputSchema)).toBe(true);
@@ -116,6 +120,98 @@ describe("MCP server", () => {
     const structured = result.structuredContent as { content: string; truncated?: boolean };
     expect(structured.content).toHaveLength(30000);
     expect(structured.truncated).toBe(true);
+  });
+
+  it("merges Map sources and returns compact structured results", async () => {
+    const { client, gateway, sitemapReader } = await connectedServer();
+    sitemapReader.read.mockResolvedValueOnce({
+      urls: [new URL("https://example.com/a")],
+      warnings: [],
+      truncated: false,
+    });
+    gateway.fetch.mockResolvedValueOnce({
+      title: "Seed",
+      content: "[Docs](/docs)",
+    });
+
+    const result = await client.callTool({
+      name: "deepseek_map",
+      arguments: { url: "https://example.com/" },
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      version: 1,
+      seed_url: "https://example.com/",
+      total: 3,
+      urls: [
+        { url: "https://example.com/", sources: ["seed_url"] },
+        { url: "https://example.com/a", sources: ["sitemap"] },
+        { url: "https://example.com/docs", sources: ["seed_page"] },
+      ],
+    });
+    expect(result.content).toEqual([
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringContaining("https://example.com/docs"),
+      }),
+    ]);
+  });
+
+  it("uses the MCP Map default limit of 100", async () => {
+    const { client, sitemapReader } = await connectedServer();
+    sitemapReader.read.mockResolvedValueOnce({
+      urls: Array.from(
+        { length: 150 },
+        (_, index) => new URL(`https://example.com/page-${String(index).padStart(3, "0")}`),
+      ),
+      warnings: [],
+      truncated: false,
+    });
+
+    const result = await client.callTool({
+      name: "deepseek_map",
+      arguments: { url: "https://example.com/" },
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({ total: 100, limit: 100, truncated: true });
+  });
+
+  it("rejects Map limits above 500", async () => {
+    const { client, sitemapReader } = await connectedServer();
+    const result = await client.callTool({
+      name: "deepseek_map",
+      arguments: { url: "https://example.com/", limit: 501 },
+    });
+    expect(result.isError).toBe(true);
+    expect(sitemapReader.read).not.toHaveBeenCalled();
+  });
+
+  it("returns Map partial-source warnings with usable URLs", async () => {
+    const { client, gateway, sitemapReader } = await connectedServer();
+    sitemapReader.read.mockResolvedValueOnce({
+      urls: [],
+      warnings: [
+        {
+          code: "sitemap_invalid",
+          message: "Invalid Sitemap",
+        },
+      ],
+      truncated: false,
+    });
+    gateway.fetch.mockResolvedValueOnce({ title: "Seed", content: "No links" });
+
+    const result = await client.callTool({
+      name: "deepseek_map",
+      arguments: { url: "https://example.com/" },
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      total: 1,
+      warnings: [{ code: "sitemap_invalid" }],
+    });
   });
 
   it("returns bounded Crawl pages without writing files", async () => {

@@ -16,7 +16,7 @@ export interface MapUrl {
   sources: MapUrlSource[];
 }
 
-export interface MapResult {
+export interface MapResult extends Record<string, unknown> {
   version: 1;
   seed_url: string;
   generated_at: string;

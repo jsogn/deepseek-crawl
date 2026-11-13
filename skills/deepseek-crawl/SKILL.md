@@ -39,7 +39,8 @@ run `deepseek-crawl setup skills` to install it into the common
 2. **Known URL** — use `fetch`.
 3. **Known site, unknown page** — use `map`, preferably with `--search`.
 4. **Known URL list** — feed Map JSON into Batch Fetch.
-5. **Several pages in one section or docs set** — use a bounded `crawl`.
+5. **Several pages in one section or docs set** — inspect a `crawl --plan-only`
+   result, then use a bounded `crawl` or Batch Fetch.
 
 Do not Crawl when Search results or one Fetch already answer the request. Map
 first when the likely URL is within a known site. Prefer Map followed by Batch
@@ -153,6 +154,13 @@ processed together. Start small:
 
 ```bash
 deepseek-crawl crawl "<section-url>" \
+  --plan-only \
+  --max-depth 1 \
+  --max-pages 5 \
+  --include-paths "/docs/*" \
+  -o .deepseek-crawl/crawl-site-plan.json
+
+deepseek-crawl crawl "<section-url>" \
   --max-depth 1 \
   --max-pages 5 \
   --concurrency 2 \
@@ -163,8 +171,15 @@ deepseek-crawl crawl "<section-url>" \
   -o .deepseek-crawl/crawl-site-section
 ```
 
+Plan reads the seed page and Sitemap only; it does not fetch discovered child
+pages. Inspect `urls`, `deferred`, and `filtered` before approving the full
+Crawl. With `--plan-only`, `--output` is a new JSON file. The selected `urls`
+can be fed directly into Batch Fetch when the seed page is already sufficient.
+
 Read `crawl.json` first to inspect settings, page paths, failures, and limits.
-Open only the page files relevant to the user's request.
+Each page includes `sources` (`seed_url`, `markdown`, or `sitemap`) so discovery
+provenance remains visible. Open only the page files relevant to the user's
+request.
 
 Use path filters for large documentation sites. The seed is always fetched;
 filters apply only to discovered URLs. CLI Crawl defaults to `--sitemap
@@ -181,6 +196,8 @@ larger frontier.
 
 - Search, the seed page used by Map, and every successfully read Crawl page can
   be billable DeepSeek requests.
+- Crawl Plan fetches the seed page and may read its public Sitemap, but it does
+  not call DeepSeek Fetch for discovered child pages.
 - This implementation does not fetch or enforce `robots.txt`. Confirm the user
   is authorized to crawl the target and that its terms permit the operation.
 - CLI Map and Crawl Sitemap access is public-network-only. MCP Crawl remains

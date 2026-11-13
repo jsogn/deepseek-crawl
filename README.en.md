@@ -41,6 +41,7 @@ Version `0.7.0` provides:
 - CLI-managed API credentials with macOS Keychain and private file fallback.
 - Batch Fetch from URL lists and Map JSON with per-page failure records.
 - Crawl include/exclude paths and query-parameter deduplication.
+- Crawl Plan previews the initial frontier before child pages are fetched.
 
 The project is open source under the MIT License.
 
@@ -283,6 +284,7 @@ deepseek-crawl crawl <url> -o <dir>
   [--exclude-paths <patterns>]
   [--ignore-query-parameters]
   [--sitemap <include|only|skip>]
+  [--plan-only]
   [--json]
 ```
 
@@ -309,6 +311,24 @@ Sitemap URLs start at depth `1` and obey the same origin, path, query, depth,
 page, and discovery limits. Sitemap failures produce `sitemap_unavailable` or
 existing Map warnings and Crawl continues with available sources. Seed-page
 failure remains fatal.
+
+Preview a larger Crawl before spending Fetch requests on its child pages:
+
+```bash
+deepseek-crawl crawl "https://api-docs.deepseek.com/" \
+  --plan-only \
+  --max-depth 1 \
+  --max-pages 20 \
+  --include-paths "/guides/*" \
+  -o .deepseek-crawl/deepseek-guides-plan.json
+```
+
+Plan reads only the seed page and Sitemap and does not fetch discovered child
+pages. With `--plan-only`, `--output` is a new JSON file path. The selected
+child pages are in `urls` and can be passed directly to Batch Fetch. `deferred`
+identifies URLs delayed by the page limit. `filtered` identifies URLs omitted
+because of cross-origin, path, or discovery limits. The plan covers the initial
+depth-1 frontier; it is not a recursive inventory of deeper URLs.
 
 ```bash
 deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
@@ -345,9 +365,10 @@ the complete directory only after success. SIGINT aborts active work, removes
 staging, and exits with code `130`.
 
 `crawl.json` contains settings, statistics, failures, content metadata,
-`warnings`, the Sitemap candidate count, and stable page paths. It does not
-duplicate page bodies. Prefer `map --search` followed by Batch Fetch for known
-URL lists; use Crawl when a bounded section must be traversed.
+`warnings`, the Sitemap candidate count, per-page `sources`, and stable page
+paths. It does not duplicate page bodies. Page sources distinguish `seed_url`,
+`markdown`, and `sitemap`. Prefer `map --search` followed by Batch Fetch for
+known URL lists; use Crawl when a bounded section must be traversed.
 
 ### Doctor
 

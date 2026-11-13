@@ -35,6 +35,7 @@ CLI + Skill。
 - `map --search` URL 筛选。
 - Map JSON 直接驱动的批量 Fetch，以及逐页失败记录。
 - Crawl 路径 include/exclude 和 query 参数去重。
+- Crawl Plan 预览初始 frontier，避免在确认 URL 列表前读取所有子页面。
 - macOS Keychain 或其他平台私有文件凭据存储。
 - `auth set`、`auth status`、`auth remove`。
 - 可选的四个 MCP 工具。
@@ -296,6 +297,7 @@ deepseek-crawl crawl <url> -o <dir>
   [--exclude-paths <patterns>]
   [--ignore-query-parameters]
   [--sitemap <include|only|skip>]
+  [--plan-only]
   [--json]
 ```
 
@@ -320,6 +322,23 @@ Sitemap 模式：
 Sitemap URL 从深度 1 开始，并遵守相同的 origin、路径、query、深度、页数和发现
 数量限制。Sitemap 读取失败会产生 `sitemap_unavailable` 或已有 Map 警告，Crawl
 继续使用可用来源；种子页读取失败仍是致命错误。
+
+大面积 Crawl 之前可以先生成初始发现计划：
+
+```bash
+deepseek-crawl crawl "https://api-docs.deepseek.com/" \
+  --plan-only \
+  --max-depth 1 \
+  --max-pages 20 \
+  --include-paths "/guides/*" \
+  -o .deepseek-crawl/deepseek-guides-plan.json
+```
+
+Plan 只读取种子页和 Sitemap，不读取任何已发现子页面。`--output` 此时是单个 JSON
+文件路径，目标不能已存在。计划中的 `urls` 是限制后选中的子页面，可直接作为
+Batch Fetch 的输入；`deferred` 说明被页数限制延后的 URL，`filtered` 说明因
+cross-origin、路径过滤或发现数量限制而省略的 URL。Plan 描述初始深度 1
+frontier，不代表递归发现全部深层 URL。
 
 ```bash
 deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
@@ -354,7 +373,8 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
 SIGINT 会中止请求、清理 staging，并以代码 `130` 退出。
 
 `crawl.json` 包含设置、统计、失败记录、内容截断元数据、`warnings`、Sitemap
-候选数量和稳定页面路径，不重复保存正文。已知 URL 列表优先使用
+候选数量、每页 `sources` 和稳定页面路径，不重复保存正文。页面来源会区分
+`seed_url`、`markdown` 和 `sitemap`。已知 URL 列表优先使用
 `map --search` 后接批量 Fetch；需要遍历一个文档区域时再使用 Crawl，可减少不必
 要的整站发现开销。
 

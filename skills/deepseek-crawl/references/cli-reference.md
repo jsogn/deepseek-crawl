@@ -24,7 +24,7 @@ Required environment:
 ```text
 No URL → Search → Fetch selected URL(s)
 Known site, unknown page → Map --search → Batch Fetch selected URL(s)
-Known docs section requiring many pages → Sitemap-assisted bounded Crawl
+Known docs section requiring many pages → Crawl Plan → bounded Crawl or Batch Fetch
 ```
 
 ## Search
@@ -149,6 +149,7 @@ deepseek-crawl crawl <url>
   [--exclude-paths <patterns>]
   [--ignore-query-parameters]
   [--sitemap <include|only|skip>]
+  [--plan-only]
   --output, -o <dir>
   [--json]
 ```
@@ -175,6 +176,37 @@ Sitemap URLs are enqueued at depth `1` and obey origin, path, query, depth,
 page, and discovery limits. Sitemap failures are warnings; seed failure is
 fatal. MCP Crawl does not expose Sitemap options and remains Markdown-only.
 
+### Crawl Plan
+
+Add `--plan-only` to preview the initial depth-1 frontier without fetching any
+discovered child page:
+
+```bash
+deepseek-crawl crawl <url> \
+  --plan-only \
+  --max-depth 1 \
+  --max-pages 20 \
+  --include-paths "/docs/*" \
+  -o plan.json
+```
+
+In this mode, `--output` is a new JSON file path, not a directory. The plan
+reads the seed page and Sitemap, so the seed request remains billable. An
+existing output path is rejected before the seed request is made.
+
+The plan contains:
+
+- `urls`: selected child URLs; this array is valid Batch Fetch input.
+- `deferred`: eligible URLs omitted by the page limit.
+- `filtered`: URLs omitted by `cross_origin`, `path_filtered`, or
+  `discovery_limit`.
+- `stats`: candidate, eligible, selected, deferred, filtered, and planned page
+  counts.
+- `warnings` and `diagnostics_truncated`.
+
+Plan covers the initial frontier only. Deeper pages require fetching the
+selected child pages.
+
 Path filters match the URL pathname. Prefix matching is used without `*` or `?`;
 includes are ORed, excludes win, and the seed bypasses filters.
 `--ignore-query-parameters` strips query strings before deduplication and Fetch.
@@ -189,7 +221,8 @@ Output:
 ```
 
 Read `crawl.json` first. It contains page paths, failures, settings, stats,
-Sitemap mode/candidate metadata, and `warnings`, but not duplicate page bodies.
+Sitemap mode/candidate metadata, per-page discovery `sources`, and `warnings`,
+but not duplicate page bodies.
 
 ## Output Rules
 

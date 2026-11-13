@@ -1,0 +1,7 @@
+interface:
+  display_name: "DeepSeek Crawl"
+  short_description: "Search and crawl live web content through the DeepSeek CLI"
+  default_prompt: "Use $deepseek-crawl to search, map, or crawl the web content needed for this task."
+
+policy:
+  allow_implicit_invocation: true

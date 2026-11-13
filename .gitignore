@@ -6,4 +6,6 @@ coverage/
 !.env.example
 .websearch/
 *.log
+.DS_Store
+*.tgz
 

@@ -5,6 +5,7 @@ import type {
   CrawlOutputResult,
   CrawlPage,
   CrawlPageSummary,
+  CrawlPlanResult,
   CrawlRunResult,
 } from "../crawl/types.js";
 
@@ -167,6 +168,8 @@ export function formatCrawlHuman(result: CrawlRunResult, outputDirectory: string
     `Delay: ${result.settings.delay_ms} ms`,
     `Fetched: ${result.stats.fetched}`,
     `Failed: ${result.stats.failed}`,
+    `Markdown-sourced pages: ${result.pages.filter((page) => page.sources.includes("markdown")).length}`,
+    `Sitemap-sourced pages: ${result.pages.filter((page) => page.sources.includes("sitemap")).length}`,
     `Content truncated: ${result.stats.content_truncated}`,
     `Page limit reached: ${result.stats.limit_reached ? "yes" : "no"}`,
     `Discovery limit reached: ${result.stats.discovery_limit_reached ? "yes" : "no"}`,
@@ -184,5 +187,31 @@ export function formatCrawlHuman(result: CrawlRunResult, outputDirectory: string
     }
   }
   lines.push(`Output: ${outputDirectory}`);
+  return lines.join("\n");
+}
+
+export function formatCrawlPlanHuman(result: CrawlPlanResult, output: string): string {
+  const lines = [
+    `Seed: ${result.seed_url}`,
+    `Depth: ${result.settings.max_depth}`,
+    `Page limit: ${result.settings.max_pages}`,
+    `Sitemap: ${result.settings.sitemap_mode ?? "skip"}`,
+    `Candidate URLs: ${result.stats.candidates}`,
+    `Eligible URLs: ${result.stats.eligible}`,
+    `Selected child pages: ${result.stats.selected}`,
+    `Planned pages including seed: ${result.stats.planned_pages}`,
+    `Deferred by page limit: ${result.stats.deferred}`,
+    `Filtered: ${result.stats.filtered}`,
+    `Page limit reached: ${result.stats.page_limit_reached ? "yes" : "no"}`,
+    `Discovery limit reached: ${result.stats.discovery_limit_reached ? "yes" : "no"}`,
+    `Diagnostics truncated: ${result.diagnostics_truncated ? "yes" : "no"}`,
+  ];
+  if (result.warnings.length > 0) {
+    lines.push(`Warnings: ${result.warnings.length}`);
+    for (const warning of result.warnings) {
+      lines.push(`- ${warning.code}: ${warning.message}`);
+    }
+  }
+  lines.push(`Output: ${output}`);
   return lines.join("\n");
 }

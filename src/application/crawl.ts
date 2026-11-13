@@ -5,6 +5,7 @@ import type {
   CrawlFailure,
   CrawlOptions,
   CrawlPage,
+  CrawlPageSource,
   CrawlPageSummary,
   CrawlRunResult,
   MapWarning,
@@ -20,6 +21,7 @@ const CRAWL_MAX_CONCURRENCY = 5;
 const CRAWL_MAX_DELAY_MS = 5_000;
 const CRAWL_MAX_DISCOVERY_LIMIT = 10_000;
 const CRAWL_MAX_PAGE_CONTENT_LIMIT = 1_000_000;
+const PAGE_SOURCE_ORDER: CrawlPageSource[] = ["seed_url", "markdown", "sitemap"];
 
 function clampInteger(value: number, name: string, minimum: number, maximum: number): number {
   if (!Number.isSafeInteger(value) || value < minimum) {
@@ -94,6 +96,7 @@ function summaryFor(page: CrawlPage): CrawlPageSummary {
     url: page.url,
     title: page.title,
     depth: page.depth,
+    sources: page.sources,
     content_length: codepointLength(page.content),
     content_truncated: page.content_truncated,
   };
@@ -101,6 +104,10 @@ function summaryFor(page: CrawlPage): CrawlPageSummary {
     summary.content_original_length = page.content_original_length;
   }
   return summary;
+}
+
+function pageSourcesInOrder(sources: Set<CrawlPageSource>): CrawlPageSource[] {
+  return PAGE_SOURCE_ORDER.filter((source) => sources.has(source));
 }
 
 function createBoundedLinkCollector(capacity: number, seen: Set<string>): BoundedLinkCollector {
@@ -168,6 +175,9 @@ export async function executeCrawl(
   crawlSignal.throwIfAborted();
   const startedAt = now().toISOString();
   const seen = new Set<string>([seed.href]);
+  const sourcesByUrl = new Map<string, Set<CrawlPageSource>>([
+    [seed.href, new Set<CrawlPageSource>(["seed_url"])],
+  ]);
   const pages: CrawlPageSummary[] = [];
   const failures: CrawlFailure[] = [];
   const warnings: MapWarning[] = [];
@@ -179,6 +189,15 @@ export async function executeCrawl(
   let limitReached = false;
   let discoveryLimitReached = false;
   let sitemapCandidates = 0;
+
+  const recordSource = (url: string, source: CrawlPageSource): void => {
+    let sources = sourcesByUrl.get(url);
+    if (!sources) {
+      sources = new Set<CrawlPageSource>();
+      sourcesByUrl.set(url, sources);
+    }
+    sources.add(source);
+  };
 
   const fetchPage = async (url: string, depth: number, index: number): Promise<PageOutcome> => {
     let page: CrawlPage;
@@ -192,6 +211,7 @@ export async function executeCrawl(
         title: bounded.title,
         depth,
         content: bounded.content,
+        sources: pageSourcesInOrder(sourcesByUrl.get(url) ?? new Set<CrawlPageSource>()),
         content_truncated: bounded.truncated ?? false,
         content_original_length: bounded.original_length ?? codepointLength(bounded.content),
       };
@@ -240,6 +260,7 @@ export async function executeCrawl(
   );
   if (sitemapMode !== "only") {
     for (const link of seedOutcome.links) {
+      recordSource(link, "markdown");
       seedLinks.add(link);
     }
   }
@@ -260,6 +281,7 @@ export async function executeCrawl(
           );
         sitemapCandidates = new Set(candidates.map((url) => url.href)).size;
         for (const url of candidates) {
+          recordSource(url.href, "sitemap");
           seedLinks.add(url.href);
         }
       }
@@ -303,6 +325,7 @@ export async function executeCrawl(
       run: async (url, index) => {
         const outcome = await fetchPage(url, depth, selectedIndexes[index] ?? 0);
         for (const link of outcome.links) {
+          recordSource(link, "markdown");
           layerLinks.add(link);
         }
         return { ...outcome, links: [] };

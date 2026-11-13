@@ -1,7 +1,13 @@
 export const packageName = "deepseek-crawl";
 export { executeBatchFetch, parseBatchFetchInput } from "./application/batch.js";
 export type { MapOptions, MapSitemapReader } from "./application/index.js";
-export { executeCrawl, executeFetch, executeMap, executeSearch } from "./application/index.js";
+export {
+  executeCrawl,
+  executeCrawlPlan,
+  executeFetch,
+  executeMap,
+  executeSearch,
+} from "./application/index.js";
 export type {
   BatchFetchFailure,
   BatchFetchOptions,
@@ -17,8 +23,15 @@ export type {
   CrawlOutputResult,
   CrawlPage,
   CrawlPageIndex,
+  CrawlPageSource,
   CrawlPageSummary,
+  CrawlPlanOmissionReason,
+  CrawlPlanOmittedUrl,
+  CrawlPlanResult,
+  CrawlPlanSeed,
+  CrawlPlanUrl,
   CrawlRunResult,
+  CrawlUrlSource,
   MapResult,
   MapUrl,
   MapUrlSource,

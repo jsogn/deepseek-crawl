@@ -2,8 +2,12 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { CrawlPage, CrawlRunResult } from "../../src/crawl/types.js";
-import { createCrawlOutputWriter, formatCrawlHuman } from "../../src/output/crawl.js";
+import type { CrawlPage, CrawlPlanResult, CrawlRunResult } from "../../src/crawl/types.js";
+import {
+  createCrawlOutputWriter,
+  formatCrawlHuman,
+  formatCrawlPlanHuman,
+} from "../../src/output/crawl.js";
 
 function page(overrides: Partial<CrawlPage> = {}): CrawlPage {
   return {
@@ -12,6 +16,7 @@ function page(overrides: Partial<CrawlPage> = {}): CrawlPage {
     title: "Example",
     depth: 0,
     content: "# Example",
+    sources: ["seed_url"],
     content_truncated: false,
     content_original_length: 9,
     ...overrides,
@@ -44,6 +49,7 @@ function result(overrides: Partial<CrawlRunResult> = {}): CrawlRunResult {
         url: "https://example.com/",
         title: "Example",
         depth: 0,
+        sources: ["seed_url"],
         content_length: 9,
         content_truncated: false,
       },
@@ -134,6 +140,68 @@ describe("createCrawlOutputWriter", () => {
   });
 });
 
+describe("formatCrawlPlanHuman", () => {
+  it("summarizes the bounded plan and its output file", () => {
+    const plan: CrawlPlanResult = {
+      version: 1,
+      seed_url: "https://example.com/",
+      generated_at: "2026-11-14T00:00:00.000Z",
+      settings: {
+        max_depth: 2,
+        max_pages: 3,
+        concurrency: 2,
+        delay_ms: 250,
+        sitemap_mode: "include",
+      },
+      seed: {
+        url: "https://example.com/",
+        title: "Example",
+        depth: 0,
+        content_length: 100,
+        content_truncated: false,
+      },
+      urls: [
+        { url: "https://example.com/a", sources: ["markdown"] },
+        { url: "https://example.com/b", sources: ["sitemap"] },
+      ],
+      deferred: [
+        {
+          url: "https://example.com/c",
+          sources: ["sitemap"],
+          reason: "page_limit",
+        },
+      ],
+      filtered: [
+        {
+          url: "https://other.example/",
+          sources: ["markdown"],
+          reason: "cross_origin",
+        },
+      ],
+      stats: {
+        candidates: 4,
+        eligible: 3,
+        selected: 2,
+        deferred: 1,
+        filtered: 1,
+        planned_pages: 3,
+        page_limit_reached: true,
+        discovery_limit_reached: false,
+        sitemap_candidates: 2,
+      },
+      diagnostics_truncated: false,
+      warnings: [{ code: "sitemap_invalid", message: "one child Sitemap failed" }],
+    };
+
+    const output = formatCrawlPlanHuman(plan, "crawl-plan.json");
+    expect(output).toContain("Planned pages including seed: 3");
+    expect(output).toContain("Deferred by page limit: 1");
+    expect(output).toContain("Filtered: 1");
+    expect(output).toContain("sitemap_invalid: one child Sitemap failed");
+    expect(output).toContain("Output: crawl-plan.json");
+  });
+});
+
 describe("formatCrawlHuman", () => {
   it("reports limits, counts, truncation, and output path", () => {
     expect(formatCrawlHuman(result(), "crawl-output")).toContain("Output: crawl-output");
@@ -141,6 +209,37 @@ describe("formatCrawlHuman", () => {
     expect(formatCrawlHuman(result(), "crawl-output")).toContain("Failed: 1");
     expect(formatCrawlHuman(result(), "crawl-output")).toContain("Page limit reached: yes");
     expect(formatCrawlHuman(result(), "crawl-output")).toContain("Page limit: 20");
+  });
+
+  it("reports fetched page discovery sources", () => {
+    const output = formatCrawlHuman(
+      result({
+        pages: [
+          {
+            index: 1,
+            url: "https://example.com/",
+            title: "Example",
+            depth: 0,
+            sources: ["seed_url"],
+            content_length: 9,
+            content_truncated: false,
+          },
+          {
+            index: 2,
+            url: "https://example.com/docs",
+            title: "Docs",
+            depth: 1,
+            sources: ["markdown", "sitemap"],
+            content_length: 20,
+            content_truncated: false,
+          },
+        ],
+      }),
+      "crawl-output",
+    );
+
+    expect(output).toContain("Markdown-sourced pages: 1");
+    expect(output).toContain("Sitemap-sourced pages: 1");
   });
 
   it("reports Sitemap mode, candidates, and warnings when present", () => {

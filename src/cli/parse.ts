@@ -51,6 +51,7 @@ export type ParsedCommand =
       excludePaths?: string[];
       ignoreQueryParameters?: boolean;
       sitemapMode: CrawlSitemapMode;
+      planOnly: boolean;
       output: string;
       json: boolean;
     }
@@ -291,6 +292,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             "include-paths": { type: "string" },
             "exclude-paths": { type: "string" },
             "ignore-query-parameters": { type: "boolean" },
+            "plan-only": { type: "boolean" },
             sitemap: { type: "string" },
             output: { type: "string", short: "o" },
             json: { type: "boolean" },
@@ -334,6 +336,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             parsed.values.sitemap === undefined
               ? "include"
               : parseSitemapMode(parsed.values.sitemap),
+          planOnly: parsed.values["plan-only"] ?? false,
           output,
           json: parsed.values.json ?? false,
         };

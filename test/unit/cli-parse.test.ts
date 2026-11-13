@@ -127,6 +127,7 @@ describe("parseCli", () => {
       excludePaths: ["/docs/private/*"],
       ignoreQueryParameters: true,
       sitemapMode: "include",
+      planOnly: false,
       output: "out",
       json: true,
     });
@@ -139,6 +140,7 @@ describe("parseCli", () => {
       concurrency: 2,
       delayMs: 250,
       sitemapMode: "include",
+      planOnly: false,
       output: "out",
       json: false,
     });
@@ -148,13 +150,24 @@ describe("parseCli", () => {
     ).toMatchObject({
       kind: "crawl",
       sitemapMode: "only",
+      planOnly: false,
       output: "out",
     });
 
     expect(parseCli(["crawl", "https://example.com", "-o", "out"])).toMatchObject({
       kind: "crawl",
       sitemapMode: "include",
+      planOnly: false,
       output: "out",
+    });
+
+    expect(
+      parseCli(["crawl", "https://example.com", "--plan-only", "-o", "plan.json"]),
+    ).toMatchObject({
+      kind: "crawl",
+      sitemapMode: "include",
+      planOnly: true,
+      output: "plan.json",
     });
   });
 

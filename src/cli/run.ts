@@ -6,6 +6,7 @@ import { z } from "zod";
 import { executeBatchFetch } from "../application/batch.js";
 import {
   executeCrawl,
+  executeCrawlPlan,
   executeFetch,
   executeMap,
   executeSearch,
@@ -19,8 +20,12 @@ import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { runMcpServer } from "../mcp/server.js";
 import { createBatchFetchOutputWriter, formatBatchFetchHuman } from "../output/batch.js";
-import { createCrawlOutputWriter, formatCrawlHuman } from "../output/crawl.js";
-import { writeFileAtomic, writeFileAtomicNoClobber } from "../output/files.js";
+import {
+  createCrawlOutputWriter,
+  formatCrawlHuman,
+  formatCrawlPlanHuman,
+} from "../output/crawl.js";
+import { assertFileMissing, writeFileAtomic, writeFileAtomicNoClobber } from "../output/files.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { formatMapUrls, formatMapWarnings } from "../output/map.js";
 import { type SkillSetupResult, setupSkills } from "../setup/skills.js";
@@ -111,8 +116,12 @@ Options:
   --exclude-paths <patterns>
   --ignore-query-parameters
   --sitemap <include|only|skip> (default: include)
+  --plan-only
   --output, -o <dir>
   --json
+
+With --plan-only, --output is a new JSON file path. The plan reads the seed and
+Sitemap only; it does not fetch discovered child pages.
 `,
   doctor: `Usage: deepseek-crawl doctor [--live] [--json]
 
@@ -269,6 +278,9 @@ async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps
 }
 
 async function runMap(command: Extract<ParsedCommand, { kind: "map" }>, deps: CliDependencies) {
+  if (command.output) {
+    await assertFileMissing(command.output);
+  }
   const config = loadConfig(deps.env, deps.credentialStore);
   const client = deps.mapClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
   const reader = deps.sitemapReader ?? new SitemapReader();
@@ -311,25 +323,36 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
   const config = loadConfig(deps.env, deps.credentialStore);
   const client = deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
   const reader = deps.sitemapReader ?? new SitemapReader();
+  const crawlOptions = {
+    maxDepth: command.maxDepth,
+    maxPages: command.maxPages,
+    concurrency: command.concurrency,
+    delayMs: command.delayMs,
+    discoveryLimit: 10_000,
+    pageContentLimit: 1_000_000,
+    includePaths: command.includePaths ?? [],
+    excludePaths: command.excludePaths ?? [],
+    ignoreQueryParameters: command.ignoreQueryParameters ?? false,
+    sitemapMode: command.sitemapMode,
+    sitemapReader: reader,
+  };
+
+  if (command.planOnly) {
+    await assertFileMissing(command.output);
+    const plan = await executeCrawlPlan(client, { url: command.url }, crawlOptions, deps.signal);
+    const json = `${JSON.stringify(plan, null, 2)}\n`;
+    await writeFileAtomicNoClobber(command.output, json);
+    deps.stdout.write(command.json ? json : `${formatCrawlPlanHuman(plan, command.output)}\n`);
+    return 0;
+  }
+
   const writer = await createCrawlOutputWriter(command.output);
 
   try {
     const result = await executeCrawl(
       client,
       { url: command.url },
-      {
-        maxDepth: command.maxDepth,
-        maxPages: command.maxPages,
-        concurrency: command.concurrency,
-        delayMs: command.delayMs,
-        discoveryLimit: 10_000,
-        pageContentLimit: 1_000_000,
-        includePaths: command.includePaths ?? [],
-        excludePaths: command.excludePaths ?? [],
-        ignoreQueryParameters: command.ignoreQueryParameters ?? false,
-        sitemapMode: command.sitemapMode,
-        sitemapReader: reader,
-      },
+      crawlOptions,
       async (page) => {
         await writer.writePage(page);
       },

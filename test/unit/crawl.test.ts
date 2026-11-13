@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeCrawl, normalizeCrawlOptions } from "../../src/application/crawl.js";
+import { executeCrawlPlan } from "../../src/application/crawl-plan.js";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
 
 const options = {
@@ -219,10 +220,11 @@ describe("executeCrawl", () => {
     ]);
   });
 
-  it("includes Sitemap candidates when Markdown has no links", async () => {
+  it("merges Sitemap candidates with Markdown links", async () => {
     const reader = {
       read: vi.fn(async () => ({
         urls: [
+          new URL("https://example.com/"),
           new URL("https://example.com/docs/a"),
           new URL("https://example.com/docs/b"),
           new URL("https://example.com/blog/post"),
@@ -237,7 +239,10 @@ describe("executeCrawl", () => {
     const result = await executeCrawl(
       {
         search: vi.fn(),
-        fetch: vi.fn(async ({ url }: { url: string }) => ({ title: url, content: "No links" })),
+        fetch: vi.fn(async ({ url }: { url: string }) => ({
+          title: url,
+          content: url === "https://example.com/" ? "[Docs A](/docs/a?utm=1)" : "No child links",
+        })),
       },
       { url: "https://example.com/" },
       {
@@ -256,6 +261,8 @@ describe("executeCrawl", () => {
       "https://example.com/",
       "https://example.com/docs/a",
     ]);
+    expect(result.pages[0]?.sources).toEqual(["seed_url"]);
+    expect(result.pages[1]?.sources).toEqual(["markdown", "sitemap"]);
     expect(result.settings.sitemap_mode).toBe("include");
     expect(result.stats.sitemap_candidates).toBe(2);
     expect(result.stats.discovery_limit_reached).toBe(true);
@@ -422,5 +429,218 @@ describe("executeCrawl", () => {
     await expect(executeCrawl(gateway, { url: "https://example.com/" }, options)).rejects.toThrow(
       "seed",
     );
+  });
+});
+
+describe("executeCrawlPlan", () => {
+  it("plans the bounded initial frontier without fetching discovered pages", async () => {
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url === "https://example.com/" ? "Seed" : "Unexpected child",
+      content:
+        url === "https://example.com/"
+          ? "[Docs A](/docs/a?utm=1) [Docs B](/docs/b) [Blog](/blog) [Outside](https://other.example/x)"
+          : "Unexpected child content",
+    }));
+    const sitemapReader = {
+      read: vi.fn(async () => ({
+        urls: [
+          new URL("https://example.com/"),
+          new URL("https://example.com/docs/a"),
+          new URL("https://example.com/docs/b"),
+          new URL("https://example.com/docs/private/x"),
+          new URL("https://example.com/blog"),
+        ],
+        warnings: [{ code: "sitemap_invalid" as const, message: "one child Sitemap failed" }],
+        truncated: false,
+      })),
+    };
+
+    const plan = await executeCrawlPlan(
+      { search: vi.fn(), fetch },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 3,
+        maxPages: 2,
+        discoveryLimit: 5,
+        includePaths: ["/docs/*"],
+        excludePaths: ["/docs/private/*"],
+        ignoreQueryParameters: true,
+        sitemapMode: "include",
+        sitemapReader,
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith({ url: "https://example.com/" }, expect.any(AbortSignal));
+    expect(plan).toMatchObject({
+      version: 1,
+      seed_url: "https://example.com/",
+      seed: {
+        url: "https://example.com/",
+        title: "Seed",
+        depth: 0,
+      },
+      settings: {
+        max_depth: 3,
+        max_pages: 2,
+        sitemap_mode: "include",
+      },
+      stats: {
+        candidates: 5,
+        eligible: 2,
+        selected: 1,
+        deferred: 1,
+        filtered: 3,
+        planned_pages: 2,
+        page_limit_reached: true,
+        discovery_limit_reached: false,
+        sitemap_candidates: 2,
+      },
+      urls: [
+        {
+          url: "https://example.com/docs/a",
+          sources: ["markdown", "sitemap"],
+        },
+      ],
+      warnings: [{ code: "sitemap_invalid", message: "one child Sitemap failed" }],
+    });
+    expect(plan.deferred).toEqual([
+      {
+        url: "https://example.com/docs/b",
+        sources: ["markdown", "sitemap"],
+        reason: "page_limit",
+      },
+    ]);
+    expect(plan.filtered).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          url: "https://example.com/blog",
+          reason: "path_filtered",
+        }),
+        expect.objectContaining({
+          url: "https://example.com/docs/private/x",
+          reason: "path_filtered",
+        }),
+        expect.objectContaining({
+          url: "https://other.example/x",
+          reason: "cross_origin",
+        }),
+      ]),
+    );
+  });
+
+  it("does not discover or read Sitemap when depth is zero", async () => {
+    const sitemapReader = { read: vi.fn() };
+    const plan = await executeCrawlPlan(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async () => ({ title: "Seed", content: "[Ignored](/ignored)" })),
+      },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 0,
+        sitemapMode: "include",
+        sitemapReader,
+      },
+    );
+
+    expect(sitemapReader.read).not.toHaveBeenCalled();
+    expect(plan.urls).toEqual([]);
+    expect(plan.stats).toMatchObject({
+      candidates: 0,
+      selected: 0,
+      planned_pages: 1,
+      page_limit_reached: false,
+      discovery_limit_reached: false,
+    });
+  });
+
+  it("reports eligible URLs omitted by the discovery limit", async () => {
+    const plan = await executeCrawlPlan(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async () => ({ title: "Seed", content: "[A](/a)" })),
+      },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 1,
+        maxPages: 10,
+        discoveryLimit: 2,
+        sitemapMode: "include",
+        sitemapReader: {
+          read: vi.fn(async () => ({
+            urls: [new URL("https://example.com/b"), new URL("https://example.com/c")],
+            warnings: [],
+            truncated: false,
+          })),
+        },
+      },
+    );
+
+    expect(plan.urls).toEqual([{ url: "https://example.com/a", sources: ["markdown"] }]);
+    expect(plan.filtered).toEqual([
+      {
+        url: "https://example.com/b",
+        sources: ["sitemap"],
+        reason: "discovery_limit",
+      },
+      {
+        url: "https://example.com/c",
+        sources: ["sitemap"],
+        reason: "discovery_limit",
+      },
+    ]);
+    expect(plan.stats).toMatchObject({
+      eligible: 3,
+      selected: 1,
+      filtered: 2,
+      discovery_limit_reached: true,
+    });
+  });
+
+  it("keeps Markdown candidates when Sitemap discovery fails", async () => {
+    const plan = await executeCrawlPlan(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async () => ({ title: "Seed", content: "[Docs](/docs)" })),
+      },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 1,
+        sitemapMode: "include",
+        sitemapReader: {
+          read: vi.fn(async () => Promise.reject(new Error("Sitemap missing"))),
+        },
+      },
+    );
+
+    expect(plan.urls).toEqual([{ url: "https://example.com/docs", sources: ["markdown"] }]);
+    expect(plan.warnings).toEqual([
+      {
+        code: "sitemap_unavailable",
+        message: "Could not read Sitemap: Sitemap missing",
+      },
+    ]);
+  });
+
+  it("propagates cancellation before the billable seed request", async () => {
+    const controller = new AbortController();
+    const reason = new Error("cancelled");
+    controller.abort(reason);
+    const fetch = vi.fn();
+
+    await expect(
+      executeCrawlPlan(
+        { search: vi.fn(), fetch },
+        { url: "https://example.com/" },
+        options,
+        controller.signal,
+      ),
+    ).rejects.toBe(reason);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

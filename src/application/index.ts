@@ -9,10 +9,17 @@ export type {
   CrawlOutputResult,
   CrawlPage,
   CrawlPageIndex,
+  CrawlPageSource,
   CrawlPageSummary,
+  CrawlPlanOmissionReason,
+  CrawlPlanOmittedUrl,
+  CrawlPlanResult,
+  CrawlPlanSeed,
+  CrawlPlanUrl,
   CrawlRunResult,
   CrawlSitemapMode,
   CrawlSitemapReader,
+  CrawlUrlSource,
   MapResult,
   MapUrl,
   MapUrlSource,
@@ -21,6 +28,7 @@ export type {
 export type { DeepSeekGateway } from "../deepseek/gateway.js";
 export { executeBatchFetch, parseBatchFetchInput } from "./batch.js";
 export { executeCrawl } from "./crawl.js";
+export { executeCrawlPlan } from "./crawl-plan.js";
 export type { MapOptions, MapSitemapReader } from "./map.js";
 export { executeMap } from "./map.js";
 

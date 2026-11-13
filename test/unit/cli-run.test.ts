@@ -65,6 +65,7 @@ describe("runCli", () => {
 
     expect(await runCli(["help", "crawl"], deps)).toBe(0);
     expect(stdout.value()).toContain("--sitemap <include|only|skip> (default: include)");
+    expect(stdout.value()).toContain("--plan-only");
   });
 
   it("renders deduplicated Map URLs in sorted human order", async () => {
@@ -167,8 +168,9 @@ describe("runCli", () => {
         sitemapReader,
       }),
     ).toBe(1);
+    expect(mapClient.fetch).not.toHaveBeenCalled();
     expect(await readFile(output, "utf8")).toBe("original");
-    expect(stderr.value()).toContain("EEXIST");
+    expect(stderr.value()).toContain("already exists");
   });
 
   it("runs Crawl and writes the output directory", async () => {
@@ -212,12 +214,77 @@ describe("runCli", () => {
         failed: 0,
         sitemap_candidates: 1,
       },
-      pages: [{ path: "pages/0001-page.md" }, { path: "pages/0002-next.md" }],
+      pages: [
+        { path: "pages/0001-page.md", sources: ["seed_url"] },
+        { path: "pages/0002-next.md", sources: ["sitemap"] },
+      ],
       warnings: [],
     });
     expect(await readFile(join(output, "pages", "0001-page.md"), "utf8")).toContain("# Example");
     expect(stdout.value()).toContain(`Output: ${output}`);
     expect(stderr.value()).toBe("");
+  });
+
+  it("writes a Crawl plan without fetching discovered pages", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-plan-"));
+    const output = join(root, "crawl-plan.json");
+    const crawlClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => ({ title: "Example", content: "No Markdown links" })),
+    };
+    const sitemapReader = sitemap([new URL("https://example.com/next")]);
+    const { deps, stdout } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        [
+          "crawl",
+          "https://example.com/",
+          "--plan-only",
+          "--max-depth",
+          "1",
+          "--max-pages",
+          "2",
+          "--output",
+          output,
+          "--json",
+        ],
+        { ...deps, crawlClient, sitemapReader },
+      ),
+    ).toBe(0);
+
+    expect(crawlClient.fetch).toHaveBeenCalledOnce();
+    const plan = JSON.parse(await readFile(output, "utf8"));
+    expect(plan).toMatchObject({
+      seed_url: "https://example.com/",
+      urls: [{ url: "https://example.com/next", sources: ["sitemap"] }],
+      stats: {
+        selected: 1,
+        planned_pages: 2,
+      },
+    });
+    expect(JSON.parse(stdout.value())).toEqual(plan);
+  });
+
+  it("does not overwrite an existing Crawl plan", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-plan-"));
+    const output = join(root, "crawl-plan.json");
+    await writeFile(output, "original", "utf8");
+    const crawlClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => ({ title: "Example", content: "No links" })),
+    };
+    const { deps, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        ["crawl", "https://example.com/", "--plan-only", "--max-depth", "0", "--output", output],
+        { ...deps, crawlClient },
+      ),
+    ).toBe(1);
+    expect(crawlClient.fetch).not.toHaveBeenCalled();
+    expect(await readFile(output, "utf8")).toBe("original");
+    expect(stderr.value()).toContain("already exists");
   });
 
   it("runs batch Fetch from Map JSON and writes per-page output", async () => {

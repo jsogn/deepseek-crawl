@@ -13,6 +13,9 @@ export type MapUrlSource = "seed_url" | "seed_page" | "sitemap";
 
 export type CrawlSitemapMode = "include" | "only" | "skip";
 
+export type CrawlUrlSource = "markdown" | "sitemap";
+export type CrawlPageSource = "seed_url" | CrawlUrlSource;
+
 export interface CrawlSitemapReader {
   read(
     seedUrl: URL,
@@ -67,6 +70,7 @@ export interface CrawlPage {
   title: string;
   depth: number;
   content: string;
+  sources: CrawlPageSource[];
   content_truncated: boolean;
   content_original_length: number;
 }
@@ -76,9 +80,58 @@ export interface CrawlPageSummary {
   url: string;
   title: string;
   depth: number;
+  sources: CrawlPageSource[];
   content_length: number;
   content_truncated: boolean;
   content_original_length?: number;
+}
+
+export interface CrawlPlanUrl {
+  url: string;
+  sources: CrawlUrlSource[];
+}
+
+export type CrawlPlanOmissionReason =
+  | "page_limit"
+  | "discovery_limit"
+  | "cross_origin"
+  | "path_filtered";
+
+export interface CrawlPlanOmittedUrl extends CrawlPlanUrl {
+  reason: CrawlPlanOmissionReason;
+}
+
+export interface CrawlPlanSeed {
+  url: string;
+  title: string;
+  depth: 0;
+  content_length: number;
+  content_truncated: boolean;
+  content_original_length?: number;
+}
+
+export interface CrawlPlanResult {
+  version: 1;
+  seed_url: string;
+  generated_at: string;
+  settings: CrawlRunResult["settings"];
+  seed: CrawlPlanSeed;
+  urls: CrawlPlanUrl[];
+  deferred: CrawlPlanOmittedUrl[];
+  filtered: CrawlPlanOmittedUrl[];
+  stats: {
+    candidates: number;
+    eligible: number;
+    selected: number;
+    deferred: number;
+    filtered: number;
+    planned_pages: number;
+    page_limit_reached: boolean;
+    discovery_limit_reached: boolean;
+    sitemap_candidates?: number;
+  };
+  diagnostics_truncated: boolean;
+  warnings: MapWarning[];
 }
 
 export interface CrawlPageIndex extends CrawlPageSummary {

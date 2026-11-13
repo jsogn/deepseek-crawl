@@ -18,6 +18,7 @@ Required environment:
 - Optional `DEEPSEEK_BASE_URL`
 - Optional `DEEPSEEK_TIMEOUT_MS`
 - Optional `DEEPSEEK_MAX_RETRIES`
+- Optional `DEEPSEEK_CACHE_DIR`
 
 ## Escalation
 
@@ -54,6 +55,8 @@ Use `--content` when the result content is likely sufficient for the task.
 ```text
 deepseek-crawl fetch <url>
   [--max-chars <0..1000000>]
+  [--cache-ttl <1..31536000>]
+  [--fresh]
   [--json]
   [--output, -o <path>]
 ```
@@ -72,6 +75,8 @@ deepseek-crawl fetch --input <path|->
   [--concurrency <1..5>]
   [--delay-ms <0..5000>]
   [--max-chars <0..1000000>]
+  [--cache-ttl <1..31536000>]
+  [--fresh]
   [--json]
 
 deepseek-crawl fetch --retry-failed <fetch.json>
@@ -79,6 +84,8 @@ deepseek-crawl fetch --retry-failed <fetch.json>
   [--concurrency <1..5>]
   [--delay-ms <0..5000>]
   [--max-chars <0..1000000>]
+  [--cache-ttl <1..31536000>]
+  [--fresh]
   [--json]
 ```
 
@@ -105,6 +112,27 @@ preserves each available original index and previous failure under `retry_of`.
 Invalid or unsupported failures are listed in `retry_of.skipped`. The retry
 output directory must be new. Duplicate failures are counted in
 `retry_of.deduplicated`.
+
+### Fetch Cache
+
+```text
+deepseek-crawl fetch <url> --cache-ttl <seconds> [--fresh]
+deepseek-crawl cache clear [--json]
+```
+
+The cache is disabled unless `--cache-ttl` is supplied. TTL is 1 to
+31,536,000 seconds. Only successful Fetch responses are stored.
+`--fresh` bypasses a hit, calls the API, and refreshes the entry.
+
+Default locations:
+
+- macOS: `~/Library/Caches/deepseek-crawl`
+- `$XDG_CACHE_HOME/deepseek-crawl`
+- `~/.cache/deepseek-crawl`
+- Override: `DEEPSEEK_CACHE_DIR`
+
+The directory is `0700`; entry files are `0600`. Cache read/write failures do
+not fail the web request and increment `cache_errors`.
 
 ## Map
 
@@ -163,11 +191,15 @@ deepseek-crawl crawl <url>
   [--ignore-query-parameters]
   [--sitemap <include|only|skip>]
   [--plan-only]
+  [--cache-ttl <1..31536000>]
+  [--fresh]
   --output, -o <dir>
   [--json]
 
 deepseek-crawl crawl --retry-failed <crawl.json>
   --output, -o <dir>
+  [--cache-ttl <1..31536000>]
+  [--fresh]
   [--json]
 ```
 
@@ -281,6 +313,8 @@ but not duplicate page bodies.
 | Fetch response body | 8 MiB                 |
 | Batch CLI input     | 8 MiB                 |
 | Batch Fetch URLs    | 10,000                |
+| Fetch cache TTL     | 31,536,000 seconds    |
+| Fetch cache entry   | 16 MiB                |
 | Crawl page content  | 1,000,000 code points |
 | Crawl discovery CLI | 10,000 URLs           |
 | Map candidates      | 10,000 URLs           |

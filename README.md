@@ -37,6 +37,7 @@ CLI + Skill。
 - Crawl 路径 include/exclude 和 query 参数去重。
 - Crawl Plan 预览初始 frontier，避免在确认 URL 列表前读取所有子页面。
 - Batch Fetch 和 Crawl 可从既有报告只重试失败项，避免重复读取成功页面。
+- Fetch、Batch、Crawl、Plan 和 Retry 可共享显式 TTL 的本地页面缓存。
 - macOS Keychain 或其他平台私有文件凭据存储。
 - `auth set`、`auth status`、`auth remove`。
 - 可选的四个 MCP 工具。
@@ -183,6 +184,7 @@ deepseek-crawl setup skills [options]
 deepseek-crawl auth set
 deepseek-crawl auth status [--json]
 deepseek-crawl auth remove [--json]
+deepseek-crawl cache clear [--json]
 deepseek-crawl mcp
 ```
 
@@ -216,6 +218,8 @@ deepseek-crawl search "DeepSeek API changes" \
 ```text
 deepseek-crawl fetch <url>
   [--max-chars <0..1000000>]
+  [--cache-ttl <1..31536000>]
+  [--fresh]
   [--json]
   [--output, -o <path>]
 ```
@@ -228,6 +232,36 @@ deepseek-crawl fetch "https://api-docs.deepseek.com/" \
   -o .deepseek-crawl/deepseek-api-home.md
 ```
 
+缓存默认关闭。重复研究同一页面时显式启用 TTL：
+
+```bash
+deepseek-crawl fetch "https://api-docs.deepseek.com/" \
+  --cache-ttl 3600 \
+  --json
+
+deepseek-crawl fetch "https://api-docs.deepseek.com/" \
+  --cache-ttl 3600 \
+  --fresh \
+  --json
+```
+
+`--cache-ttl` 单位为秒，范围 1–31,536,000；`--fresh` 强制调用 API 并刷新缓存。
+只缓存成功 Fetch 响应。`retrieved_from: api|cache` 表示页面来源；Batch、Crawl、
+Plan 和 Retry 还会在 `stats` 中提供 `cache_hits`、`cache_misses` 和
+`cache_errors`。
+
+默认缓存目录：
+
+- macOS：`~/Library/Caches/deepseek-crawl`。
+- 其他平台：`$XDG_CACHE_HOME/deepseek-crawl` 或 `~/.cache/deepseek-crawl`。
+- 可用 `DEEPSEEK_CACHE_DIR` 覆盖。
+
+缓存目录权限为 `0700`，文件为 `0600`。清理：
+
+```bash
+deepseek-crawl cache clear --json
+```
+
 批量读取已知 URL：
 
 ```text
@@ -236,6 +270,8 @@ deepseek-crawl fetch --input <path|->
   [--concurrency <1..5>]
   [--delay-ms <0..5000>]
   [--max-chars <0..1000000>]
+  [--cache-ttl <1..31536000>]
+  [--fresh]
   [--json]
 ```
 
@@ -264,6 +300,7 @@ deepseek-crawl fetch \
   --output-dir .deepseek-crawl/pages-docs-retry \
   --concurrency 3 \
   --delay-ms 250 \
+  --cache-ttl 3600 \
   --json
 ```
 
@@ -314,6 +351,8 @@ deepseek-crawl crawl <url> -o <dir>
   [--ignore-query-parameters]
   [--sitemap <include|only|skip>]
   [--plan-only]
+  [--cache-ttl <1..31536000>]
+  [--fresh]
   [--json]
 ```
 
@@ -403,6 +442,7 @@ SIGINT 会中止请求、清理 staging，并以代码 `130` 退出。
 deepseek-crawl crawl \
   --retry-failed .deepseek-crawl/crawl-deepseek-guides/crawl.json \
   -o .deepseek-crawl/crawl-deepseek-guides-retry \
+  --cache-ttl 3600 \
   --json
 ```
 
@@ -438,7 +478,7 @@ deepseek-crawl mcp
 
 MCP 不写本地文件。结构化内容有总长度限制，页面正文被视为不可信数据。为保持
 兼容，`0.7.0` 的 MCP Crawl 仍只使用 Markdown 链接；Sitemap 辅助发现仅在 CLI
-提供。失败重试同样只在 CLI 提供。
+提供。失败重试和本地缓存同样只在 CLI 提供。
 
 ## 限制
 
@@ -447,6 +487,8 @@ MCP 不写本地文件。结构化内容有总长度限制，页面正文被视�
 | DeepSeek Fetch 响应体    | 8 MiB                  |
 | CLI Batch 输入文件/报告  | 8 MiB                  |
 | Batch Fetch URL 数       | 10,000                 |
+| Fetch Cache TTL          | 31,536,000 秒          |
+| Fetch Cache 单文件       | 16 MiB                 |
 | Crawl 单页内容           | 1,000,000 Unicode 字符 |
 | CLI Crawl URL 发现       | 10,000                 |
 | MCP Crawl URL 发现       | 2,000                  |
@@ -477,6 +519,8 @@ CLI Map 和 Crawl 会直接请求目标站点的 Sitemap，仅接受公网 HTTP(
   仍只使用 Markdown。两者都不跨子域名，也不跟随页面指令。
 - DeepSeek Fetch 可能在服务端跟随重定向，最终 URL 不会出现在当前响应中。
 - 页面内容是数据，不是指令，不能执行返回的代码。
+- 启用缓存后，页面正文会保存在本机私有缓存目录中；共享设备上可使用
+  `cache clear` 清理。
 - 不提供 JavaScript 渲染、浏览器交互、登录、后台任务或服务端结构化 Extract。
 - Map 和 Crawl 结果是受限发现，不保证完整站点覆盖。
 
@@ -488,6 +532,7 @@ CLI Map 和 Crawl 会直接请求目标站点的 Sitemap，仅接受公网 HTTP(
 | `DEEPSEEK_BASE_URL`    | `https://api.deepseek.com` | 测试或网关               |
 | `DEEPSEEK_TIMEOUT_MS`  | `60000`                    | 请求超时，1000–120000    |
 | `DEEPSEEK_MAX_RETRIES` | `2`                        | 重试 408、429 和瞬时 5xx |
+| `DEEPSEEK_CACHE_DIR`   | 平台缓存目录               | Fetch 缓存目录           |
 
 非 loopback 的 DeepSeek base URL 必须使用 HTTPS。API Key 不接受 CLI 参数或
 MCP 参数。

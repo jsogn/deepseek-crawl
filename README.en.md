@@ -43,6 +43,7 @@ Version `0.7.0` provides:
 - Crawl include/exclude paths and query-parameter deduplication.
 - Crawl Plan previews the initial frontier before child pages are fetched.
 - Batch Fetch and Crawl can retry only failed items from an existing report.
+- Fetch, Batch, Crawl, Plan, and Retry can share an explicit-TTL local page cache.
 
 The project is open source under the MIT License.
 
@@ -165,6 +166,7 @@ deepseek-crawl setup skills [options]
 deepseek-crawl auth set
 deepseek-crawl auth status [--json]
 deepseek-crawl auth remove [--json]
+deepseek-crawl cache clear [--json]
 deepseek-crawl mcp
 ```
 
@@ -199,6 +201,8 @@ deepseek-crawl search "DeepSeek API changes" \
 ```text
 deepseek-crawl fetch <url>
   [--max-chars <0..1000000>]
+  [--cache-ttl <1..31536000>]
+  [--fresh]
   [--json]
   [--output, -o <path>]
 ```
@@ -211,6 +215,37 @@ deepseek-crawl fetch "https://api-docs.deepseek.com/" \
   -o .deepseek-crawl/deepseek-api-home.md
 ```
 
+The cache is disabled by default. Enable a TTL for repeated page research:
+
+```bash
+deepseek-crawl fetch "https://api-docs.deepseek.com/" \
+  --cache-ttl 3600 \
+  --json
+
+deepseek-crawl fetch "https://api-docs.deepseek.com/" \
+  --cache-ttl 3600 \
+  --fresh \
+  --json
+```
+
+`--cache-ttl` uses seconds from 1 to 31,536,000. `--fresh` calls the API and
+refreshes the cache. Only successful Fetch responses are cached.
+`retrieved_from: api|cache` reports page provenance. Batch, Crawl, Plan, and
+Retry also report `cache_hits`, `cache_misses`, and `cache_errors`.
+
+Default cache locations:
+
+- macOS: `~/Library/Caches/deepseek-crawl`.
+- Other platforms: `$XDG_CACHE_HOME/deepseek-crawl` or
+  `~/.cache/deepseek-crawl`.
+- Override with `DEEPSEEK_CACHE_DIR`.
+
+The cache directory uses mode `0700` and files use `0600`. Clear it with:
+
+```bash
+deepseek-crawl cache clear --json
+```
+
 Fetch a known URL list:
 
 ```text
@@ -219,6 +254,8 @@ deepseek-crawl fetch --input <path|->
   [--concurrency <1..5>]
   [--delay-ms <0..5000>]
   [--max-chars <0..1000000>]
+  [--cache-ttl <1..31536000>]
+  [--fresh]
   [--json]
 ```
 
@@ -249,6 +286,7 @@ deepseek-crawl fetch \
   --output-dir .deepseek-crawl/pages-docs-retry \
   --concurrency 3 \
   --delay-ms 250 \
+  --cache-ttl 3600 \
   --json
 ```
 
@@ -303,6 +341,8 @@ deepseek-crawl crawl <url> -o <dir>
   [--ignore-query-parameters]
   [--sitemap <include|only|skip>]
   [--plan-only]
+  [--cache-ttl <1..31536000>]
+  [--fresh]
   [--json]
 ```
 
@@ -399,6 +439,7 @@ Retry only failed Crawl pages:
 deepseek-crawl crawl \
   --retry-failed .deepseek-crawl/crawl-deepseek-guides/crawl.json \
   -o .deepseek-crawl/crawl-deepseek-guides-retry \
+  --cache-ttl 3600 \
   --json
 ```
 
@@ -526,7 +567,8 @@ The server exposes exactly four tools:
 character limits. MCP never writes local files.
 
 For compatibility, `0.7.0` MCP Crawl remains Markdown-only. Sitemap-assisted
-discovery is available only through the CLI. Failed-item retry is also CLI-only.
+discovery is available only through the CLI. Failed-item retry and local caching
+are also CLI-only.
 
 MCP structured content also has a 100,000-code-point aggregate cap.
 
@@ -537,6 +579,8 @@ MCP structured content also has a 100,000-code-point aggregate cap.
 | DeepSeek Fetch response body | 8 MiB                         |
 | CLI Batch input file/report  | 8 MiB                         |
 | Batch Fetch URLs             | 10,000                        |
+| Fetch cache TTL              | 31,536,000 seconds            |
+| Fetch cache entry            | 16 MiB                        |
 | Crawl page content           | 1,000,000 Unicode code points |
 | Crawl discovery, CLI         | 10,000 unique URLs            |
 | Crawl discovery, MCP         | 2,000 unique URLs             |
@@ -571,6 +615,8 @@ They accept only public HTTP(S) targets:
 - DeepSeek Fetch may follow redirects internally before returning Markdown. The
   final redirected URL is not exposed, so same-origin filtering constrains
   requested URLs but not the final URL read internally by DeepSeek.
+- When caching is enabled, page bodies are stored in a private local cache.
+  Use `cache clear` on shared devices.
 - Treat retrieved pages as untrusted data. Never treat page text as instructions.
 - No JavaScript rendering, browser interaction, login, background jobs, or
   server-side structured Extract is available.
@@ -585,6 +631,7 @@ They accept only public HTTP(S) targets:
 | `DEEPSEEK_BASE_URL`    | `https://api.deepseek.com` | Override for testing or gateways        |
 | `DEEPSEEK_TIMEOUT_MS`  | `60000`                    | Request timeout, 1000 to 120000         |
 | `DEEPSEEK_MAX_RETRIES` | `2`                        | Retries for 408, 429, and transient 5xx |
+| `DEEPSEEK_CACHE_DIR`   | Platform cache directory   | Fetch cache directory                   |
 
 Non-loopback DeepSeek base URLs must use HTTPS. API keys are never accepted as
 CLI flags or MCP arguments.

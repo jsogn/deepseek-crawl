@@ -85,6 +85,19 @@ rg -n "specific term|error code|API name" .deepseek-crawl/page.md
 Check `.deepseek-crawl/` for a suitable earlier result before repeating a
 billable request. Cite the source URLs used in the final answer.
 
+The CLI also has an explicit-TTL Fetch cache shared by Fetch, Batch, Crawl,
+Plan, and Retry. It is disabled by default:
+
+```bash
+deepseek-crawl fetch "<url>" --cache-ttl 3600 --json
+deepseek-crawl fetch "<url>" --cache-ttl 3600 --fresh --json
+deepseek-crawl cache clear --json
+```
+
+Use caching for repeatable research where content may be up to one hour old.
+Use `--fresh` for volatile pages or when the user explicitly needs current
+content. `retrieved_from` and cache stats show whether the API was called.
+
 ## Search
 
 Use Search for ordinary web discovery, current information, announcements,
@@ -117,6 +130,7 @@ deepseek-crawl fetch \
   --output-dir .deepseek-crawl/pages-site \
   --concurrency 3 \
   --delay-ms 250 \
+  --cache-ttl 3600 \
   --json
 ```
 
@@ -180,6 +194,7 @@ deepseek-crawl crawl "<section-url>" \
   --exclude-paths "/docs/private/*" \
   --ignore-query-parameters \
   --sitemap include \
+  --cache-ttl 3600 \
   -o .deepseek-crawl/crawl-site-section
 ```
 
@@ -225,6 +240,8 @@ reason. It is bounded by the report's `max_pages`; inspect `retry_of.skipped`.
   not call DeepSeek Fetch for discovered child pages.
 - Failed-item retry only calls DeepSeek Fetch for URLs listed in the report's
   failures; previously successful pages are reused from the original output.
+- Cache hits do not call DeepSeek. Cache is opt-in and only stores successful
+  Fetch responses in the user's private cache directory.
 - This implementation does not fetch or enforce `robots.txt`. Confirm the user
   is authorized to crawl the target and that its terms permit the operation.
 - CLI Map and Crawl Sitemap access is public-network-only. MCP Crawl remains

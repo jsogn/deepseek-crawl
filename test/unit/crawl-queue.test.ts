@@ -40,7 +40,7 @@ describe("runLayeredTasks", () => {
   });
 
   it("spaces back-to-back request starts with the injected sleep function", async () => {
-    const sleep = vi.fn(async () => undefined);
+    const sleep = vi.fn(async (_milliseconds: number, _signal?: AbortSignal) => undefined);
     const run = vi.fn(async (value: string) => value.toUpperCase());
 
     const results = await runLayeredTasks(["a", "b", "c"], {

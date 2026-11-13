@@ -3,6 +3,13 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
 import { createMcpServer, resolveMcpCrawlLimits } from "../../src/mcp/server.js";
+import type { SitemapDiscovery, SitemapReadOptions } from "../../src/sitemap/reader.js";
+import type {
+  FetchInput,
+  RawFetchResponse,
+  RawSearchResponse,
+  SearchInput,
+} from "../../src/types.js";
 
 const baseResult = {
   rerank_score: 2.4,
@@ -25,11 +32,26 @@ afterEach(async () => {
 
 async function connectedServer() {
   const gateway = {
-    search: vi.fn(async () => ({ results: [baseResult] })),
-    fetch: vi.fn(async () => ({ title: "Page", content: "# Body" })),
+    search: vi.fn(
+      async (_input: SearchInput): Promise<RawSearchResponse> => ({
+        results: [baseResult],
+      }),
+    ),
+    fetch: vi.fn(
+      async (_input: FetchInput): Promise<RawFetchResponse> => ({
+        title: "Page",
+        content: "# Body",
+      }),
+    ),
   };
   const sitemapReader = {
-    read: vi.fn(async () => ({ urls: [], warnings: [], truncated: false })),
+    read: vi.fn(
+      async (
+        _seedUrl: URL,
+        _options: SitemapReadOptions,
+        _signal?: AbortSignal,
+      ): Promise<SitemapDiscovery> => ({ urls: [], warnings: [], truncated: false }),
+    ),
   };
   const server = createMcpServer({ client: gateway, sitemapReader });
   const client = new Client({ name: "test-client", version: "1.0.0" });
@@ -300,7 +322,7 @@ describe("MCP server", () => {
 
   it("bounds untrusted titles and failure messages in the human summary", async () => {
     const { client, gateway } = await connectedServer();
-    gateway.fetch.mockImplementation(async ({ url }: { url: string }) => {
+    gateway.fetch.mockImplementation(async ({ url }: FetchInput) => {
       if (url === "https://example.com/broken") {
         throw new DeepSeekError("F".repeat(100_000), { kind: "not_found" });
       }
@@ -319,9 +341,10 @@ describe("MCP server", () => {
         delay_ms: 0,
       },
     });
-    const text = result.content?.[0];
+    const content = result.content as Array<{ type: string; text?: string }> | undefined;
+    const text = content?.[0];
     expect(text?.type).toBe("text");
-    if (text?.type === "text") {
+    if (text?.type === "text" && text.text !== undefined) {
       expect([...text.text].length).toBeLessThan(5_000);
       expect(text.text).toContain("not_found");
     }

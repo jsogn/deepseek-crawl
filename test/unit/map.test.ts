@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeMap } from "../../src/application/map.js";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
+import type { SitemapReadOptions } from "../../src/sitemap/reader.js";
 
 const now = () => new Date("2026-11-13T12:00:00.000Z");
 
@@ -13,7 +14,7 @@ function reader(result: {
   truncated?: boolean;
 }) {
   return {
-    read: vi.fn(async () => ({
+    read: vi.fn(async (_seed: URL, _options: SitemapReadOptions) => ({
       urls: result.urls,
       warnings: result.warnings ?? [],
       truncated: result.truncated ?? false,

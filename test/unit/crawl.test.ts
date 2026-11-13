@@ -222,7 +222,7 @@ describe("executeCrawl", () => {
 
   it("merges Sitemap candidates with Markdown links", async () => {
     const reader = {
-      read: vi.fn(async () => ({
+      read: vi.fn(async (_seed: URL, _options: unknown, _signal?: AbortSignal) => ({
         urls: [
           new URL("https://example.com/"),
           new URL("https://example.com/docs/a"),

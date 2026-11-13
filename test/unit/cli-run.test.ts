@@ -673,7 +673,10 @@ describe("runCli", () => {
   });
 
   it("runs doctor without a billable POST", async () => {
-    const fetchImpl = vi.fn(async () => new Response("ok", { status: 404 }));
+    const fetchImpl = vi.fn(
+      async (_input: string | URL | Request, _init?: RequestInit) =>
+        new Response("ok", { status: 404 }),
+    );
     const { deps, stdout } = dependencies(fetchImpl as unknown as typeof fetch);
 
     expect(await runCli(["doctor", "--json"], deps)).toBe(0);

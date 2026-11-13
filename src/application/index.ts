@@ -26,9 +26,10 @@ export type {
   MapWarning,
 } from "../crawl/types.js";
 export type { DeepSeekGateway } from "../deepseek/gateway.js";
-export { executeBatchFetch, parseBatchFetchInput } from "./batch.js";
+export { executeBatchFetch, executeBatchFetchRetry, parseBatchFetchInput } from "./batch.js";
 export { executeCrawl } from "./crawl.js";
 export { executeCrawlPlan } from "./crawl-plan.js";
+export { executeCrawlRetry } from "./crawl-retry.js";
 export type { MapOptions, MapSitemapReader } from "./map.js";
 export { executeMap } from "./map.js";
 

@@ -325,7 +325,7 @@ export async function executeCrawl(
       },
     });
 
-    for (const outcome of outcomes) {
+    for (const [offset, outcome] of outcomes.entries()) {
       if (outcome.summary) {
         fetched += 1;
         contentTruncated += outcome.summary.content_truncated ? 1 : 0;
@@ -333,7 +333,9 @@ export async function executeCrawl(
       } else {
         failures.push({
           url: outcome.url,
+          index: selectedIndexes[offset] ?? 0,
           depth,
+          sources: pageSourcesInOrder(sourcesByUrl.get(outcome.url) ?? new Set<CrawlPageSource>()),
           kind: errorKind(outcome.error),
           message: errorMessage(outcome.error),
         });

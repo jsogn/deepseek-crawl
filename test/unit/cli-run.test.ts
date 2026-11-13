@@ -1,4 +1,4 @@
-import { lstat, mkdtemp, readFile, readlink, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -66,6 +66,7 @@ describe("runCli", () => {
     expect(await runCli(["help", "crawl"], deps)).toBe(0);
     expect(stdout.value()).toContain("--sitemap <include|only|skip> (default: include)");
     expect(stdout.value()).toContain("--plan-only");
+    expect(stdout.value()).toContain("--retry-failed");
   });
 
   it("renders deduplicated Map URLs in sorted human order", async () => {
@@ -332,6 +333,112 @@ describe("runCli", () => {
     expect(stderr.value()).toBe("");
   });
 
+  it("retries only failed Batch Fetch URLs from an existing report", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-retry-"));
+    const reportPath = join(root, "fetch.json");
+    const output = join(root, "retry");
+    await writeFile(
+      reportPath,
+      JSON.stringify({
+        version: 1,
+        source: "map.json",
+        failures: [
+          {
+            index: 2,
+            url: "https://example.com/fail",
+            kind: "timeout",
+            message: "timed out",
+          },
+        ],
+      }),
+    );
+    const fetchClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async ({ url }: { url: string }) => ({
+        title: "Retried",
+        content: `retried:${url}`,
+      })),
+    };
+    const { deps, stdout } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        [
+          "fetch",
+          "--retry-failed",
+          reportPath,
+          "--output-dir",
+          output,
+          "--delay-ms",
+          "0",
+          "--json",
+        ],
+        { ...deps, fetchClient },
+      ),
+    ).toBe(0);
+
+    expect(fetchClient.fetch).toHaveBeenCalledOnce();
+    expect(JSON.parse(await readFile(join(output, "fetch.json"), "utf8"))).toMatchObject({
+      source: `${reportPath} [retry-failed]`,
+      retry_of: {
+        source: reportPath,
+        original_failures: 1,
+        attempted: 1,
+      },
+      pages: [
+        {
+          index: 2,
+          url: "https://example.com/fail",
+          path: "pages/0002-fail.md",
+          retry_of: {
+            index: 2,
+            kind: "timeout",
+            message: "timed out",
+          },
+        },
+      ],
+    });
+    expect(JSON.parse(stdout.value())).toMatchObject({
+      retry_of: { attempted: 1 },
+    });
+  });
+
+  it("rejects an existing Batch retry output before making a Fetch request", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-retry-existing-"));
+    const reportPath = join(root, "fetch.json");
+    const output = join(root, "retry");
+    await writeFile(
+      reportPath,
+      JSON.stringify({
+        version: 1,
+        source: "map.json",
+        failures: [
+          {
+            index: 2,
+            url: "https://example.com/fail",
+            kind: "timeout",
+            message: "timed out",
+          },
+        ],
+      }),
+    );
+    await mkdir(output);
+    const fetchClient = {
+      search: vi.fn(),
+      fetch: vi.fn(),
+    };
+    const { deps, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(["fetch", "--retry-failed", reportPath, "--output-dir", output], {
+        ...deps,
+        fetchClient,
+      }),
+    ).toBe(1);
+    expect(fetchClient.fetch).not.toHaveBeenCalled();
+    expect(stderr.value()).toContain("already exists");
+  });
+
   it("reads batch Fetch input from stdin", async () => {
     const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-batch-stdin-"));
     const output = join(root, "pages");
@@ -510,6 +617,78 @@ describe("runCli", () => {
       "sitemap_unavailable: Could not read Sitemap: Sitemap missing",
     );
     expect(stderr.value()).toBe("");
+  });
+
+  it("retries only failed Crawl URLs from an existing report", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-retry-"));
+    const reportPath = join(root, "crawl.json");
+    const output = join(root, "retry");
+    await writeFile(
+      reportPath,
+      JSON.stringify({
+        version: 1,
+        seed_url: "https://example.com/",
+        settings: {
+          max_depth: 2,
+          max_pages: 5,
+          concurrency: 2,
+          delay_ms: 0,
+          sitemap_mode: "include",
+        },
+        failures: [
+          {
+            index: 3,
+            url: "https://example.com/retry",
+            depth: 2,
+            sources: ["markdown"],
+            kind: "timeout",
+            message: "timed out",
+          },
+        ],
+      }),
+    );
+    const crawlClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async ({ url }: { url: string }) => ({
+        title: "Retried",
+        content: `retried:${url}`,
+      })),
+    };
+    const { deps, stdout } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(["crawl", "--retry-failed", reportPath, "-o", output, "--json"], {
+        ...deps,
+        crawlClient,
+      }),
+    ).toBe(0);
+
+    expect(crawlClient.fetch).toHaveBeenCalledOnce();
+    expect(JSON.parse(await readFile(join(output, "crawl.json"), "utf8"))).toMatchObject({
+      seed_url: "https://example.com/",
+      retry_of: {
+        source: reportPath,
+        original_failures: 1,
+        attempted: 1,
+      },
+      pages: [
+        {
+          index: 3,
+          url: "https://example.com/retry",
+          depth: 2,
+          sources: ["markdown"],
+          path: "pages/0003-retry.md",
+          retry_of: {
+            index: 3,
+            kind: "timeout",
+            message: "timed out",
+          },
+        },
+      ],
+    });
+    expect(JSON.parse(stdout.value())).toMatchObject({
+      retry_of: { attempted: 1 },
+    });
   });
 
   it("does not read Sitemap when Crawl uses skip mode", async () => {

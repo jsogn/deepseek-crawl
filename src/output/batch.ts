@@ -45,13 +45,22 @@ export async function createBatchFetchOutputWriter(
 }
 
 export function formatBatchFetchHuman(result: BatchFetchResult, outputDirectory: string): string {
-  return [
+  const lines = [
     `Input: ${result.source}`,
     `URLs: ${result.stats.input} input, ${result.stats.unique} unique`,
     `Concurrency: ${result.settings.concurrency}`,
     `Delay: ${result.settings.delay_ms} ms`,
     `Fetched: ${result.stats.fetched}`,
     `Failed: ${result.stats.failed}`,
-    `Output: ${outputDirectory}`,
-  ].join("\n");
+  ];
+  if (result.retry_of) {
+    lines.push(
+      `Retry of: ${result.retry_of.source}`,
+      `Retry attempted: ${result.retry_of.attempted} of ${result.retry_of.original_failures} original failures`,
+      `Retry skipped: ${result.retry_of.skipped.length}`,
+      `Retry truncated: ${result.retry_of.truncated ? "yes" : "no"}`,
+    );
+  }
+  lines.push(`Output: ${outputDirectory}`);
+  return lines.join("\n");
 }

@@ -3,10 +3,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { executeBatchFetch } from "../application/batch.js";
+import { executeBatchFetch, executeBatchFetchRetry } from "../application/batch.js";
 import {
   executeCrawl,
   executeCrawlPlan,
+  executeCrawlRetry,
   executeFetch,
   executeMap,
   executeSearch,
@@ -61,8 +62,10 @@ const MAIN_HELP = `deepseek-crawl ${packageVersion}
 Usage:
   deepseek-crawl search <query> [options]
   deepseek-crawl fetch <url> [options]
+  deepseek-crawl fetch --retry-failed <fetch.json> --output-dir <dir> [options]
   deepseek-crawl map <url> [options]
   deepseek-crawl crawl <url> [options]
+  deepseek-crawl crawl --retry-failed <crawl.json> -o <dir> [options]
   deepseek-crawl doctor [--live] [--json]
   deepseek-crawl setup skills [options]
   deepseek-crawl auth set
@@ -89,9 +92,12 @@ Options:
 
        deepseek-crawl fetch --input <path|-> --output-dir <dir> [options]
 
+       deepseek-crawl fetch --retry-failed <fetch.json> --output-dir <dir> [options]
+
 Options:
   --max-chars <0..1000000>
   --input <path|->
+  --retry-failed <fetch.json>
   --output-dir <dir>
   --concurrency <1..5>
   --delay-ms <0..5000>
@@ -108,6 +114,8 @@ Options:
 `,
   crawl: `Usage: deepseek-crawl crawl <url> [options]
 
+       deepseek-crawl crawl --retry-failed <crawl.json> -o <dir> [--json]
+
 Options:
   --max-depth <0..5>
   --max-pages <1..100>
@@ -118,11 +126,15 @@ Options:
   --ignore-query-parameters
   --sitemap <include|only|skip> (default: include)
   --plan-only
+  --retry-failed <crawl.json>
   --output, -o <dir>
   --json
 
 With --plan-only, --output is a new JSON file path. The plan reads the seed and
 Sitemap only; it does not fetch discovered child pages.
+
+With --retry-failed, Crawl reads settings from the existing report and retries
+only its failed pages into a new output directory.
 `,
   doctor: `Usage: deepseek-crawl doctor [--live] [--json]
 
@@ -278,6 +290,51 @@ async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps
   return 0;
 }
 
+async function readJsonReport(path: string, label: string): Promise<unknown> {
+  const text = await readFile(path, "utf8");
+  try {
+    return JSON.parse(text) as unknown;
+  } catch (error) {
+    throw new Error(`${label} is not valid JSON.`, { cause: error });
+  }
+}
+
+async function runFetchRetry(
+  command: Extract<ParsedCommand, { kind: "fetch-retry" }>,
+  deps: CliDependencies,
+) {
+  const config = loadConfig(deps.env, deps.credentialStore);
+  const client = deps.fetchClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+  const report = await readJsonReport(command.report, "Batch Fetch retry report");
+  const writer = await createBatchFetchOutputWriter(command.outputDir);
+  try {
+    const result = await executeBatchFetchRetry(
+      client,
+      report,
+      command.report,
+      {
+        concurrency: command.concurrency,
+        delayMs: command.delayMs,
+        maxChars: command.maxChars ?? 0,
+      },
+      async (page) => {
+        await writer.writePage(page);
+      },
+      deps.signal,
+    );
+    const output = await writer.finish(result);
+    deps.stdout.write(
+      command.json
+        ? `${JSON.stringify(output, null, 2)}\n`
+        : `${formatBatchFetchHuman(output, command.outputDir)}\n`,
+    );
+    return output.stats.fetched === 0 && output.stats.failed > 0 ? 1 : 0;
+  } catch (error) {
+    await writer.abort().catch(() => undefined);
+    throw error;
+  }
+}
+
 async function runMap(command: Extract<ParsedCommand, { kind: "map" }>, deps: CliDependencies) {
   if (command.output) {
     await assertPathMissing(command.output);
@@ -354,6 +411,37 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
       client,
       { url: command.url },
       crawlOptions,
+      async (page) => {
+        await writer.writePage(page);
+      },
+      deps.signal,
+    );
+    const output = await writer.finish(result);
+    deps.stdout.write(
+      command.json
+        ? `${JSON.stringify(output, null, 2)}\n`
+        : `${formatCrawlHuman(output, command.output)}\n`,
+    );
+    return 0;
+  } catch (error) {
+    await writer.abort().catch(() => undefined);
+    throw error;
+  }
+}
+
+async function runCrawlRetry(
+  command: Extract<ParsedCommand, { kind: "crawl-retry" }>,
+  deps: CliDependencies,
+) {
+  const config = loadConfig(deps.env, deps.credentialStore);
+  const client = deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+  const report = await readJsonReport(command.report, "Crawl retry report");
+  const writer = await createCrawlOutputWriter(command.output);
+  try {
+    const result = await executeCrawlRetry(
+      client,
+      report,
+      command.report,
       async (page) => {
         await writer.writePage(page);
       },
@@ -486,10 +574,14 @@ export async function runCli(
         return await runSearch(command, deps);
       case "fetch":
         return await runFetch(command, deps);
+      case "fetch-retry":
+        return await runFetchRetry(command, deps);
       case "map":
         return await runMap(command, deps);
       case "crawl":
         return await runCrawl(command, deps);
+      case "crawl-retry":
+        return await runCrawlRetry(command, deps);
       case "setup-skills":
         return await runSetupSkills(command, deps);
       case "auth-set":

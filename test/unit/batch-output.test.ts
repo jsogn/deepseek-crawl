@@ -71,4 +71,24 @@ describe("batch fetch output", () => {
     expect(formatBatchFetchHuman(result(), "/tmp/batch")).toContain("Fetched: 1");
     expect(formatBatchFetchHuman(result(), "/tmp/batch")).toContain("Output: /tmp/batch");
   });
+
+  it("reports retry provenance in the human summary", () => {
+    const output = formatBatchFetchHuman(
+      {
+        ...result(),
+        retry_of: {
+          source: "/tmp/fetch.json",
+          original_source: "map.json",
+          original_failures: 3,
+          attempted: 1,
+          skipped: [],
+          truncated: false,
+        },
+      },
+      "/tmp/retry",
+    );
+
+    expect(output).toContain("Retry of: /tmp/fetch.json");
+    expect(output).toContain("Retry attempted: 1 of 3 original failures");
+  });
 });

@@ -33,6 +33,15 @@ export type ParsedCommand =
       output?: string;
     }
   | {
+      kind: "fetch-retry";
+      report: string;
+      outputDir: string;
+      maxChars?: number;
+      concurrency: number;
+      delayMs: number;
+      json: boolean;
+    }
+  | {
       kind: "map";
       url: string;
       limit: number;
@@ -52,6 +61,12 @@ export type ParsedCommand =
       ignoreQueryParameters?: boolean;
       sitemapMode: CrawlSitemapMode;
       planOnly: boolean;
+      output: string;
+      json: boolean;
+    }
+  | {
+      kind: "crawl-retry";
+      report: string;
       output: string;
       json: boolean;
     }
@@ -188,6 +203,7 @@ export function parseCli(argv: string[]): ParsedCommand {
           options: {
             "max-chars": { type: "string" },
             input: { type: "string" },
+            "retry-failed": { type: "string" },
             "output-dir": { type: "string" },
             concurrency: { type: "string" },
             "delay-ms": { type: "string" },
@@ -202,6 +218,43 @@ export function parseCli(argv: string[]): ParsedCommand {
         const result: ParsedCommand = { kind: "fetch", json: parsed.values.json ?? false };
         const input = parsed.values.input?.trim();
         const outputDir = parsed.values["output-dir"]?.trim();
+        const retryFailed = parsed.values["retry-failed"]?.trim();
+        if (retryFailed !== undefined) {
+          if (!retryFailed) {
+            throw new CliUsageError("retry-failed requires a report path.");
+          }
+          if (parsed.positionals.length > 0) {
+            throw new CliUsageError("fetch retry does not accept a URL.");
+          }
+          if (input) {
+            throw new CliUsageError("--input and --retry-failed cannot be used together.");
+          }
+          if (!outputDir) {
+            throw new CliUsageError("output-dir is required with --retry-failed.");
+          }
+          if (parsed.values.output !== undefined) {
+            throw new CliUsageError(
+              "--output cannot be used with --retry-failed; use --output-dir.",
+            );
+          }
+          return {
+            kind: "fetch-retry",
+            report: retryFailed,
+            outputDir,
+            concurrency:
+              parsed.values.concurrency === undefined
+                ? 3
+                : parseInteger(parsed.values.concurrency, "concurrency", 1, 5),
+            delayMs:
+              parsed.values["delay-ms"] === undefined
+                ? 250
+                : parseInteger(parsed.values["delay-ms"], "delay-ms", 0, 5000),
+            ...(parsed.values["max-chars"] === undefined
+              ? {}
+              : { maxChars: parseContentLimit(parsed.values["max-chars"]) }),
+            json: parsed.values.json ?? false,
+          };
+        }
         if (input) {
           if (parsed.positionals.length > 0) {
             throw new CliUsageError("fetch accepts either a URL or --input, not both.");
@@ -293,6 +346,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             "exclude-paths": { type: "string" },
             "ignore-query-parameters": { type: "boolean" },
             "plan-only": { type: "boolean" },
+            "retry-failed": { type: "string" },
             sitemap: { type: "string" },
             output: { type: "string", short: "o" },
             json: { type: "boolean" },
@@ -305,6 +359,36 @@ export function parseCli(argv: string[]): ParsedCommand {
         const output = parsed.values.output?.trim();
         if (!output) {
           throw new CliUsageError("output is required.");
+        }
+        const retryFailed = parsed.values["retry-failed"]?.trim();
+        if (retryFailed !== undefined) {
+          if (!retryFailed) {
+            throw new CliUsageError("retry-failed requires a report path.");
+          }
+          if (parsed.positionals.length > 0) {
+            throw new CliUsageError("crawl retry does not accept a URL.");
+          }
+          if (parsed.values["plan-only"]) {
+            throw new CliUsageError("--plan-only cannot be used with --retry-failed.");
+          }
+          const incompatible =
+            parsed.values["max-depth"] !== undefined ||
+            parsed.values["max-pages"] !== undefined ||
+            parsed.values.concurrency !== undefined ||
+            parsed.values["delay-ms"] !== undefined ||
+            parsed.values["include-paths"] !== undefined ||
+            parsed.values["exclude-paths"] !== undefined ||
+            parsed.values["ignore-query-parameters"] ||
+            parsed.values.sitemap !== undefined;
+          if (incompatible) {
+            throw new CliUsageError("Crawl retry uses settings from the existing report.");
+          }
+          return {
+            kind: "crawl-retry",
+            report: retryFailed,
+            output,
+            json: parsed.values.json ?? false,
+          };
         }
         return {
           kind: "crawl",

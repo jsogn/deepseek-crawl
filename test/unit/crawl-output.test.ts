@@ -242,6 +242,24 @@ describe("formatCrawlHuman", () => {
     expect(output).toContain("Sitemap-sourced pages: 1");
   });
 
+  it("reports retry provenance in the human summary", () => {
+    const output = formatCrawlHuman(
+      result({
+        retry_of: {
+          source: "crawl.json",
+          original_failures: 4,
+          attempted: 2,
+          skipped: [],
+          truncated: false,
+        },
+      }),
+      "retry-output",
+    );
+
+    expect(output).toContain("Retry of: crawl.json");
+    expect(output).toContain("Retry attempted: 2 of 4 original failures");
+  });
+
   it("reports Sitemap mode, candidates, and warnings when present", () => {
     const output = formatCrawlHuman(
       result({

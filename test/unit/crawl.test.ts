@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeCrawl, normalizeCrawlOptions } from "../../src/application/crawl.js";
 import { executeCrawlPlan } from "../../src/application/crawl-plan.js";
+import { executeCrawlRetry } from "../../src/application/crawl-retry.js";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
 
 const options = {
@@ -642,5 +643,283 @@ describe("executeCrawlPlan", () => {
       ),
     ).rejects.toBe(reason);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("executeCrawlRetry", () => {
+  it("retries only same-origin failed pages and preserves their crawl metadata", async () => {
+    const pages: Array<{
+      index: number;
+      depth: number;
+      sources: string[];
+      retryOf?: unknown;
+    }> = [];
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: `Retried ${url}`,
+      content: `content:${url}`,
+    }));
+    const report = {
+      version: 1,
+      seed_url: "https://example.com/",
+      settings: {
+        max_depth: 3,
+        max_pages: 5,
+        concurrency: 2,
+        delay_ms: 0,
+        sitemap_mode: "include",
+      },
+      failures: [
+        {
+          index: 2,
+          url: "https://example.com/retry",
+          depth: 1,
+          sources: ["sitemap"],
+          kind: "timeout",
+          message: "request timed out",
+        },
+        {
+          index: 3,
+          url: "https://other.example/outside",
+          depth: 1,
+          sources: ["markdown"],
+          kind: "fetch",
+          message: "outside origin",
+        },
+        {
+          index: 4,
+          url: "file:///etc/passwd",
+          depth: 1,
+          sources: ["markdown"],
+          kind: "invalid_url",
+          message: "not HTTP(S)",
+        },
+      ],
+    };
+
+    const result = await executeCrawlRetry(
+      { search: vi.fn(), fetch },
+      report,
+      "crawl.json",
+      async (page) => {
+        pages.push({
+          index: page.index,
+          depth: page.depth,
+          sources: page.sources,
+          retryOf: page.retryOf,
+        });
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith(
+      { url: "https://example.com/retry" },
+      expect.any(AbortSignal),
+    );
+    expect(pages).toEqual([
+      {
+        index: 2,
+        depth: 1,
+        sources: ["sitemap"],
+        retryOf: {
+          index: 2,
+          url: "https://example.com/retry",
+          kind: "timeout",
+          message: "request timed out",
+        },
+      },
+    ]);
+    expect(result).toMatchObject({
+      version: 1,
+      seed_url: "https://example.com/",
+      settings: {
+        max_depth: 3,
+        max_pages: 5,
+        concurrency: 2,
+        delay_ms: 0,
+        sitemap_mode: "include",
+      },
+      retry_of: {
+        source: "crawl.json",
+        original_failures: 3,
+        attempted: 1,
+        skipped: [
+          {
+            index: 3,
+            url: "https://other.example/outside",
+            kind: "fetch",
+            message: "outside origin",
+          },
+          {
+            index: 4,
+            url: "file:///etc/passwd",
+            kind: "invalid_url",
+            message: "not HTTP(S)",
+          },
+        ],
+      },
+      pages: [
+        {
+          index: 2,
+          depth: 1,
+          sources: ["sitemap"],
+          retry_of: {
+            index: 2,
+            url: "https://example.com/retry",
+            kind: "timeout",
+            message: "request timed out",
+          },
+        },
+      ],
+      failures: [],
+    });
+  });
+
+  it("records both the current and previous failure when a Crawl retry fails again", async () => {
+    const result = await executeCrawlRetry(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async () =>
+          Promise.reject(new DeepSeekError("still unavailable", { kind: "server" })),
+        ),
+      },
+      {
+        version: 1,
+        seed_url: "https://example.com/",
+        settings: {
+          max_depth: 2,
+          max_pages: 5,
+          concurrency: 2,
+          delay_ms: 0,
+          sitemap_mode: "include",
+        },
+        failures: [
+          {
+            index: 3,
+            url: "https://example.com/retry",
+            depth: 1,
+            sources: ["sitemap"],
+            kind: "timeout",
+            message: "timed out",
+          },
+        ],
+      },
+      "crawl.json",
+    );
+
+    expect(result.pages).toEqual([]);
+    expect(result.failures).toEqual([
+      {
+        url: "https://example.com/retry",
+        index: 3,
+        depth: 1,
+        sources: ["sitemap"],
+        kind: "server",
+        message: "still unavailable",
+        retry_of: {
+          index: 3,
+          url: "https://example.com/retry",
+          kind: "timeout",
+          message: "timed out",
+        },
+      },
+    ]);
+  });
+
+  it("bounds retry requests by the original Crawl page limit", async () => {
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content: "retried",
+    }));
+    const result = await executeCrawlRetry(
+      { search: vi.fn(), fetch },
+      {
+        version: 1,
+        seed_url: "https://example.com/",
+        settings: {
+          max_depth: 2,
+          max_pages: 2,
+          concurrency: 2,
+          delay_ms: 0,
+          sitemap_mode: "include",
+        },
+        failures: [
+          {
+            index: 2,
+            url: "https://example.com/a",
+            depth: 1,
+            sources: ["markdown"],
+            kind: "timeout",
+            message: "first",
+          },
+          {
+            index: 3,
+            url: "https://example.com/b",
+            depth: 1,
+            sources: ["markdown"],
+            kind: "timeout",
+            message: "second",
+          },
+          {
+            index: 4,
+            url: "https://example.com/c",
+            depth: 1,
+            sources: ["markdown"],
+            kind: "timeout",
+            message: "third",
+          },
+        ],
+      },
+      "crawl.json",
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.retry_of).toMatchObject({
+      original_failures: 3,
+      attempted: 2,
+      truncated: true,
+    });
+    expect(result.retry_of?.skipped).toHaveLength(1);
+  });
+
+  it("never retries the Crawl seed URL", async () => {
+    const fetch = vi.fn();
+    const result = await executeCrawlRetry(
+      { search: vi.fn(), fetch },
+      {
+        version: 1,
+        seed_url: "https://example.com/",
+        settings: {
+          max_depth: 2,
+          max_pages: 5,
+          concurrency: 2,
+          delay_ms: 0,
+          sitemap_mode: "include",
+        },
+        failures: [
+          {
+            index: 1,
+            url: "https://example.com/",
+            depth: 0,
+            sources: ["seed_url"],
+            kind: "timeout",
+            message: "seed was reported as failed",
+          },
+        ],
+      },
+      "crawl.json",
+    );
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(result.retry_of).toMatchObject({
+      attempted: 0,
+      skipped: [
+        {
+          index: 1,
+          url: "https://example.com/",
+          kind: "timeout",
+          message: "seed was reported as failed",
+        },
+      ],
+    });
   });
 });

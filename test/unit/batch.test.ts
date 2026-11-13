@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { executeBatchFetch, parseBatchFetchInput } from "../../src/application/batch.js";
+import {
+  executeBatchFetch,
+  executeBatchFetchRetry,
+  parseBatchFetchInput,
+} from "../../src/application/batch.js";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
 
 const now = () => new Date("2026-11-14T01:00:00.000Z");
@@ -112,6 +116,174 @@ describe("executeBatchFetch", () => {
       content_length: 4,
       content_truncated: true,
       content_original_length: 6,
+    });
+  });
+});
+
+describe("executeBatchFetchRetry", () => {
+  it("retries only failed URLs, preserves indexes, and records skipped failures", async () => {
+    const pages: Array<{ index: number; url: string; retryOf?: unknown }> = [];
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content: `retried:${url}`,
+    }));
+    const report = {
+      version: 1,
+      source: "map.json",
+      failures: [
+        {
+          index: 2,
+          url: "https://example.com/fail",
+          kind: "timeout",
+          message: "request timed out",
+        },
+        {
+          index: 2,
+          url: "https://example.com/fail",
+          kind: "timeout",
+          message: "request timed out again",
+        },
+        {
+          index: 3,
+          url: "file:///etc/passwd",
+          kind: "invalid_url",
+          message: "not HTTP(S)",
+        },
+      ],
+    };
+
+    const result = await executeBatchFetchRetry(
+      { search: vi.fn(), fetch },
+      report,
+      "fetch.json",
+      options,
+      async (page) => {
+        pages.push({
+          index: page.index,
+          url: page.url,
+          retryOf: page.retryOf,
+        });
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith(
+      { url: "https://example.com/fail" },
+      expect.any(AbortSignal),
+    );
+    expect(pages).toEqual([
+      {
+        index: 2,
+        url: "https://example.com/fail",
+        retryOf: {
+          index: 2,
+          url: "https://example.com/fail",
+          kind: "timeout",
+          message: "request timed out",
+        },
+      },
+    ]);
+    expect(result).toMatchObject({
+      version: 1,
+      source: "fetch.json [retry-failed]",
+      retry_of: {
+        source: "fetch.json",
+        original_failures: 3,
+        attempted: 1,
+        skipped: [
+          {
+            index: 3,
+            url: "file:///etc/passwd",
+            kind: "invalid_url",
+            message: "not HTTP(S)",
+          },
+        ],
+      },
+      stats: {
+        input: 3,
+        unique: 1,
+        fetched: 1,
+        failed: 0,
+      },
+      pages: [
+        {
+          index: 2,
+          url: "https://example.com/fail",
+          retry_of: {
+            index: 2,
+            url: "https://example.com/fail",
+            kind: "timeout",
+            message: "request timed out",
+          },
+        },
+      ],
+      failures: [],
+    });
+  });
+
+  it("records both the current and previous failure when a retry fails again", async () => {
+    const result = await executeBatchFetchRetry(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async () =>
+          Promise.reject(new DeepSeekError("rate limited", { kind: "rate_limit" })),
+        ),
+      },
+      {
+        version: 1,
+        source: "map.json",
+        failures: [
+          {
+            index: 4,
+            url: "https://example.com/busy",
+            kind: "timeout",
+            message: "timed out",
+          },
+        ],
+      },
+      "fetch.json",
+      options,
+      async () => undefined,
+    );
+
+    expect(result.pages).toEqual([]);
+    expect(result.failures).toEqual([
+      {
+        url: "https://example.com/busy",
+        index: 4,
+        kind: "rate_limit",
+        message: "rate limited",
+        retry_of: {
+          index: 4,
+          url: "https://example.com/busy",
+          kind: "timeout",
+          message: "timed out",
+        },
+      },
+    ]);
+  });
+
+  it("returns an empty successful retry report when there are no failures", async () => {
+    const fetch = vi.fn();
+    const result = await executeBatchFetchRetry(
+      { search: vi.fn(), fetch },
+      { version: 1, source: "map.json", failures: [] },
+      "fetch.json",
+      options,
+      async () => undefined,
+    );
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      retry_of: {
+        original_failures: 0,
+        attempted: 0,
+        skipped: [],
+        truncated: false,
+      },
+      stats: { input: 0, unique: 0, fetched: 0, failed: 0 },
+      pages: [],
+      failures: [],
     });
   });
 });

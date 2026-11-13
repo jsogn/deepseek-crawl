@@ -1,9 +1,14 @@
 export const packageName = "deepseek-crawl";
-export { executeBatchFetch, parseBatchFetchInput } from "./application/batch.js";
+export {
+  executeBatchFetch,
+  executeBatchFetchRetry,
+  parseBatchFetchInput,
+} from "./application/batch.js";
 export type { MapOptions, MapSitemapReader } from "./application/index.js";
 export {
   executeCrawl,
   executeCrawlPlan,
+  executeCrawlRetry,
   executeFetch,
   executeMap,
   executeSearch,
@@ -45,3 +50,4 @@ export {
 } from "./credentials/store.js";
 export { DeepSeekClient } from "./deepseek/client.js";
 export { DeepSeekError } from "./deepseek/errors.js";
+export type { RetryAttempt, RetrySummary } from "./retry/types.js";

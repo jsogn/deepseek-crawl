@@ -65,6 +65,31 @@ describe("parseCli", () => {
       delayMs: 100,
       json: true,
     });
+
+    expect(
+      parseCli([
+        "fetch",
+        "--retry-failed",
+        "fetch.json",
+        "--output-dir",
+        "retry",
+        "--concurrency",
+        "2",
+        "--delay-ms",
+        "0",
+        "--max-chars",
+        "5000",
+        "--json",
+      ]),
+    ).toEqual({
+      kind: "fetch-retry",
+      report: "fetch.json",
+      outputDir: "retry",
+      maxChars: 5000,
+      concurrency: 2,
+      delayMs: 0,
+      json: true,
+    });
   });
 
   it("parses Map options and defaults", () => {
@@ -169,6 +194,13 @@ describe("parseCli", () => {
       planOnly: true,
       output: "plan.json",
     });
+
+    expect(parseCli(["crawl", "--retry-failed", "crawl.json", "-o", "retry", "--json"])).toEqual({
+      kind: "crawl-retry",
+      report: "crawl.json",
+      output: "retry",
+      json: true,
+    });
   });
 
   it("parses doctor and help", () => {
@@ -234,6 +266,16 @@ describe("parseCli", () => {
     [["fetch", "https://example.com", "--input", "urls.json"], /input|url/i],
     [["fetch", "--input", "urls.json"], /output-dir/i],
     [["fetch", "--input", "urls.json", "--output-dir", "pages", "--output", "out"], /output/i],
+    [["fetch", "--retry-failed", "fetch.json", "--output-dir", "retry", "url"], /retry|URL/i],
+    [
+      ["fetch", "--retry-failed", "fetch.json", "--input", "urls.json", "--output-dir", "retry"],
+      /retry|input/i,
+    ],
+    [["fetch", "--retry-failed", "fetch.json"], /output-dir/i],
+    [
+      ["fetch", "--retry-failed", "fetch.json", "--output-dir", "retry", "--output", "out"],
+      /output/i,
+    ],
     [["fetch", "https://example.com", "--concurrency", "2"], /concurrency/i],
     [["map", "https://example.com", "--limit", "0"], /limit/i],
     [["map", "https://example.com", "--limit", "1001"], /limit/i],
@@ -245,6 +287,12 @@ describe("parseCli", () => {
     [["crawl", "https://example.com", "--output", "out", "--concurrency", "6"], /concurrency/i],
     [["crawl", "https://example.com", "--output", "out", "--delay-ms", "5001"], /delay-ms/i],
     [["crawl", "https://example.com", "--output", "out", "--sitemap", "sometimes"], /sitemap/i],
+    [["crawl", "--retry-failed", "crawl.json"], /output is required/i],
+    [
+      ["crawl", "--retry-failed", "crawl.json", "https://example.com", "-o", "retry"],
+      /retry|argument/i,
+    ],
+    [["crawl", "--retry-failed", "crawl.json", "-o", "retry", "--plan-only"], /retry|plan/i],
     [["setup"], /skills|subcommand/i],
     [["setup", "unknown"], /unknown|skills/i],
     [["setup", "skills", "--global", "--project"], /global|project/i],

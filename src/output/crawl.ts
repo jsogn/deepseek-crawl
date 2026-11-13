@@ -77,6 +77,14 @@ export function formatCrawlHuman(result: CrawlRunResult, outputDirectory: string
       lines.push(`- ${warning.code}: ${warning.message}`);
     }
   }
+  if (result.retry_of) {
+    lines.push(
+      `Retry of: ${result.retry_of.source}`,
+      `Retry attempted: ${result.retry_of.attempted} of ${result.retry_of.original_failures} original failures`,
+      `Retry skipped: ${result.retry_of.skipped.length}`,
+      `Retry truncated: ${result.retry_of.truncated ? "yes" : "no"}`,
+    );
+  }
   lines.push(`Output: ${outputDirectory}`);
   return lines.join("\n");
 }

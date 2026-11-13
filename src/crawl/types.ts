@@ -1,3 +1,5 @@
+import type { RetryAttempt, RetrySummary } from "../retry/types.js";
+
 export type MapWarningCode =
   | "sitemap_unavailable"
   | "sitemap_invalid"
@@ -73,6 +75,7 @@ export interface CrawlPage {
   sources: CrawlPageSource[];
   content_truncated: boolean;
   content_original_length: number;
+  retryOf?: RetryAttempt;
 }
 
 export interface CrawlPageSummary {
@@ -84,6 +87,7 @@ export interface CrawlPageSummary {
   content_length: number;
   content_truncated: boolean;
   content_original_length?: number;
+  retry_of?: RetryAttempt;
 }
 
 export interface CrawlPlanUrl {
@@ -140,9 +144,12 @@ export interface CrawlPageIndex extends CrawlPageSummary {
 
 export interface CrawlFailure {
   url: string;
+  index?: number;
   depth: number;
+  sources?: CrawlPageSource[];
   kind: string;
   message: string;
+  retry_of?: RetryAttempt;
 }
 
 export interface CrawlRunResult {
@@ -169,6 +176,7 @@ export interface CrawlRunResult {
   pages: CrawlPageSummary[];
   failures: CrawlFailure[];
   warnings: MapWarning[];
+  retry_of?: RetrySummary;
 }
 
 export interface CrawlOutputResult extends Omit<CrawlRunResult, "pages"> {

@@ -124,6 +124,37 @@ describe("parseCli", () => {
     expect(parseCli(["--version"])).toEqual({ kind: "version" });
   });
 
+  it("parses setup skills defaults and explicit options", () => {
+    expect(parseCli(["setup", "skills"])).toEqual({
+      kind: "setup-skills",
+      scope: "global",
+      agents: ["agents"],
+      copy: false,
+      force: false,
+      json: false,
+    });
+
+    expect(
+      parseCli([
+        "setup",
+        "skills",
+        "--project",
+        "--agent",
+        "codex,cursor",
+        "--copy",
+        "--force",
+        "--json",
+      ]),
+    ).toEqual({
+      kind: "setup-skills",
+      scope: "project",
+      agents: ["codex", "cursor"],
+      copy: true,
+      force: true,
+      json: true,
+    });
+  });
+
   it.each([
     [["search"], /query is required/i],
     [["fetch"], /url is required/i],
@@ -140,6 +171,11 @@ describe("parseCli", () => {
     [["crawl", "https://example.com", "--output", "out", "--max-pages", "0"], /max-pages/i],
     [["crawl", "https://example.com", "--output", "out", "--concurrency", "6"], /concurrency/i],
     [["crawl", "https://example.com", "--output", "out", "--delay-ms", "5001"], /delay-ms/i],
+    [["setup"], /skills|subcommand/i],
+    [["setup", "unknown"], /unknown|skills/i],
+    [["setup", "skills", "--global", "--project"], /global|project/i],
+    [["setup", "skills", "--agent", "unknown"], /agent/i],
+    [["setup", "skills", "--unknown"], /unknown option/i],
     [["unknown"], /unknown command/i],
     [["search", "x", "--unknown"], /unknown option/i],
   ])("rejects invalid input %#", (argv, message) => {

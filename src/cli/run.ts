@@ -1,3 +1,6 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import {
   executeCrawl,
@@ -16,6 +19,7 @@ import { writeFileAtomic, writeFileAtomicNoClobber } from "../output/files.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { formatMapUrls, formatMapWarnings } from "../output/map.js";
 import { SitemapReader } from "../sitemap/reader.js";
+import { setupSkills, type SkillSetupResult } from "../setup/skills.js";
 import { packageVersion } from "../version.js";
 import { runDoctor } from "./doctor.js";
 import { CliUsageError, type ParsedCommand, parseCli } from "./parse.js";
@@ -29,6 +33,12 @@ export interface CliDependencies {
   crawlClient?: DeepSeekGateway;
   mapClient?: DeepSeekGateway;
   sitemapReader?: MapSitemapReader;
+  setupEnvironment?: {
+    home: string;
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    packageRoot: string;
+  };
 }
 
 const MAIN_HELP = `deepseek-crawl ${packageVersion}
@@ -39,6 +49,7 @@ Usage:
   deepseek-crawl map <url> [options]
   deepseek-crawl crawl <url> [options]
   deepseek-crawl doctor [--live] [--json]
+  deepseek-crawl setup skills [options]
   deepseek-crawl mcp
 
 Run "deepseek-crawl help <command>" for command details.
@@ -85,6 +96,16 @@ Options:
 
 Without --live, doctor does not make a billable DeepSeek request.
 `,
+  setup: `Usage: deepseek-crawl setup skills [options]
+
+Options:
+  --global, -g
+  --project, -p
+  --agent, -a <agents,codex,claude-code,cursor,all>
+  --copy
+  --force
+  --json
+`,
   mcp: "Usage: deepseek-crawl mcp\n\nStart the MCP server over stdio.\n",
 };
 
@@ -100,6 +121,9 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     ...(dependencies.sitemapReader === undefined
       ? {}
       : { sitemapReader: dependencies.sitemapReader }),
+    ...(dependencies.setupEnvironment === undefined
+      ? {}
+      : { setupEnvironment: dependencies.setupEnvironment }),
   };
 }
 
@@ -243,6 +267,41 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
   }
 }
 
+function formatSkillSetupHuman(result: SkillSetupResult): string {
+  const lines = ["Installed DeepSeek Crawl Skill:"];
+  for (const install of result.installs) {
+    const status = install.status === "installed" ? "" : ` [${install.status}]`;
+    lines.push(
+      `- ${install.agents.join(",")}: ${install.path} (${install.mode})${status}`,
+    );
+  }
+  lines.push("", "Start a new Agent session to use the Skill.");
+  return lines.join("\n");
+}
+
+async function runSetupSkills(
+  command: Extract<ParsedCommand, { kind: "setup-skills" }>,
+  deps: CliDependencies,
+) {
+  const environment = deps.setupEnvironment;
+  const packageRoot =
+    environment?.packageRoot ?? fileURLToPath(new URL("../../", import.meta.url));
+  const result = await setupSkills({
+    agents: command.agents,
+    scope: command.scope,
+    home: environment?.home ?? homedir(),
+    cwd: environment?.cwd ?? process.cwd(),
+    env: environment?.env ?? deps.env,
+    source: join(packageRoot, "skills", "deepseek-crawl"),
+    copy: command.copy,
+    force: command.force,
+  });
+  deps.stdout.write(
+    command.json ? `${JSON.stringify(result, null, 2)}\n` : `${formatSkillSetupHuman(result)}\n`,
+  );
+  return 0;
+}
+
 export async function runCli(
   argv: string[],
   dependencies: Partial<CliDependencies> = {},
@@ -272,6 +331,8 @@ export async function runCli(
         return await runMap(command, deps);
       case "crawl":
         return await runCrawl(command, deps);
+      case "setup-skills":
+        return await runSetupSkills(command, deps);
       case "doctor":
         return await runDoctor({
           env: deps.env,

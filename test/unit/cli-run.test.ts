@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, readlink, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { runCli } from "../../src/cli/run.js";
 
@@ -225,6 +226,56 @@ describe("runCli", () => {
     expect(JSON.parse(stdout.value())).toMatchObject({
       seed_url: "https://example.com/",
       pages: [{ path: "pages/0001-page.md", content_length: 9 }],
+    });
+  });
+
+  it("installs the bundled Skill into the common agents directory without an API key", async () => {
+    const home = await mkdtemp(join(tmpdir(), "deepseek-crawl-home-"));
+    const cwd = await mkdtemp(join(tmpdir(), "deepseek-crawl-project-"));
+    const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
+    const { deps, stdout, stderr } = dependencies(
+      vi.fn() as unknown as typeof fetch,
+      {},
+    );
+
+    expect(
+      await runCli(["setup", "skills"], {
+        ...deps,
+        setupEnvironment: { home, cwd, env: {}, packageRoot },
+      }),
+    ).toBe(0);
+    const target = join(home, ".agents", "skills", "deepseek-crawl");
+    expect((await lstat(target)).isSymbolicLink()).toBe(true);
+    expect(await readlink(target)).toBe(join(packageRoot, "skills", "deepseek-crawl"));
+    expect(stdout.value()).toContain(target);
+    expect(stdout.value()).toContain("Start a new Agent session");
+    expect(stderr.value()).toBe("");
+  });
+
+  it("prints setup JSON for a selected Codex install", async () => {
+    const home = await mkdtemp(join(tmpdir(), "deepseek-crawl-home-"));
+    const cwd = await mkdtemp(join(tmpdir(), "deepseek-crawl-project-"));
+    const packageRoot = fileURLToPath(new URL("../..", import.meta.url));
+    const { deps, stdout } = dependencies(vi.fn() as unknown as typeof fetch, {});
+
+    expect(
+      await runCli(["setup", "skills", "--agent", "codex", "--json"], {
+        ...deps,
+        setupEnvironment: { home, cwd, env: {}, packageRoot },
+      }),
+    ).toBe(0);
+    expect(JSON.parse(stdout.value())).toMatchObject({
+      version: 1,
+      scope: "global",
+      mode: "symlink",
+      installs: [
+        {
+          agents: ["codex"],
+          path: join(home, ".codex", "skills", "deepseek-crawl"),
+          status: "installed",
+        },
+      ],
+      restart_required: true,
     });
   });
 

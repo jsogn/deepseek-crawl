@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { parseSkillAgents, type SkillAgent } from "../setup/skills.js";
 
 export class CliUsageError extends Error {
   constructor(message: string) {
@@ -45,6 +46,14 @@ export type ParsedCommand =
       json: boolean;
     }
   | { kind: "doctor"; live: boolean; json: boolean }
+  | {
+      kind: "setup-skills";
+      scope: "global" | "project";
+      agents: SkillAgent[];
+      copy: boolean;
+      force: boolean;
+      json: boolean;
+    }
   | { kind: "mcp" }
   | { kind: "help"; command?: string }
   | { kind: "version" };
@@ -271,6 +280,42 @@ export function parseCli(argv: string[]): ParsedCommand {
               live: parsed.values.live ?? false,
               json: parsed.values.json ?? false,
             };
+      }
+      case "setup": {
+        if (args[0] === "--help" || args[0] === "-h") {
+          return { kind: "help", command: "setup" };
+        }
+        if (args[0] !== "skills") {
+          throw new CliUsageError("setup subcommand skills is required.");
+        }
+        const parsed = parseArgs({
+          args: args.slice(1),
+          allowPositionals: false,
+          strict: true,
+          options: {
+            global: { type: "boolean", short: "g" },
+            project: { type: "boolean", short: "p" },
+            agent: { type: "string", short: "a" },
+            copy: { type: "boolean" },
+            force: { type: "boolean" },
+            json: { type: "boolean" },
+            help: { type: "boolean", short: "h" },
+          },
+        });
+        if (parsed.values.help) {
+          return { kind: "help", command: "setup" };
+        }
+        if (parsed.values.global && parsed.values.project) {
+          throw new CliUsageError("--global and --project cannot be used together.");
+        }
+        return {
+          kind: "setup-skills",
+          scope: parsed.values.project ? "project" : "global",
+          agents: parseSkillAgents(parsed.values.agent),
+          copy: parsed.values.copy ?? false,
+          force: parsed.values.force ?? false,
+          json: parsed.values.json ?? false,
+        };
       }
       case "mcp": {
         const parsed = parseArgs({

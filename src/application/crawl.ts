@@ -1,5 +1,9 @@
-import { cacheStatsFor, fetchSourceFor } from "../cache/cached-gateway.js";
-import { contentHash } from "../content/hash.js";
+import {
+  cacheStatsFor,
+  contentHashFor,
+  fetchSourceFor,
+  prepareCachedFetch,
+} from "../cache/cached-gateway.js";
 import { compareCrawlBaseline } from "../crawl/baseline.js";
 import { canonicalizeCrawlUrl, createCrawlPathFilter } from "../crawl/filters.js";
 import { extractMarkdownLinks, sameOrigin } from "../crawl/links.js";
@@ -211,7 +215,7 @@ export async function executeCrawl(
     let links: string[];
     try {
       const response = await client.fetch({ url }, crawlSignal);
-      const hash = contentHash(response.content);
+      const hash = contentHashFor(client, url, response);
       const previousHash = limits.baseline?.hashes.get(url);
       const changeStatus = limits.baseline
         ? previousHash === undefined
@@ -343,6 +347,7 @@ export async function executeCrawl(
       concurrency: limits.concurrency,
       delayMs: limits.delayMs,
       signal: crawlSignal,
+      immediate: async (url) => prepareCachedFetch(client, { url }),
       run: async (url, index) => {
         const outcome = await fetchPage(url, depth, selectedIndexes[index] ?? 0);
         for (const link of outcome.links) {

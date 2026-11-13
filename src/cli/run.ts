@@ -25,7 +25,6 @@ import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { errorMessage as genericErrorMessage } from "../error-message.js";
-import { runMcpServer } from "../mcp/server.js";
 import { createBatchFetchOutputWriter, formatBatchFetchHuman } from "../output/batch.js";
 import {
   createCrawlOutputWriter,
@@ -36,7 +35,6 @@ import { assertPathMissing, writeFileAtomic, writeFileAtomicNoClobber } from "..
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { formatMapUrls, formatMapWarnings } from "../output/map.js";
 import { type SkillSetupResult, setupSkills } from "../setup/skills.js";
-import { SitemapReader } from "../sitemap/reader.js";
 import { packageVersion } from "../version.js";
 import { runDoctor } from "./doctor.js";
 import { readJsonFileBounded, readStdinBounded, readTextFileBounded } from "./input.js";
@@ -241,6 +239,11 @@ function withFetchCache(
   });
 }
 
+async function defaultSitemapReader(): Promise<MapSitemapReader> {
+  const { SitemapReader } = await import("../sitemap/reader.js");
+  return new SitemapReader();
+}
+
 async function runSearch(
   command: Extract<ParsedCommand, { kind: "search" }>,
   deps: CliDependencies,
@@ -383,7 +386,7 @@ async function runMap(command: Extract<ParsedCommand, { kind: "map" }>, deps: Cl
   }
   const config = loadConfig(deps.env, deps.credentialStore);
   const client = deps.mapClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
-  const reader = deps.sitemapReader ?? new SitemapReader();
+  const reader = deps.sitemapReader ?? (await defaultSitemapReader());
   const output = await executeMap(
     client,
     reader,
@@ -427,7 +430,7 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
     command.fresh,
     deps,
   );
-  const reader = deps.sitemapReader ?? new SitemapReader();
+  const reader = deps.sitemapReader ?? (await defaultSitemapReader());
   let baseline: ReturnType<typeof parseCrawlBaseline> | undefined;
   if (command.baseline) {
     let baselinePath = command.baseline;
@@ -687,15 +690,17 @@ export async function runCli(
           stdout: deps.stdout,
           stderr: deps.stderr,
         });
-      case "mcp":
+      case "mcp": {
+        const { runMcpServer } = await import("../mcp/server.js");
         await runMcpServer({
           client: new DeepSeekClient({
             ...loadConfig(deps.env, deps.credentialStore),
             fetchImpl: deps.fetchImpl,
           }),
-          sitemapReader: deps.sitemapReader ?? new SitemapReader(),
+          sitemapReader: deps.sitemapReader ?? (await defaultSitemapReader()),
         });
         return 0;
+      }
     }
   } catch (error) {
     deps.stderr.write(`${errorMessage(error)}\n`);

@@ -11,6 +11,11 @@ export interface FetchCacheEntry {
 export interface FetchCache {
   readonly location: string;
   read(url: string): Promise<FetchCacheEntry | null>;
-  write(url: string, response: RawFetchResponse, fetchedAt: string): Promise<void>;
+  write(
+    url: string,
+    response: RawFetchResponse,
+    fetchedAt: string,
+    contentHash?: string,
+  ): Promise<void>;
   clear(): Promise<void>;
 }

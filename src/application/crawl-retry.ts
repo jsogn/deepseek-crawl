@@ -1,5 +1,9 @@
-import { cacheStatsFor, fetchSourceFor } from "../cache/cached-gateway.js";
-import { contentHash } from "../content/hash.js";
+import {
+  cacheStatsFor,
+  contentHashFor,
+  fetchSourceFor,
+  prepareCachedFetch,
+} from "../cache/cached-gateway.js";
 import { canonicalizeCrawlUrl } from "../crawl/filters.js";
 import { sameOrigin } from "../crawl/links.js";
 import { runLayeredTasks } from "../crawl/queue.js";
@@ -154,10 +158,11 @@ export async function executeCrawlRetry(
       concurrency: limits.concurrency,
       delayMs: limits.delayMs,
       signal: combinedSignal,
+      immediate: async (request) => prepareCachedFetch(client, { url: request.url }),
       run: async (request) => {
         try {
           const response = await client.fetch({ url: request.url }, combinedSignal);
-          const hash = contentHash(response.content);
+          const hash = contentHashFor(client, request.url, response);
           const retrievedFrom = fetchSourceFor(client, request.url);
           const bounded = boundFetchOutput(
             { ...response, url: request.url },

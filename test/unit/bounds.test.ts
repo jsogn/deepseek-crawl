@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { boundFetchOutput, boundSearchOutput, truncateText } from "../../src/output/bounds.js";
+import {
+  boundFetchOutput,
+  boundSearchOutput,
+  codepointLength,
+  truncateText,
+} from "../../src/output/bounds.js";
 
 describe("truncateText", () => {
   it("does not split Unicode code points", () => {
@@ -24,6 +29,16 @@ describe("truncateText", () => {
       truncated: false,
       originalLength: 5,
     });
+  });
+
+  it("uses a fast path for BMP text and preserves surrogate-pair boundaries", () => {
+    expect(codepointLength("你好")).toBe(2);
+    expect(truncateText("你好", 1)).toEqual({
+      value: "你",
+      truncated: true,
+      originalLength: 2,
+    });
+    expect(codepointLength("😀😀")).toBe(2);
   });
 
   it.each([-1, 1.5, 1000001])("rejects an invalid limit %s", (limit) => {

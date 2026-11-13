@@ -3,6 +3,7 @@ export interface LayeredTaskOptions<T, R> {
   delayMs: number;
   signal?: AbortSignal;
   sleep?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
+  immediate?: (item: T, index: number) => Promise<boolean>;
   run: (item: T, index: number) => Promise<R>;
 }
 
@@ -54,10 +55,14 @@ export async function runLayeredTasks<T, R>(
       const index = next;
       next += 1;
       if (index >= items.length) return;
-      await start();
-      options.signal?.throwIfAborted();
       const item = items[index];
       if (item === undefined) return;
+      options.signal?.throwIfAborted();
+      const immediate = options.immediate ? await options.immediate(item, index) : false;
+      if (!immediate) {
+        await start();
+      }
+      options.signal?.throwIfAborted();
       results[index] = await options.run(item, index);
     }
   };

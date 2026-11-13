@@ -5,8 +5,12 @@ import type {
   BatchFetchPageSummary,
   BatchFetchResult,
 } from "../batch/types.js";
-import { cacheStatsFor, fetchSourceFor } from "../cache/cached-gateway.js";
-import { contentHash } from "../content/hash.js";
+import {
+  cacheStatsFor,
+  contentHashFor,
+  fetchSourceFor,
+  prepareCachedFetch,
+} from "../cache/cached-gateway.js";
 import { normalizeHttpUrl } from "../crawl/links.js";
 import { runLayeredTasks } from "../crawl/queue.js";
 import { DeepSeekError } from "../deepseek/errors.js";
@@ -182,10 +186,11 @@ async function executeBatchRequests(
     concurrency: settings.concurrency,
     delayMs: settings.delayMs,
     signal: combinedSignal,
+    immediate: async (request) => prepareCachedFetch(client, { url: request.url }),
     run: async (request) => {
       try {
         const response = await client.fetch({ url: request.url }, combinedSignal);
-        const hash = contentHash(response.content);
+        const hash = contentHashFor(client, request.url, response);
         const retrievedFrom = fetchSourceFor(client, request.url);
         const bounded = boundFetchOutput({ ...response, url: request.url }, settings.maxChars);
         const page: BatchFetchPage = {

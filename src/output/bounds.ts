@@ -6,8 +6,12 @@ export interface TextBound {
   originalLength: number;
 }
 
+function hasHighSurrogate(value: string): boolean {
+  return /[\uD800-\uDBFF]/.test(value);
+}
+
 export function codepointLength(value: string): number {
-  return Array.from(value).length;
+  return hasHighSurrogate(value) ? Array.from(value).length : value.length;
 }
 
 function validateLimit(limit: number): void {
@@ -18,6 +22,12 @@ function validateLimit(limit: number): void {
 
 export function truncateText(value: string, limit: number): TextBound {
   validateLimit(limit);
+  if (!hasHighSurrogate(value)) {
+    const originalLength = value.length;
+    return limit === 0 || originalLength <= limit
+      ? { value, truncated: false, originalLength }
+      : { value: value.slice(0, limit), truncated: true, originalLength };
+  }
   const originalLength = codepointLength(value);
   if (limit === 0 || originalLength <= limit) {
     return {

@@ -1,5 +1,4 @@
-import { fetchSourceFor } from "../cache/cached-gateway.js";
-import { contentHash } from "../content/hash.js";
+import { contentHashFor, fetchSourceFor } from "../cache/cached-gateway.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { fetchInputSchema, searchInputSchema } from "../deepseek/schemas.js";
 import { boundFetchOutput, boundSearchOutput } from "../output/bounds.js";
@@ -62,7 +61,7 @@ export async function executeFetch(
   const source = fetchSourceFor(client, parsed.url);
   return {
     ...boundFetchOutput({ ...response, url: parsed.url }, options.maxChars),
-    content_hash: contentHash(response.content),
+    content_hash: contentHashFor(client, parsed.url, response),
     ...(source ? { retrieved_from: source } : {}),
   };
 }

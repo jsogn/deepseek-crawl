@@ -129,4 +129,32 @@ describe("CachedFetchGateway", () => {
     expect(fetch).toHaveBeenCalledOnce();
     expect(gateway.stats()).toEqual({ hits: 0, misses: 1, errors: 2 });
   });
+
+  it("prepares a cache hit without rereading the entry during fetch", async () => {
+    const cache = new FileFetchCache(
+      join(await mkdtemp(join(tmpdir(), "deepseek-cache-")), "cache"),
+    );
+    await cache.write(
+      "https://example.com/page",
+      { title: "Cached", content: "cached" },
+      "2026-11-14T01:00:00.000Z",
+    );
+    const read = vi.spyOn(cache, "read");
+    const fetch = vi.fn();
+    const gateway = new CachedFetchGateway({ search: vi.fn(), fetch }, cache, {
+      ttlMs: 60_000,
+      fresh: false,
+      now: () => new Date("2026-11-14T01:00:30.000Z"),
+    });
+
+    await expect(gateway.prepare({ url: "https://example.com/page" })).resolves.toBe(true);
+    await expect(gateway.fetch({ url: "https://example.com/page" })).resolves.toEqual({
+      title: "Cached",
+      content: "cached",
+    });
+
+    expect(read).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(gateway.stats()).toEqual({ hits: 1, misses: 0, errors: 0 });
+  });
 });

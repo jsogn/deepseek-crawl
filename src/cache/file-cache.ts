@@ -74,6 +74,7 @@ export class FileFetchCache implements FetchCache {
     url: string,
     response: FetchCacheEntry["response"],
     fetchedAt: string,
+    hash = contentHash(response.content),
   ): Promise<void> {
     await this.#ensureLocation();
     const target = entryPath(this.location, url);
@@ -83,7 +84,7 @@ export class FileFetchCache implements FetchCache {
         version: 1,
         url,
         fetched_at: fetchedAt,
-        content_hash: contentHash(response.content),
+        content_hash: hash,
         response,
       },
       null,

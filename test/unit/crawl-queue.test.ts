@@ -58,4 +58,37 @@ describe("runLayeredTasks", () => {
       expect(milliseconds).toBeLessThanOrEqual(250);
     }
   });
+
+  it("does not throttle items marked as immediate", async () => {
+    const sleep = vi.fn(async () => undefined);
+    const run = vi.fn(async (value: string) => value.toUpperCase());
+
+    const results = await runLayeredTasks(["a", "b", "c"], {
+      concurrency: 3,
+      delayMs: 250,
+      sleep,
+      immediate: async () => true,
+      run,
+    });
+
+    expect(results).toEqual(["A", "B", "C"]);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
+  it("applies delay only between non-immediate items", async () => {
+    const sleep = vi.fn(async (_milliseconds: number, _signal?: AbortSignal) => undefined);
+    const run = vi.fn(async (value: string) => value.toUpperCase());
+
+    const results = await runLayeredTasks(["cached", "a", "b"], {
+      concurrency: 3,
+      delayMs: 250,
+      sleep,
+      immediate: async (value) => value === "cached",
+      run,
+    });
+
+    expect(results).toEqual(["CACHED", "A", "B"]);
+    expect(sleep).toHaveBeenCalledOnce();
+  });
 });

@@ -42,6 +42,46 @@ describe("parseCli", () => {
     });
   });
 
+  it("parses crawl options and defaults", () => {
+    expect(
+      parseCli([
+        "crawl",
+        "https://example.com",
+        "--max-depth",
+        "1",
+        "--max-pages",
+        "4",
+        "--concurrency",
+        "2",
+        "--delay-ms",
+        "0",
+        "--output",
+        "out",
+        "--json",
+      ]),
+    ).toEqual({
+      kind: "crawl",
+      url: "https://example.com",
+      maxDepth: 1,
+      maxPages: 4,
+      concurrency: 2,
+      delayMs: 0,
+      output: "out",
+      json: true,
+    });
+
+    expect(parseCli(["crawl", "https://example.com", "--output", "out"])).toEqual({
+      kind: "crawl",
+      url: "https://example.com",
+      maxDepth: 2,
+      maxPages: 20,
+      concurrency: 2,
+      delayMs: 250,
+      output: "out",
+      json: false,
+    });
+  });
+
   it("parses doctor and help", () => {
     expect(parseCli(["doctor", "--live", "--json"])).toEqual({
       kind: "doctor",
@@ -59,6 +99,11 @@ describe("parseCli", () => {
     [["search", "x", "--count", "1.5"], /count/i],
     [["search", "x", "--max-content-chars=-1"], /content limit/i],
     [["fetch", "https://example.com", "--max-chars=1000001"], /content limit/i],
+    [["crawl", "https://example.com"], /output is required/i],
+    [["crawl", "https://example.com", "--output", "out", "--max-depth", "6"], /max-depth/i],
+    [["crawl", "https://example.com", "--output", "out", "--max-pages", "0"], /max-pages/i],
+    [["crawl", "https://example.com", "--output", "out", "--concurrency", "6"], /concurrency/i],
+    [["crawl", "https://example.com", "--output", "out", "--delay-ms", "5001"], /delay-ms/i],
     [["unknown"], /unknown command/i],
     [["search", "x", "--unknown"], /unknown option/i],
   ])("rejects invalid input %#", (argv, message) => {

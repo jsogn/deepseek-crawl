@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -46,6 +46,84 @@ function dependencies(
 }
 
 describe("runCli", () => {
+  it("runs Crawl and writes the output directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-cli-"));
+    const output = join(root, "crawl");
+    const crawlClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async ({ url }: { url: string }) => ({
+        title: url.endsWith("/") ? "Example" : "Next",
+        content: url.endsWith("/") ? "[Next](/next)" : "# Next",
+      })),
+    };
+    const { deps, stdout, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        [
+          "crawl",
+          "https://example.com",
+          "--max-depth",
+          "1",
+          "--max-pages",
+          "2",
+          "--delay-ms",
+          "0",
+          "--output",
+          output,
+        ],
+        { ...deps, crawlClient },
+      ),
+    ).toBe(0);
+    expect(crawlClient.fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(await readFile(join(output, "crawl.json"), "utf8"))).toMatchObject({
+      seed_url: "https://example.com/",
+      stats: { discovered: 2, fetched: 2, failed: 0 },
+      pages: [{ path: "pages/0001-page.md" }, { path: "pages/0002-next.md" }],
+    });
+    expect(await readFile(join(output, "pages", "0001-page.md"), "utf8")).toContain("# Example");
+    expect(stdout.value()).toContain(`Output: ${output}`);
+    expect(stderr.value()).toBe("");
+  });
+
+  it("cleans Crawl staging when the signal is already aborted", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-cli-"));
+    const output = join(root, "crawl");
+    const controller = new AbortController();
+    controller.abort();
+    const { deps, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(["crawl", "https://example.com", "--output", output], {
+        ...deps,
+        signal: controller.signal,
+      }),
+    ).toBe(130);
+    await expect(stat(output)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(stderr.value()).not.toBe("");
+  });
+
+  it("prints Crawl JSON with published page paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-cli-"));
+    const output = join(root, "crawl");
+    const crawlClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => ({ title: "Example", content: "No links." })),
+    };
+    const { deps, stdout } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        ["crawl", "https://example.com", "--max-depth", "0", "--output", output, "--json"],
+        { ...deps, crawlClient },
+      ),
+    ).toBe(0);
+    expect(JSON.parse(stdout.value())).toMatchObject({
+      seed_url: "https://example.com/",
+      pages: [{ path: "pages/0001-page.md", content_length: 9 }],
+    });
+  });
+
   it("renders human Search output with the inline limit", async () => {
     const fetchImpl = vi.fn(async () => Response.json(searchResponse)) as unknown as typeof fetch;
     const { deps, stdout, stderr } = dependencies(fetchImpl);

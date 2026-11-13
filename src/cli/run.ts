@@ -1,9 +1,11 @@
 import { z } from "zod";
-import { executeFetch, executeSearch } from "../application/index.js";
+import { executeCrawl, executeFetch, executeSearch } from "../application/index.js";
 import { loadConfig } from "../config.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
+import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { runMcpServer } from "../mcp/server.js";
+import { createCrawlOutputWriter, formatCrawlHuman } from "../output/crawl.js";
 import { writeFileAtomic } from "../output/files.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { packageVersion } from "../version.js";
@@ -15,6 +17,8 @@ export interface CliDependencies {
   fetchImpl: typeof fetch;
   stdout: { write(value: string): unknown };
   stderr: { write(value: string): unknown };
+  signal?: AbortSignal;
+  crawlClient?: DeepSeekGateway;
 }
 
 const MAIN_HELP = `deepseek-crawl ${packageVersion}
@@ -22,6 +26,7 @@ const MAIN_HELP = `deepseek-crawl ${packageVersion}
 Usage:
   deepseek-crawl search <query> [options]
   deepseek-crawl fetch <url> [options]
+  deepseek-crawl crawl <url> [options]
   deepseek-crawl doctor [--live] [--json]
   deepseek-crawl mcp
 
@@ -47,6 +52,16 @@ Options:
   --json
   --output, -o <path>
 `,
+  crawl: `Usage: deepseek-crawl crawl <url> [options]
+
+Options:
+  --max-depth <0..5>
+  --max-pages <1..100>
+  --concurrency <1..5>
+  --delay-ms <0..5000>
+  --output <dir>
+  --json
+`,
   doctor: `Usage: deepseek-crawl doctor [--live] [--json]
 
 Without --live, doctor does not make a billable DeepSeek request.
@@ -60,6 +75,8 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     fetchImpl: dependencies.fetchImpl ?? globalThis.fetch,
     stdout: dependencies.stdout ?? process.stdout,
     stderr: dependencies.stderr ?? process.stderr,
+    ...(dependencies.signal === undefined ? {} : { signal: dependencies.signal }),
+    ...(dependencies.crawlClient === undefined ? {} : { crawlClient: dependencies.crawlClient }),
   };
 }
 
@@ -129,6 +146,41 @@ async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps
   return 0;
 }
 
+async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps: CliDependencies) {
+  const config = loadConfig(deps.env);
+  const client = deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+  const writer = await createCrawlOutputWriter(command.output);
+
+  try {
+    const result = await executeCrawl(
+      client,
+      { url: command.url },
+      {
+        maxDepth: command.maxDepth,
+        maxPages: command.maxPages,
+        concurrency: command.concurrency,
+        delayMs: command.delayMs,
+        discoveryLimit: 10_000,
+        pageContentLimit: 1_000_000,
+      },
+      async (page) => {
+        await writer.writePage(page);
+      },
+      deps.signal,
+    );
+    const output = await writer.finish(result);
+    deps.stdout.write(
+      command.json
+        ? `${JSON.stringify(output, null, 2)}\n`
+        : `${formatCrawlHuman(output, command.output)}\n`,
+    );
+    return 0;
+  } catch (error) {
+    await writer.abort();
+    throw error;
+  }
+}
+
 export async function runCli(
   argv: string[],
   dependencies: Partial<CliDependencies> = {},
@@ -154,6 +206,8 @@ export async function runCli(
         return await runSearch(command, deps);
       case "fetch":
         return await runFetch(command, deps);
+      case "crawl":
+        return await runCrawl(command, deps);
       case "doctor":
         return await runDoctor({
           env: deps.env,
@@ -171,6 +225,9 @@ export async function runCli(
     }
   } catch (error) {
     deps.stderr.write(`${errorMessage(error)}\n`);
+    if (deps.signal?.aborted) {
+      return 130;
+    }
     return error instanceof CliUsageError || error instanceof z.ZodError ? 2 : 1;
   }
 }

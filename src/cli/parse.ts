@@ -26,6 +26,16 @@ export type ParsedCommand =
       json: boolean;
       output?: string;
     }
+  | {
+      kind: "crawl";
+      url: string;
+      maxDepth: number;
+      maxPages: number;
+      concurrency: number;
+      delayMs: number;
+      output: string;
+      json: boolean;
+    }
   | { kind: "doctor"; live: boolean; json: boolean }
   | { kind: "mcp" }
   | { kind: "help"; command?: string }
@@ -152,6 +162,51 @@ export function parseCli(argv: string[]): ParsedCommand {
           result.output = parsed.values.output;
         }
         return result;
+      }
+      case "crawl": {
+        const parsed = parseArgs({
+          args,
+          allowPositionals: true,
+          strict: true,
+          options: {
+            "max-depth": { type: "string" },
+            "max-pages": { type: "string" },
+            concurrency: { type: "string" },
+            "delay-ms": { type: "string" },
+            output: { type: "string" },
+            json: { type: "boolean" },
+            help: { type: "boolean", short: "h" },
+          },
+        });
+        if (parsed.values.help) {
+          return { kind: "help", command: "crawl" };
+        }
+        const output = parsed.values.output?.trim();
+        if (!output) {
+          throw new CliUsageError("output is required.");
+        }
+        return {
+          kind: "crawl",
+          url: exactPositional(parsed.positionals, "url"),
+          maxDepth:
+            parsed.values["max-depth"] === undefined
+              ? 2
+              : parseInteger(parsed.values["max-depth"], "max-depth", 0, 5),
+          maxPages:
+            parsed.values["max-pages"] === undefined
+              ? 20
+              : parseInteger(parsed.values["max-pages"], "max-pages", 1, 100),
+          concurrency:
+            parsed.values.concurrency === undefined
+              ? 2
+              : parseInteger(parsed.values.concurrency, "concurrency", 1, 5),
+          delayMs:
+            parsed.values["delay-ms"] === undefined
+              ? 250
+              : parseInteger(parsed.values["delay-ms"], "delay-ms", 0, 5000),
+          output,
+          json: parsed.values.json ?? false,
+        };
       }
       case "doctor": {
         const parsed = parseArgs({

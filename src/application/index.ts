@@ -3,7 +3,17 @@ import { fetchInputSchema, searchInputSchema } from "../deepseek/schemas.js";
 import { boundFetchOutput, boundSearchOutput } from "../output/bounds.js";
 import type { FetchOutput, SearchOutput } from "../types.js";
 
+export type {
+  CrawlFailure,
+  CrawlOptions,
+  CrawlOutputResult,
+  CrawlPage,
+  CrawlPageIndex,
+  CrawlPageSummary,
+  CrawlRunResult,
+} from "../crawl/types.js";
 export type { DeepSeekGateway } from "../deepseek/gateway.js";
+export { executeCrawl } from "./crawl.js";
 
 export async function executeSearch(
   client: DeepSeekGateway,

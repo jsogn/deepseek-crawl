@@ -22,8 +22,12 @@ export type ParsedCommand =
     }
   | {
       kind: "fetch";
-      url: string;
+      url?: string;
+      input?: string;
+      outputDir?: string;
       maxChars?: number;
+      concurrency?: number;
+      delayMs?: number;
       json: boolean;
       output?: string;
     }
@@ -42,6 +46,9 @@ export type ParsedCommand =
       maxPages: number;
       concurrency: number;
       delayMs: number;
+      includePaths?: string[];
+      excludePaths?: string[];
+      ignoreQueryParameters?: boolean;
       output: string;
       json: boolean;
     }
@@ -81,6 +88,14 @@ function parseContentLimit(value: string): number {
     throw new CliUsageError("Content limit must be an integer from 0 to 1000000.");
   }
   return parsed;
+}
+
+function parsePatterns(value: string, name: string): string[] {
+  const patterns = value.split(",").map((pattern) => pattern.trim());
+  if (patterns.some((pattern) => !pattern)) {
+    throw new CliUsageError(`${name} patterns must not be empty.`);
+  }
+  return patterns;
 }
 
 function exactPositional(positionals: string[], name: string): string {
@@ -162,6 +177,10 @@ export function parseCli(argv: string[]): ParsedCommand {
           strict: true,
           options: {
             "max-chars": { type: "string" },
+            input: { type: "string" },
+            "output-dir": { type: "string" },
+            concurrency: { type: "string" },
+            "delay-ms": { type: "string" },
             json: { type: "boolean" },
             output: { type: "string", short: "o" },
             help: { type: "boolean", short: "h" },
@@ -170,11 +189,41 @@ export function parseCli(argv: string[]): ParsedCommand {
         if (parsed.values.help) {
           return { kind: "help", command: "fetch" };
         }
-        const result: ParsedCommand = {
-          kind: "fetch",
-          url: exactPositional(parsed.positionals, "url"),
-          json: parsed.values.json ?? false,
-        };
+        const result: ParsedCommand = { kind: "fetch", json: parsed.values.json ?? false };
+        const input = parsed.values.input?.trim();
+        const outputDir = parsed.values["output-dir"]?.trim();
+        if (input) {
+          if (parsed.positionals.length > 0) {
+            throw new CliUsageError("fetch accepts either a URL or --input, not both.");
+          }
+          if (!outputDir) {
+            throw new CliUsageError("output-dir is required with --input.");
+          }
+          if (parsed.values.output !== undefined) {
+            throw new CliUsageError("--output cannot be used with --input; use --output-dir.");
+          }
+          result.input = input;
+          result.outputDir = outputDir;
+          result.concurrency =
+            parsed.values.concurrency === undefined
+              ? 3
+              : parseInteger(parsed.values.concurrency, "concurrency", 1, 5);
+          result.delayMs =
+            parsed.values["delay-ms"] === undefined
+              ? 250
+              : parseInteger(parsed.values["delay-ms"], "delay-ms", 0, 5000);
+        } else {
+          result.url = exactPositional(parsed.positionals, "url");
+          if (outputDir !== undefined) {
+            throw new CliUsageError("--output-dir requires --input.");
+          }
+          if (parsed.values.concurrency !== undefined) {
+            throw new CliUsageError("--concurrency requires --input.");
+          }
+          if (parsed.values["delay-ms"] !== undefined) {
+            throw new CliUsageError("--delay-ms requires --input.");
+          }
+        }
         if (parsed.values["max-chars"] !== undefined) {
           result.maxChars = parseContentLimit(parsed.values["max-chars"]);
         }
@@ -230,6 +279,9 @@ export function parseCli(argv: string[]): ParsedCommand {
             "max-pages": { type: "string" },
             concurrency: { type: "string" },
             "delay-ms": { type: "string" },
+            "include-paths": { type: "string" },
+            "exclude-paths": { type: "string" },
+            "ignore-query-parameters": { type: "boolean" },
             output: { type: "string", short: "o" },
             json: { type: "boolean" },
             help: { type: "boolean", short: "h" },
@@ -261,6 +313,15 @@ export function parseCli(argv: string[]): ParsedCommand {
             parsed.values["delay-ms"] === undefined
               ? 250
               : parseInteger(parsed.values["delay-ms"], "delay-ms", 0, 5000),
+          ...(parsed.values["include-paths"] === undefined
+            ? {}
+            : { includePaths: parsePatterns(parsed.values["include-paths"], "include-paths") }),
+          ...(parsed.values["exclude-paths"] === undefined
+            ? {}
+            : { excludePaths: parsePatterns(parsed.values["exclude-paths"], "exclude-paths") }),
+          ...(parsed.values["ignore-query-parameters"]
+            ? { ignoreQueryParameters: true }
+            : {}),
           output,
           json: parsed.values.json ?? false,
         };

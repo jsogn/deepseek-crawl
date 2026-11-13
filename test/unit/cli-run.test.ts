@@ -1,6 +1,7 @@
 import { lstat, mkdtemp, readFile, readlink, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { runCli } from "../../src/cli/run.js";
@@ -195,6 +196,144 @@ describe("runCli", () => {
     expect(await readFile(join(output, "pages", "0001-page.md"), "utf8")).toContain("# Example");
     expect(stdout.value()).toContain(`Output: ${output}`);
     expect(stderr.value()).toBe("");
+  });
+
+  it("runs batch Fetch from Map JSON and writes per-page output", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-batch-"));
+    const input = join(root, "urls.json");
+    const output = join(root, "pages");
+    await writeFile(
+      input,
+      JSON.stringify({
+        urls: [{ url: "https://example.com/a" }, { url: "https://example.com/b" }],
+      }),
+    );
+    const fetchClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async ({ url }: { url: string }) => ({
+        title: url.endsWith("/a") ? "A" : "B",
+        content: `# ${url.endsWith("/a") ? "A" : "B"}`,
+      })),
+    };
+    const { deps, stdout, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        [
+          "fetch",
+          "--input",
+          input,
+          "--output-dir",
+          output,
+          "--concurrency",
+          "2",
+          "--delay-ms",
+          "0",
+          "--json",
+        ],
+        { ...deps, fetchClient },
+      ),
+    ).toBe(0);
+    expect(JSON.parse(stdout.value())).toMatchObject({
+      source: input,
+      stats: { input: 2, unique: 2, fetched: 2, failed: 0 },
+      pages: [{ path: "pages/0001-a.md" }, { path: "pages/0002-b.md" }],
+    });
+    expect(await readFile(join(output, "pages", "0001-a.md"), "utf8")).toContain("Source:");
+    expect(stderr.value()).toBe("");
+  });
+
+  it("reads batch Fetch input from stdin", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-batch-stdin-"));
+    const output = join(root, "pages");
+    const fetchClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => ({ title: "Page", content: "Body" })),
+    };
+    const { deps } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        ["fetch", "--input", "-", "--output-dir", output, "--delay-ms", "0"],
+        { ...deps, fetchClient, stdin: Readable.from("https://example.com/a\n") },
+      ),
+    ).toBe(0);
+    expect(JSON.parse(await readFile(join(output, "fetch.json"), "utf8"))).toMatchObject({
+      source: "stdin",
+      stats: { fetched: 1 },
+    });
+  });
+
+  it("publishes a batch report and exits 1 when every URL fails", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-batch-fail-"));
+    const output = join(root, "pages");
+    const fetchClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => {
+        throw new Error("page unavailable");
+      }),
+    };
+    const { deps, stdout } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        ["fetch", "--input", "-", "--output-dir", output, "--delay-ms", "0", "--json"],
+        {
+          ...deps,
+          fetchClient,
+          stdin: Readable.from("https://example.com/a\n"),
+        },
+      ),
+    ).toBe(1);
+    expect(JSON.parse(stdout.value())).toMatchObject({
+      stats: { fetched: 0, failed: 1 },
+    });
+  });
+
+  it("forwards Crawl path filters and query deduplication", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-filtered-"));
+    const output = join(root, "crawl");
+    const crawlClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async ({ url }: { url: string }) => ({
+        title: url,
+        content:
+          url === "https://example.com/"
+            ? "[Doc](/docs/a?x=1) [Doc duplicate](/docs/a?x=2) [Blog](/blog)"
+            : "No links",
+      })),
+    };
+    const { deps } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        [
+          "crawl",
+          "https://example.com/?from=seed",
+          "--max-depth",
+          "1",
+          "--max-pages",
+          "3",
+          "--delay-ms",
+          "0",
+          "--include-paths",
+          "/docs",
+          "--ignore-query-parameters",
+          "--output",
+          output,
+        ],
+        { ...deps, crawlClient },
+      ),
+    ).toBe(0);
+    const report = JSON.parse(await readFile(join(output, "crawl.json"), "utf8")) as {
+      seed_url: string;
+      pages: Array<{ url: string }>;
+    };
+    expect(report.seed_url).toBe("https://example.com/");
+    expect(report.pages.map((page) => page.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/docs/a",
+    ]);
   });
 
   it("cleans Crawl staging when the signal is already aborted", async () => {

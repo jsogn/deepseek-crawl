@@ -40,6 +40,31 @@ describe("parseCli", () => {
       maxChars: 20,
       json: true,
     });
+
+    expect(
+      parseCli([
+        "fetch",
+        "--input",
+        "urls.json",
+        "--output-dir",
+        "pages",
+        "--concurrency",
+        "3",
+        "--delay-ms",
+        "100",
+        "--max-chars",
+        "5000",
+        "--json",
+      ]),
+    ).toEqual({
+      kind: "fetch",
+      input: "urls.json",
+      outputDir: "pages",
+      maxChars: 5000,
+      concurrency: 3,
+      delayMs: 100,
+      json: true,
+    });
   });
 
   it("parses Map options and defaults", () => {
@@ -82,6 +107,11 @@ describe("parseCli", () => {
         "2",
         "--delay-ms",
         "0",
+        "--include-paths",
+        "/docs/*,/api/?",
+        "--exclude-paths",
+        "/docs/private/*",
+        "--ignore-query-parameters",
         "--output",
         "out",
         "--json",
@@ -93,6 +123,9 @@ describe("parseCli", () => {
       maxPages: 4,
       concurrency: 2,
       delayMs: 0,
+      includePaths: ["/docs/*", "/api/?"],
+      excludePaths: ["/docs/private/*"],
+      ignoreQueryParameters: true,
       output: "out",
       json: true,
     });
@@ -174,6 +207,10 @@ describe("parseCli", () => {
     [["search", "x", "--count", "1.5"], /count/i],
     [["search", "x", "--max-content-chars=-1"], /content limit/i],
     [["fetch", "https://example.com", "--max-chars=1000001"], /content limit/i],
+    [["fetch", "https://example.com", "--input", "urls.json"], /input|url/i],
+    [["fetch", "--input", "urls.json"], /output-dir/i],
+    [["fetch", "--input", "urls.json", "--output-dir", "pages", "--output", "out"], /output/i],
+    [["fetch", "https://example.com", "--concurrency", "2"], /concurrency/i],
     [["map", "https://example.com", "--limit", "0"], /limit/i],
     [["map", "https://example.com", "--limit", "1001"], /limit/i],
     [["map", "https://example.com", "--search", "   "], /search/i],

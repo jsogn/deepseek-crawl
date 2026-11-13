@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +10,7 @@ import {
   executeSearch,
   type MapSitemapReader,
 } from "../application/index.js";
+import { executeBatchFetch } from "../application/batch.js";
 import { loadConfig } from "../config.js";
 import { readSecret } from "../credentials/input.js";
 import { type CredentialStore, createCredentialStore } from "../credentials/store.js";
@@ -16,6 +18,10 @@ import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { runMcpServer } from "../mcp/server.js";
+import {
+  createBatchFetchOutputWriter,
+  formatBatchFetchHuman,
+} from "../output/batch.js";
 import { createCrawlOutputWriter, formatCrawlHuman } from "../output/crawl.js";
 import { writeFileAtomic, writeFileAtomicNoClobber } from "../output/files.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
@@ -33,6 +39,7 @@ export interface CliDependencies {
   stderr: { write(value: string): unknown };
   signal?: AbortSignal;
   crawlClient?: DeepSeekGateway;
+  fetchClient?: DeepSeekGateway;
   mapClient?: DeepSeekGateway;
   sitemapReader?: MapSitemapReader;
   setupEnvironment?: {
@@ -43,6 +50,7 @@ export interface CliDependencies {
   };
   credentialStore?: CredentialStore;
   secretReader?: () => Promise<string>;
+  stdin: NodeJS.ReadableStream;
 }
 
 const MAIN_HELP = `deepseek-crawl ${packageVersion}
@@ -76,8 +84,14 @@ Options:
 `,
   fetch: `Usage: deepseek-crawl fetch <url> [options]
 
+       deepseek-crawl fetch --input <path|-> --output-dir <dir> [options]
+
 Options:
   --max-chars <0..1000000>
+  --input <path|->
+  --output-dir <dir>
+  --concurrency <1..5>
+  --delay-ms <0..5000>
   --json
   --output, -o <path>
 `,
@@ -96,6 +110,9 @@ Options:
   --max-pages <1..100>
   --concurrency <1..5>
   --delay-ms <0..5000>
+  --include-paths <patterns>
+  --exclude-paths <patterns>
+  --ignore-query-parameters
   --output, -o <dir>
   --json
 `,
@@ -129,6 +146,7 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     stderr: dependencies.stderr ?? process.stderr,
     ...(dependencies.signal === undefined ? {} : { signal: dependencies.signal }),
     ...(dependencies.crawlClient === undefined ? {} : { crawlClient: dependencies.crawlClient }),
+    ...(dependencies.fetchClient === undefined ? {} : { fetchClient: dependencies.fetchClient }),
     ...(dependencies.mapClient === undefined ? {} : { mapClient: dependencies.mapClient }),
     ...(dependencies.sitemapReader === undefined
       ? {}
@@ -140,6 +158,7 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
       ? {}
       : { credentialStore: dependencies.credentialStore }),
     ...(dependencies.secretReader === undefined ? {} : { secretReader: dependencies.secretReader }),
+    stdin: dependencies.stdin ?? process.stdin,
   };
 }
 
@@ -190,9 +209,51 @@ async function runSearch(
 
 async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps: CliDependencies) {
   const config = loadConfig(deps.env, deps.credentialStore);
-  const client = new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+  const client = deps.fetchClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+
+  if (command.input) {
+    const source = command.input === "-" ? "stdin" : command.input;
+    let inputText: string;
+    if (command.input === "-") {
+      inputText = "";
+      for await (const chunk of deps.stdin) {
+        inputText += String(chunk);
+      }
+    } else {
+      inputText = await readFile(command.input, "utf8");
+    }
+
+    const writer = await createBatchFetchOutputWriter(command.outputDir ?? "");
+    try {
+      const result = await executeBatchFetch(
+        client,
+        inputText,
+        source,
+        {
+          concurrency: command.concurrency ?? 3,
+          delayMs: command.delayMs ?? 250,
+          maxChars: command.maxChars ?? 0,
+        },
+        async (page) => {
+          await writer.writePage(page);
+        },
+        deps.signal,
+      );
+      const output = await writer.finish(result);
+      deps.stdout.write(
+        command.json
+          ? `${JSON.stringify(output, null, 2)}\n`
+          : `${formatBatchFetchHuman(output, command.outputDir ?? "")}\n`,
+      );
+      return output.stats.fetched === 0 && output.stats.failed > 0 ? 1 : 0;
+    } catch (error) {
+      await writer.abort().catch(() => undefined);
+      throw error;
+    }
+  }
+
   const maxChars = command.output ? 0 : (command.maxChars ?? (command.json ? 0 : 30000));
-  const output = await executeFetch(client, { url: command.url }, { maxChars });
+  const output = await executeFetch(client, { url: command.url ?? "" }, { maxChars });
 
   if (command.output) {
     const content = command.json
@@ -264,6 +325,9 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
         delayMs: command.delayMs,
         discoveryLimit: 10_000,
         pageContentLimit: 1_000_000,
+        includePaths: command.includePaths ?? [],
+        excludePaths: command.excludePaths ?? [],
+        ignoreQueryParameters: command.ignoreQueryParameters ?? false,
       },
       async (page) => {
         await writer.writePage(page);

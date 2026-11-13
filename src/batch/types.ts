@@ -53,6 +53,6 @@ export interface BatchFetchResult extends Record<string, unknown> {
   failures: BatchFetchFailure[];
 }
 
-export interface BatchFetchOutputResult extends Omit<BatchFetchResult, "pages"> {
+export interface BatchFetchOutputResult extends BatchFetchResult {
   pages: BatchFetchPageIndex[];
 }

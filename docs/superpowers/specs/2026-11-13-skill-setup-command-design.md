@@ -9,10 +9,10 @@ Target version: `0.4.0`
 ## Summary
 
 Add `deepseek-crawl setup skills` so users can install the bundled
-`deepseek-crawl` Agent Skill immediately after installing the CLI. The default
-is a global Codex installation. The command supports project installation,
-Claude Code, Cursor, universal `.agents/skills`, copy or symlink mode, and
-explicit replacement.
+`deepseek-crawl` Agent Skill immediately after installing the CLI. Installation
+uses the cross-Agent `.agents/skills` convention. The default is global
+`~/.agents/skills`; project installation uses `.agents/skills` in the current
+workspace.
 
 The repository continues to support the universal ecosystem command:
 
@@ -25,11 +25,11 @@ CLI users.
 
 ## Goals
 
-- Make the normal Codex path two commands:
+- Make the normal Agent path two commands:
   `npm install -g deepseek-crawl`, then `deepseek-crawl setup skills`.
 - Reuse the Skill files already bundled in the installed npm package.
 - Support global and project scope without shell copy instructions.
-- Support Codex, Claude Code, Cursor, and the universal Agent directory.
+- Install once into the common `.agents/skills` directory used across Agents.
 - Make updates predictable through symlink mode by default.
 - Never overwrite an unrelated existing skill without `--force`.
 - Keep behavior testable without writing to the real home directory.
@@ -38,7 +38,8 @@ CLI users.
 ## Non-goals
 
 - Installing the CLI itself.
-- Detecting every Agent supported by `skills.sh`.
+- Installing into Agent-specific private directories such as `.codex/skills`,
+  `.claude/skills`, or `.cursor/skills`.
 - Editing Agent configuration files or enabling/disabling Skills.
 - Installing MCP configuration.
 - Publishing to the OpenAI plugin directory.
@@ -49,7 +50,6 @@ CLI users.
 ```text
 deepseek-crawl setup skills
   [--global | --project]
-  [--agent <codex,claude-code,cursor,agents,all>]
   [--copy]
   [--force]
   [--json]
@@ -58,36 +58,24 @@ deepseek-crawl setup skills
 Defaults:
 
 - Scope: global.
-- Agent: `codex`.
 - Mode: symlink the bundled Skill directory.
 - Existing destination: fail without `--force`.
-
-`--agent` accepts a comma-separated list. `all` expands to Codex, Claude Code,
-Cursor, and universal Agents; duplicate resolved paths are installed once.
 
 ## Install Paths
 
 Global:
 
 ```text
-Codex         $CODEX_HOME/skills/deepseek-crawl
-              or ~/.codex/skills/deepseek-crawl
-Claude Code   ~/.claude/skills/deepseek-crawl
-Cursor        ~/.cursor/skills/deepseek-crawl
-Universal     ~/.agents/skills/deepseek-crawl
+~/.agents/skills/deepseek-crawl
 ```
 
 Project:
 
 ```text
-Codex         <cwd>/.agents/skills/deepseek-crawl
-Claude Code   <cwd>/.claude/skills/deepseek-crawl
-Cursor        <cwd>/.agents/skills/deepseek-crawl
-Universal     <cwd>/.agents/skills/deepseek-crawl
+<cwd>/.agents/skills/deepseek-crawl
 ```
 
-Codex and universal Agents intentionally converge on project-level
-`.agents/skills`.
+Agent-specific directories are not managed by this command.
 
 ## Source Resolution
 
@@ -142,7 +130,7 @@ Human:
 
 ```text
 Installed DeepSeek Crawl Skill:
-- codex: /Users/me/.codex/skills/deepseek-crawl (symlink)
+- /Users/me/.agents/skills/deepseek-crawl (symlink)
 
 Start a new Agent session to use the Skill.
 ```
@@ -157,8 +145,7 @@ JSON:
   "source": "/path/to/package/skills/deepseek-crawl",
   "installs": [
     {
-      "agent": "codex",
-      "path": "/Users/me/.codex/skills/deepseek-crawl",
+      "path": "/Users/me/.agents/skills/deepseek-crawl",
       "status": "installed",
       "mode": "symlink"
     }
@@ -171,7 +158,6 @@ Status values are `installed`, `unchanged`, and, with `--force`, `replaced`.
 
 ## Parsing and Errors
 
-- Unknown Agents and empty Agent values are usage errors and exit `2`.
 - `--global` and `--project` together are a usage error.
 - Empty `setup skills` is valid with defaults.
 - Missing bundled Skill source is a runtime error and exit `1`.
@@ -184,7 +170,7 @@ Status values are `installed`, `unchanged`, and, with `--force`, `replaced`.
 ```text
 CLI parser ─> setup command
                     │
-                    ├─> Agent path resolver
+                    ├─> standard `.agents/skills` path resolver
                     ├─> bundled source resolver
                     └─> copy/symlink installer
 ```
@@ -228,7 +214,6 @@ deepseek-crawl doctor
 Also document:
 
 - `--project`.
-- `--agent claude-code,cursor`.
 - `--copy`.
 - `--force`.
 - `npx skills add jsogn/deepseek-crawl --skill deepseek-crawl`.
@@ -241,10 +226,7 @@ files are available but not installed.
 
 Offline tests cover:
 
-- Global Codex path with `CODEX_HOME`.
-- Global Codex fallback to `~/.codex/skills`.
-- Claude, Cursor, universal, and project path resolution.
-- `all` deduplication.
+- Global and project `.agents/skills` path resolution.
 - Default symlink installation.
 - Copy installation.
 - Idempotent unchanged result.
@@ -256,9 +238,9 @@ Offline tests cover:
 
 ## Acceptance Criteria
 
-- `deepseek-crawl setup skills` installs globally for Codex.
+- `deepseek-crawl setup skills` installs globally into `~/.agents/skills`.
 - Re-running the command is safe and idempotent.
-- `--project`, `--agent`, `--copy`, `--force`, and `--json` work as specified.
+- `--project`, `--copy`, `--force`, and `--json` work as specified.
 - No command can remove or replace a directory outside the named Skill path.
 - `npm run verify` passes.
 - Skill validator passes.

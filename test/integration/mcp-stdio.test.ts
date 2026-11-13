@@ -49,7 +49,7 @@ async function startMockDeepSeek() {
 }
 
 describe("MCP over stdio", () => {
-  it("negotiates and calls both tools against a local DeepSeek mock", async () => {
+  it("negotiates and calls Search and Fetch against a local DeepSeek mock", async () => {
     const baseUrl = await startMockDeepSeek();
     const transport = new StdioClientTransport({
       command: process.execPath,
@@ -66,7 +66,11 @@ describe("MCP over stdio", () => {
     await client.connect(transport);
 
     const { tools } = await client.listTools();
-    expect(tools.map((tool) => tool.name).sort()).toEqual(["deepseek_fetch", "deepseek_search"]);
+    expect(tools.map((tool) => tool.name).sort()).toEqual([
+      "deepseek_crawl",
+      "deepseek_fetch",
+      "deepseek_search",
+    ]);
 
     const search = await client.callTool({
       name: "deepseek_search",

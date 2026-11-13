@@ -158,7 +158,7 @@ JSON:
   "source": "/path/to/package/skills/deepseek-crawl",
   "installs": [
     {
-      "agent": "agents",
+      "agents": ["agents"],
       "path": "/Users/me/.agents/skills/deepseek-crawl",
       "status": "installed",
       "mode": "symlink"
@@ -169,6 +169,8 @@ JSON:
 ```
 
 Status values are `installed`, `unchanged`, and, with `--force`, `replaced`.
+Entries whose selected Agents resolve to the same path are grouped and list all
+matching Agent names in `agents`.
 
 ## Parsing and Errors
 

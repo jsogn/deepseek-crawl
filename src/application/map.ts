@@ -18,6 +18,7 @@ export interface MapOptions {
   limit: number;
   discoveryLimit: number;
   pageContentLimit?: number;
+  search?: string;
   now?: () => Date;
 }
 
@@ -51,7 +52,19 @@ function selectCandidates(
   candidates: Map<string, Set<MapUrlSource>>,
   seedHref: string,
   limit: number,
+  search?: string,
 ): MapUrl[] {
+  if (search !== undefined) {
+    const matches = [...candidates.keys()]
+      .filter((url) => url.toLowerCase().includes(search.toLowerCase()))
+      .sort(compareCodeUnits)
+      .slice(0, limit);
+    return matches.map((url) => ({
+      url,
+      sources: sourcesInOrder(candidates.get(url) ?? new Set<MapUrlSource>()),
+    }));
+  }
+
   const seedSources = candidates.get(seedHref);
   if (!seedSources) {
     throw new Error("Map seed URL was not retained.");
@@ -153,6 +166,10 @@ export async function executeMap(
     options.pageContentLimit === undefined
       ? HARD_PAGE_CONTENT_LIMIT
       : validateLimit(options.pageContentLimit, "Map page content limit", HARD_PAGE_CONTENT_LIMIT);
+  const search = options.search?.trim();
+  if (options.search !== undefined && !search) {
+    throw new Error("Map search must contain non-whitespace text.");
+  }
 
   const [sitemapResult, seedPageResult] = await Promise.allSettled([
     reader.read(
@@ -227,11 +244,17 @@ export async function executeMap(
   const collected = candidateCollector.finish();
   const candidates = collected.candidates;
   truncated = truncated || collected.truncated;
-  if (candidates.size > limit) {
+  const matchedCount =
+    search === undefined
+      ? candidates.size
+      : [...candidates.keys()].filter((url) =>
+          url.toLowerCase().includes(search.toLowerCase()),
+        ).length;
+  if (matchedCount > limit) {
     truncated = true;
   }
 
-  const urls = selectCandidates(candidates, seed.href, Math.min(limit, candidates.size));
+  const urls = selectCandidates(candidates, seed.href, limit, search);
 
   const generatedAt = (options.now ?? (() => new Date()))().toISOString();
   return {
@@ -243,5 +266,6 @@ export async function executeMap(
     truncated,
     urls,
     warnings,
+    ...(search === undefined ? {} : { search }),
   };
 }

@@ -25,6 +25,7 @@ export interface MapResult extends Record<string, unknown> {
   truncated: boolean;
   urls: MapUrl[];
   warnings: MapWarning[];
+  search?: string;
 }
 
 export interface CrawlInput {

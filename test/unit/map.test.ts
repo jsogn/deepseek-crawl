@@ -323,4 +323,69 @@ describe("executeMap", () => {
     ).rejects.toThrow(/limit/i);
     expect(sitemapReader.read).not.toHaveBeenCalled();
   });
+
+  it("filters Map URLs case-insensitively before applying the limit", async () => {
+    const sitemapReader = reader({
+      urls: [
+        new URL("https://example.com/docs/reference"),
+        new URL("https://example.com/blog/post"),
+      ],
+    });
+    const client = gateway("[Docs](/docs/start) [API](/docs/api) [Blog](/blog)");
+
+    const result = await executeMap(
+      client,
+      sitemapReader,
+      { url: "https://example.com/" },
+      { limit: 2, discoveryLimit: 100, search: "  DOCS  ", now },
+    );
+
+    expect(result.search).toBe("DOCS");
+    expect(result.urls).toEqual([
+      { url: "https://example.com/docs/api", sources: ["seed_page"] },
+      { url: "https://example.com/docs/reference", sources: ["sitemap"] },
+    ]);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("returns an empty successful Map when search has no matches", async () => {
+    const result = await executeMap(
+      gateway("[Docs](/docs)"),
+      reader({ urls: [new URL("https://example.com/docs")] }),
+      { url: "https://example.com/" },
+      { limit: 10, discoveryLimit: 100, search: "missing", now },
+    );
+
+    expect(result.urls).toEqual([]);
+    expect(result.total).toBe(0);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("keeps the seed in search results when it matches", async () => {
+    const result = await executeMap(
+      gateway("[Docs](/docs)"),
+      reader({ urls: [new URL("https://example.com/docs")] }),
+      { url: "https://example.com/docs" },
+      { limit: 10, discoveryLimit: 100, search: "docs", now },
+    );
+
+    expect(result.urls[0]?.url).toBe("https://example.com/docs");
+    expect(result.search).toBe("docs");
+  });
+
+  it("rejects an empty Map search before reading either source", async () => {
+    const sitemapReader = reader({ urls: [] });
+    const client = gateway("");
+
+    await expect(
+      executeMap(
+        client,
+        sitemapReader,
+        { url: "https://example.com/" },
+        { limit: 10, discoveryLimit: 100, search: "   " },
+      ),
+    ).rejects.toThrow(/search/i);
+    expect(sitemapReader.read).not.toHaveBeenCalled();
+    expect(client.fetch).not.toHaveBeenCalled();
+  });
 });

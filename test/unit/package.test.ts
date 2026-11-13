@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("package executable", () => {
@@ -9,5 +10,22 @@ describe("package executable", () => {
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe("0.2.0");
     expect(result.stderr).toBe("");
+  });
+});
+
+describe("package documentation", () => {
+  it("documents every public CLI and MCP capability", async () => {
+    const readme = await readFile(new URL("../../README.md", import.meta.url), "utf8");
+
+    for (const text of [
+      "deepseek-crawl map",
+      "deepseek-crawl crawl",
+      "deepseek_map",
+      "deepseek_crawl",
+      "robots.txt",
+      "Firecrawl",
+    ]) {
+      expect(readme).toContain(text);
+    }
   });
 });

@@ -13,6 +13,6 @@
     }
   },
   "files": {
-    "includes": ["**", "!dist", "!coverage"]
+    "includes": ["**", "!dist", "!coverage", "!.superpowers", "!docs/superpowers"]
   }
 }

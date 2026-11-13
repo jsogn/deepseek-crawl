@@ -155,6 +155,18 @@ describe("parseCli", () => {
     });
   });
 
+  it("parses auth commands", () => {
+    expect(parseCli(["auth", "set"])).toEqual({ kind: "auth-set" });
+    expect(parseCli(["auth", "status", "--json"])).toEqual({
+      kind: "auth-status",
+      json: true,
+    });
+    expect(parseCli(["auth", "remove", "--json"])).toEqual({
+      kind: "auth-remove",
+      json: true,
+    });
+  });
+
   it.each([
     [["search"], /query is required/i],
     [["fetch"], /url is required/i],
@@ -176,6 +188,9 @@ describe("parseCli", () => {
     [["setup", "skills", "--global", "--project"], /global|project/i],
     [["setup", "skills", "--agent", "unknown"], /agent/i],
     [["setup", "skills", "--unknown"], /unknown option/i],
+    [["auth"], /auth|subcommand/i],
+    [["auth", "unknown"], /auth|subcommand/i],
+    [["auth", "set", "--json"], /unknown option/i],
     [["unknown"], /unknown command/i],
     [["search", "x", "--unknown"], /unknown option/i],
   ])("rejects invalid input %#", (argv, message) => {

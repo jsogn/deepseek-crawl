@@ -54,6 +54,9 @@ export type ParsedCommand =
       force: boolean;
       json: boolean;
     }
+  | { kind: "auth-set" }
+  | { kind: "auth-status"; json: boolean }
+  | { kind: "auth-remove"; json: boolean }
   | { kind: "mcp" }
   | { kind: "help"; command?: string }
   | { kind: "version" };
@@ -316,6 +319,44 @@ export function parseCli(argv: string[]): ParsedCommand {
           force: parsed.values.force ?? false,
           json: parsed.values.json ?? false,
         };
+      }
+      case "auth": {
+        const subcommand = args[0];
+        if (subcommand === "--help" || subcommand === "-h") {
+          return { kind: "help", command: "auth" };
+        }
+        if (subcommand === "set") {
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: false,
+            strict: true,
+            options: { help: { type: "boolean", short: "h" } },
+          });
+          return parsed.values.help ? { kind: "help", command: "auth" } : { kind: "auth-set" };
+        }
+        if (subcommand === "status" || subcommand === "remove") {
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: false,
+            strict: true,
+            options: {
+              json: { type: "boolean" },
+              help: { type: "boolean", short: "h" },
+            },
+          });
+          if (parsed.values.help) {
+            return { kind: "help", command: "auth" };
+          }
+          return {
+            kind: subcommand === "status" ? "auth-status" : "auth-remove",
+            json: parsed.values.json ?? false,
+          };
+        }
+        throw new CliUsageError(
+          subcommand
+            ? `Unknown auth subcommand: ${subcommand}`
+            : "auth subcommand set, status, or remove is required.",
+        );
       }
       case "mcp": {
         const parsed = parseArgs({

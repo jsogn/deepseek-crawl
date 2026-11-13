@@ -10,7 +10,8 @@ import {
   type MapSitemapReader,
 } from "../application/index.js";
 import { loadConfig } from "../config.js";
-import type { CredentialStore } from "../credentials/store.js";
+import { readSecret } from "../credentials/input.js";
+import { createCredentialStore, type CredentialStore } from "../credentials/store.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
@@ -41,6 +42,7 @@ export interface CliDependencies {
     packageRoot: string;
   };
   credentialStore?: CredentialStore;
+  secretReader?: () => Promise<string>;
 }
 
 const MAIN_HELP = `deepseek-crawl ${packageVersion}
@@ -52,6 +54,9 @@ Usage:
   deepseek-crawl crawl <url> [options]
   deepseek-crawl doctor [--live] [--json]
   deepseek-crawl setup skills [options]
+  deepseek-crawl auth set
+  deepseek-crawl auth status [--json]
+  deepseek-crawl auth remove [--json]
   deepseek-crawl mcp
 
 Run "deepseek-crawl help <command>" for command details.
@@ -108,6 +113,11 @@ Options:
   --force
   --json
 `,
+  auth: `Usage:
+  deepseek-crawl auth set
+  deepseek-crawl auth status [--json]
+  deepseek-crawl auth remove [--json]
+`,
   mcp: "Usage: deepseek-crawl mcp\n\nStart the MCP server over stdio.\n",
 };
 
@@ -129,6 +139,7 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     ...(dependencies.credentialStore === undefined
       ? {}
       : { credentialStore: dependencies.credentialStore }),
+    ...(dependencies.secretReader === undefined ? {} : { secretReader: dependencies.secretReader }),
   };
 }
 
@@ -304,6 +315,63 @@ async function runSetupSkills(
   return 0;
 }
 
+function resolvedCredentialStore(deps: CliDependencies): CredentialStore {
+  return deps.credentialStore ?? createCredentialStore({ env: deps.env });
+}
+
+function authStatus(env: NodeJS.ProcessEnv, store: CredentialStore) {
+  if (env.DEEPSEEK_API_KEY?.trim()) {
+    return { configured: true, source: "environment", backend: "environment" };
+  }
+  const stored = store.get()?.trim();
+  return stored
+    ? { configured: true, source: store.name, backend: store.name }
+    : { configured: false, source: "missing", backend: store.name };
+}
+
+async function runAuthSet(deps: CliDependencies) {
+  const store = resolvedCredentialStore(deps);
+  const secret = await (deps.secretReader ?? readSecret)();
+  store.set(secret);
+  deps.stdout.write(`DeepSeek API key saved in ${store.name}.\n`);
+  return 0;
+}
+
+async function runAuthStatus(
+  command: Extract<ParsedCommand, { kind: "auth-status" }>,
+  deps: CliDependencies,
+) {
+  const result = authStatus(deps.env, resolvedCredentialStore(deps));
+  if (command.json) {
+    deps.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  } else {
+    deps.stdout.write(
+      result.configured
+        ? `DeepSeek API key configured via ${result.source}.\n`
+        : `DeepSeek API key is not configured (${result.backend}).\n`,
+    );
+  }
+  return 0;
+}
+
+async function runAuthRemove(
+  command: Extract<ParsedCommand, { kind: "auth-remove" }>,
+  deps: CliDependencies,
+) {
+  const store = resolvedCredentialStore(deps);
+  const existed = store.get() !== undefined;
+  store.remove();
+  const result = { removed: existed };
+  deps.stdout.write(
+    command.json
+      ? `${JSON.stringify(result, null, 2)}\n`
+      : existed
+        ? "Stored DeepSeek API key removed.\n"
+        : "No stored DeepSeek API key was found.\n",
+  );
+  return 0;
+}
+
 export async function runCli(
   argv: string[],
   dependencies: Partial<CliDependencies> = {},
@@ -335,6 +403,12 @@ export async function runCli(
         return await runCrawl(command, deps);
       case "setup-skills":
         return await runSetupSkills(command, deps);
+      case "auth-set":
+        return await runAuthSet(deps);
+      case "auth-status":
+        return await runAuthStatus(command, deps);
+      case "auth-remove":
+        return await runAuthRemove(command, deps);
       case "doctor":
         return await runDoctor({
           env: deps.env,

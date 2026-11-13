@@ -16,3 +16,9 @@ export type {
 } from "./crawl/types.js";
 export { DeepSeekClient } from "./deepseek/client.js";
 export { DeepSeekError } from "./deepseek/errors.js";
+export { readSecret } from "./credentials/input.js";
+export {
+  createCredentialStore,
+  type CredentialBackend,
+  type CredentialStore,
+} from "./credentials/store.js";

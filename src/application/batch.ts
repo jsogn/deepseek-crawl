@@ -11,12 +11,15 @@ import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { errorMessage } from "../error-message.js";
 import { boundFetchOutput, codepointLength } from "../output/bounds.js";
+import { createIndexAllocator } from "../retry/indexes.js";
 import { parseBatchFetchRetryReport } from "../retry/report.js";
 import type { RetryAttempt, RetrySummary } from "../retry/types.js";
 
 const MAX_CONCURRENCY = 5;
 const MAX_DELAY_MS = 5_000;
 const MAX_CONTENT_CHARS = 1_000_000;
+const MAX_BATCH_URLS = 10_000;
+const MAX_BATCH_INPUT_BYTES = 8 * 1024 * 1024;
 
 function normalizeInteger(value: number, name: string, minimum: number, maximum: number): number {
   if (!Number.isSafeInteger(value) || value < minimum) {
@@ -70,6 +73,9 @@ function parseStructuredInput(input: unknown): string[] {
   } else {
     throw new Error("Batch Fetch input must contain a URL array or urls field.");
   }
+  if (entries.length > MAX_BATCH_URLS) {
+    throw new Error(`Batch Fetch supports at most ${MAX_BATCH_URLS.toLocaleString("en-US")} URLs.`);
+  }
   const urls = entries.map(entryUrl);
   if (urls.length === 0) {
     throw new Error("Batch Fetch input cannot be empty.");
@@ -80,6 +86,9 @@ function parseStructuredInput(input: unknown): string[] {
 export function parseBatchFetchInput(input: string | unknown): string[] {
   if (typeof input !== "string") {
     return parseStructuredInput(input);
+  }
+  if (Buffer.byteLength(input, "utf8") > MAX_BATCH_INPUT_BYTES) {
+    throw new Error("Batch Fetch input exceeds the 8 MiB input limit.");
   }
   const text = input.trim();
   if (!text) {
@@ -247,6 +256,9 @@ export async function executeBatchFetch(
 ): Promise<BatchFetchResult> {
   const settings = normalizeOptions(options);
   const entries = parseBatchFetchInput(input);
+  if (entries.length > MAX_BATCH_URLS) {
+    throw new Error(`Batch Fetch supports at most ${MAX_BATCH_URLS.toLocaleString("en-US")} URLs.`);
+  }
   const failures: BatchFetchFailure[] = [];
   const requests: BatchFetchRequest[] = [];
   const seen = new Set<string>();
@@ -288,11 +300,16 @@ export async function executeBatchFetchRetry(
 ): Promise<BatchFetchResult> {
   const settings = normalizeOptions(options);
   const report = parseBatchFetchRetryReport(input);
+  if (report.failures.length > MAX_BATCH_URLS) {
+    throw new Error(
+      `Batch Fetch retry supports at most ${MAX_BATCH_URLS.toLocaleString("en-US")} failures.`,
+    );
+  }
   const requests: BatchFetchRequest[] = [];
   const skipped: RetryAttempt[] = [];
   const seen = new Set<string>();
-  const usedIndexes = new Set<number>();
-  let fallbackIndex = 1;
+  const indexes = createIndexAllocator();
+  let deduplicated = 0;
 
   for (const failure of report.failures) {
     const normalized = normalizeHttpUrl(failure.url);
@@ -301,15 +318,11 @@ export async function executeBatchFetchRetry(
       continue;
     }
     if (seen.has(normalized.href)) {
+      deduplicated += 1;
       continue;
     }
     seen.add(normalized.href);
-    let index = failure.index ?? fallbackIndex;
-    while (usedIndexes.has(index)) {
-      index += 1;
-    }
-    usedIndexes.add(index);
-    fallbackIndex = Math.max(fallbackIndex, index + 1);
+    const index = indexes.allocate(failure.index);
     requests.push({ url: normalized.href, index, retryOf: failure });
   }
 
@@ -318,6 +331,7 @@ export async function executeBatchFetchRetry(
     original_source: report.source,
     original_failures: report.failures.length,
     attempted: requests.length,
+    deduplicated,
     skipped,
     truncated: false,
   };

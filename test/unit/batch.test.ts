@@ -38,9 +38,23 @@ describe("parseBatchFetchInput", () => {
       expect(() => parseBatchFetchInput(input)).toThrow(/input|URL/i);
     },
   );
+
+  it("rejects string input over the 8 MiB boundary", () => {
+    expect(() => parseBatchFetchInput("x".repeat(8 * 1024 * 1024 + 1))).toThrow(/8 MiB/i);
+  });
 });
 
 describe("executeBatchFetch", () => {
+  it("rejects more than 10,000 input entries before making requests", async () => {
+    const fetch = vi.fn();
+    const input = Array.from({ length: 10_001 }, (_, index) => `https://example.com/${index}`);
+
+    await expect(
+      executeBatchFetch({ search: vi.fn(), fetch }, input, "bench", options, async () => undefined),
+    ).rejects.toThrow(/10,?000/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("deduplicates, records invalid and failed URLs, and preserves indexes", async () => {
     const pages = new Map<number, string>();
     const fetch = vi.fn(async ({ url }: { url: string }) => {
@@ -121,6 +135,27 @@ describe("executeBatchFetch", () => {
 });
 
 describe("executeBatchFetchRetry", () => {
+  it("rejects more than 10,000 failures before making requests", async () => {
+    const fetch = vi.fn();
+    const failures = Array.from({ length: 10_001 }, (_, index) => ({
+      index: index + 1,
+      url: `https://example.com/${index}`,
+      kind: "timeout",
+      message: "timed out",
+    }));
+
+    await expect(
+      executeBatchFetchRetry(
+        { search: vi.fn(), fetch },
+        { version: 1, source: "map.json", failures },
+        "fetch.json",
+        options,
+        async () => undefined,
+      ),
+    ).rejects.toThrow(/10,?000/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("retries only failed URLs, preserves indexes, and records skipped failures", async () => {
     const pages: Array<{ index: number; url: string; retryOf?: unknown }> = [];
     const fetch = vi.fn(async ({ url }: { url: string }) => ({
@@ -190,6 +225,7 @@ describe("executeBatchFetchRetry", () => {
         source: "fetch.json",
         original_failures: 3,
         attempted: 1,
+        deduplicated: 1,
         skipped: [
           {
             index: 3,
@@ -278,6 +314,7 @@ describe("executeBatchFetchRetry", () => {
       retry_of: {
         original_failures: 0,
         attempted: 0,
+        deduplicated: 0,
         skipped: [],
         truncated: false,
       },
@@ -285,5 +322,42 @@ describe("executeBatchFetchRetry", () => {
       pages: [],
       failures: [],
     });
+  });
+
+  it("stops launching retry requests when page output fails", async () => {
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content: "retried",
+    }));
+
+    await expect(
+      executeBatchFetchRetry(
+        { search: vi.fn(), fetch },
+        {
+          version: 1,
+          source: "map.json",
+          failures: [
+            {
+              index: 1,
+              url: "https://example.com/a",
+              kind: "timeout",
+              message: "first",
+            },
+            {
+              index: 2,
+              url: "https://example.com/b",
+              kind: "timeout",
+              message: "second",
+            },
+          ],
+        },
+        "fetch.json",
+        { ...options, concurrency: 1 },
+        async () => {
+          throw new Error("write failed");
+        },
+      ),
+    ).rejects.toThrow("write failed");
+    expect(fetch).toHaveBeenCalledOnce();
   });
 });

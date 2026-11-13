@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,6 +33,7 @@ import { type SkillSetupResult, setupSkills } from "../setup/skills.js";
 import { SitemapReader } from "../sitemap/reader.js";
 import { packageVersion } from "../version.js";
 import { runDoctor } from "./doctor.js";
+import { readJsonFileBounded, readStdinBounded, readTextFileBounded } from "./input.js";
 import { CliUsageError, type ParsedCommand, parseCli } from "./parse.js";
 
 export interface CliDependencies {
@@ -235,12 +235,9 @@ async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps
     const source = command.input === "-" ? "stdin" : command.input;
     let inputText: string;
     if (command.input === "-") {
-      inputText = "";
-      for await (const chunk of deps.stdin) {
-        inputText += String(chunk);
-      }
+      inputText = await readStdinBounded(deps.stdin, "Batch Fetch input");
     } else {
-      inputText = await readFile(command.input, "utf8");
+      inputText = await readTextFileBounded(command.input, "Batch Fetch input");
     }
 
     const writer = await createBatchFetchOutputWriter(command.outputDir ?? "");
@@ -290,22 +287,13 @@ async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps
   return 0;
 }
 
-async function readJsonReport(path: string, label: string): Promise<unknown> {
-  const text = await readFile(path, "utf8");
-  try {
-    return JSON.parse(text) as unknown;
-  } catch (error) {
-    throw new Error(`${label} is not valid JSON.`, { cause: error });
-  }
-}
-
 async function runFetchRetry(
   command: Extract<ParsedCommand, { kind: "fetch-retry" }>,
   deps: CliDependencies,
 ) {
   const config = loadConfig(deps.env, deps.credentialStore);
   const client = deps.fetchClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
-  const report = await readJsonReport(command.report, "Batch Fetch retry report");
+  const report = await readJsonFileBounded(command.report, "Batch Fetch retry report");
   const writer = await createBatchFetchOutputWriter(command.outputDir);
   try {
     const result = await executeBatchFetchRetry(
@@ -435,7 +423,7 @@ async function runCrawlRetry(
 ) {
   const config = loadConfig(deps.env, deps.credentialStore);
   const client = deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
-  const report = await readJsonReport(command.report, "Crawl retry report");
+  const report = await readJsonFileBounded(command.report, "Crawl retry report");
   const writer = await createCrawlOutputWriter(command.output);
   try {
     const result = await executeCrawlRetry(

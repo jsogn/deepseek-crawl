@@ -1,5 +1,5 @@
 import { canonicalizeCrawlUrl, createCrawlPathFilter } from "../crawl/filters.js";
-import { extractMarkdownLinks, sameOrigin } from "../crawl/links.js";
+import { sameOrigin, visitMarkdownLinks } from "../crawl/links.js";
 import type {
   CrawlOptions,
   CrawlPlanOmittedUrl,
@@ -81,30 +81,51 @@ export async function executeCrawlPlan(
     : planController.signal;
   planSignal.throwIfAborted();
   const warnings: MapWarning[] = [];
-  const candidates = new Map<string, MutablePlanCandidate>();
+  const eligibleCandidates = new Map<string, MutablePlanCandidate>();
+  const filteredCandidates = new Map<string, MutablePlanCandidate>();
+  const eligibleRetainLimit = Math.max(0, limits.discoveryLimit - 1) + PLAN_DIAGNOSTIC_LIMIT;
   let sitemapCandidates = 0;
   let sitemapTruncated = false;
+  let candidatesTruncated = false;
 
-  const addCandidates = (urls: readonly URL[], source: CrawlUrlSource): void => {
-    for (const value of urls) {
-      const normalized = canonicalizeCrawlUrl(value, undefined, limits.ignoreQueryParameters);
-      if (!normalized || normalized.href === seed.href) {
-        continue;
+  const trimCandidates = (values: Map<string, MutablePlanCandidate>, limit: number): void => {
+    if (values.size <= limit) {
+      return;
+    }
+    const retained = [...values.keys()].sort().slice(0, limit);
+    const retainedSet = new Set(retained);
+    for (const key of values.keys()) {
+      if (!retainedSet.has(key)) {
+        values.delete(key);
       }
-      let candidate = candidates.get(normalized.href);
-      if (!candidate) {
-        candidate = { url: normalized, sources: new Set<CrawlUrlSource>() };
-        candidates.set(normalized.href, candidate);
-      }
-      candidate.sources.add(source);
-      if (candidate.reason) {
-        continue;
-      }
-      if (!sameOrigin(normalized, seed)) {
-        candidate.reason = "cross_origin";
-      } else if (!pathFilter(normalized)) {
-        candidate.reason = "path_filtered";
-      }
+    }
+    candidatesTruncated = true;
+  };
+
+  const addCandidate = (value: URL, source: CrawlUrlSource): void => {
+    const normalized = canonicalizeCrawlUrl(value, undefined, limits.ignoreQueryParameters);
+    if (!normalized || normalized.href === seed.href) {
+      return;
+    }
+    const reason = !sameOrigin(normalized, seed)
+      ? "cross_origin"
+      : !pathFilter(normalized)
+        ? "path_filtered"
+        : undefined;
+    const values = reason ? filteredCandidates : eligibleCandidates;
+    const limit = reason ? PLAN_DIAGNOSTIC_LIMIT : eligibleRetainLimit;
+    let candidate = values.get(normalized.href);
+    if (!candidate) {
+      candidate = {
+        url: normalized,
+        sources: new Set<CrawlUrlSource>(),
+        ...(reason ? { reason } : {}),
+      };
+      values.set(normalized.href, candidate);
+    }
+    candidate.sources.add(source);
+    if (values.size >= limit * 2) {
+      trimCandidates(values, limit);
     }
   };
 
@@ -112,7 +133,9 @@ export async function executeCrawlPlan(
   const bounded = boundFetchOutput({ ...response, url: seed.href }, limits.pageContentLimit);
   if (limits.maxDepth > 0) {
     if (sitemapMode !== "only") {
-      addCandidates(extractMarkdownLinks(bounded.content, seed), "markdown");
+      visitMarkdownLinks(bounded.content, seed, (url) => {
+        addCandidate(url, "markdown");
+      });
     }
     if (sitemapMode !== "skip") {
       try {
@@ -132,7 +155,9 @@ export async function executeCrawlPlan(
               .filter((url) => url.href !== seed.href && sameOrigin(url, seed) && pathFilter(url))
               .map((url) => url.href),
           ).size;
-          addCandidates(sitemapUrls, "sitemap");
+          for (const url of sitemapUrls) {
+            addCandidate(url, "sitemap");
+          }
         }
       } catch (error) {
         if (planSignal.aborted) {
@@ -146,13 +171,14 @@ export async function executeCrawlPlan(
     }
   }
 
-  const allCandidates = [...candidates.values()];
-  const eligible = allCandidates
-    .filter((candidate) => candidate.reason === undefined)
-    .sort((left, right) => left.url.href.localeCompare(right.url.href));
-  const filtered = allCandidates
-    .filter((candidate) => candidate.reason !== undefined)
-    .sort((left, right) => left.url.href.localeCompare(right.url.href));
+  trimCandidates(eligibleCandidates, eligibleRetainLimit);
+  trimCandidates(filteredCandidates, PLAN_DIAGNOSTIC_LIMIT);
+  const eligible = [...eligibleCandidates.values()].sort((left, right) =>
+    left.url.href.localeCompare(right.url.href),
+  );
+  const filtered = [...filteredCandidates.values()].sort((left, right) =>
+    left.url.href.localeCompare(right.url.href),
+  );
 
   const discoveryCapacity = Math.max(0, limits.discoveryLimit - 1);
   const pageCapacity = Math.max(0, limits.maxPages - 1);
@@ -190,17 +216,18 @@ export async function executeCrawlPlan(
     deferred: deferred.map((candidate) => filteredUrl(candidate, "page_limit")),
     filtered: [...filteredUrlDetails, ...discoveryOmittedDetails],
     stats: {
-      candidates: allCandidates.length,
+      candidates: eligible.length + filtered.length,
       eligible: eligible.length,
       selected: selectedSet.size,
       deferred: deferredSet.size,
       filtered: filteredCount,
       planned_pages: selectedSet.size + 1,
       page_limit_reached: deferred.length > 0,
-      discovery_limit_reached: discoveryLimitReached,
+      discovery_limit_reached: discoveryLimitReached || candidatesTruncated,
       ...(options.sitemapMode === undefined ? {} : { sitemap_candidates: sitemapCandidates }),
     },
     diagnostics_truncated:
+      candidatesTruncated ||
       filtered.length > filteredUrlDetails.length ||
       discoveryOmitted.length > discoveryOmittedDetails.length,
     warnings,

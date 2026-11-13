@@ -1,4 +1,13 @@
-import { lstat, mkdir, mkdtemp, readFile, readlink, stat, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  stat,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -437,6 +446,112 @@ describe("runCli", () => {
     ).toBe(1);
     expect(fetchClient.fetch).not.toHaveBeenCalled();
     expect(stderr.value()).toContain("already exists");
+  });
+
+  it("rejects oversized Batch input before making a Fetch request", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-input-limit-"));
+    const input = join(root, "urls.json");
+    const output = join(root, "pages");
+    await writeFile(input, "");
+    await truncate(input, 8 * 1024 * 1024 + 1);
+    const fetchClient = {
+      search: vi.fn(),
+      fetch: vi.fn(),
+    };
+    const { deps, stdout, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(["fetch", "--input", input, "--output-dir", output], { ...deps, fetchClient }),
+    ).toBe(1);
+    expect(fetchClient.fetch).not.toHaveBeenCalled();
+    expect({ stdout: stdout.value(), stderr: stderr.value() }).toMatchObject({
+      stderr: expect.stringContaining("8 MiB"),
+    });
+    await expect(stat(output)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects oversized retry reports before making a Fetch request", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-report-limit-"));
+    const report = join(root, "fetch.json");
+    const output = join(root, "retry");
+    await writeFile(report, "");
+    await truncate(report, 8 * 1024 * 1024 + 1);
+    const fetchClient = {
+      search: vi.fn(),
+      fetch: vi.fn(),
+    };
+    const { deps, stdout, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(["fetch", "--retry-failed", report, "--output-dir", output], {
+        ...deps,
+        fetchClient,
+      }),
+    ).toBe(1);
+    expect(fetchClient.fetch).not.toHaveBeenCalled();
+    expect({ stdout: stdout.value(), stderr: stderr.value() }).toMatchObject({
+      stderr: expect.stringContaining("8 MiB"),
+    });
+    await expect(stat(output)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects oversized stdin before making a Fetch request", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-stdin-limit-"));
+    const output = join(root, "pages");
+    const fetchClient = {
+      search: vi.fn(),
+      fetch: vi.fn(),
+    };
+    const { deps, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(["fetch", "--input", "-", "--output-dir", output], {
+        ...deps,
+        fetchClient,
+        stdin: Readable.from([Buffer.alloc(5 * 1024 * 1024), Buffer.alloc(4 * 1024 * 1024)]),
+      }),
+    ).toBe(1);
+    expect(fetchClient.fetch).not.toHaveBeenCalled();
+    expect(stderr.value()).toContain("8 MiB");
+    await expect(stat(output)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("cleans Batch retry staging when the signal is already aborted", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-retry-abort-"));
+    const report = join(root, "fetch.json");
+    const output = join(root, "retry");
+    await writeFile(
+      report,
+      JSON.stringify({
+        version: 1,
+        source: "map.json",
+        failures: [
+          {
+            index: 1,
+            url: "https://example.com/fail",
+            kind: "timeout",
+            message: "timed out",
+          },
+        ],
+      }),
+    );
+    const controller = new AbortController();
+    controller.abort();
+    const fetchClient = {
+      search: vi.fn(),
+      fetch: vi.fn(),
+    };
+    const { deps } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(["fetch", "--retry-failed", report, "--output-dir", output], {
+        ...deps,
+        fetchClient,
+        signal: controller.signal,
+      }),
+    ).toBe(130);
+    expect(fetchClient.fetch).not.toHaveBeenCalled();
+    await expect(stat(output)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("reads batch Fetch input from stdin", async () => {

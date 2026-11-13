@@ -81,6 +81,7 @@ describe("batch fetch output", () => {
           original_source: "map.json",
           original_failures: 3,
           attempted: 1,
+          deduplicated: 0,
           skipped: [],
           truncated: false,
         },
@@ -90,5 +91,6 @@ describe("batch fetch output", () => {
 
     expect(output).toContain("Retry of: /tmp/fetch.json");
     expect(output).toContain("Retry attempted: 1 of 3 original failures");
+    expect(output).toContain("Retry deduplicated: 0");
   });
 });

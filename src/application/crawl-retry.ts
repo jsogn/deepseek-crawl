@@ -12,6 +12,7 @@ import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { errorMessage } from "../error-message.js";
 import { boundFetchOutput, codepointLength } from "../output/bounds.js";
+import { createIndexAllocator } from "../retry/indexes.js";
 import { type CrawlRetryFailure, parseCrawlRetryReport } from "../retry/report.js";
 import type { RetryAttempt, RetrySummary } from "../retry/types.js";
 import { normalizeCrawlOptions } from "./crawl.js";
@@ -94,8 +95,8 @@ export async function executeCrawlRetry(
   const requests: CrawlRetryRequest[] = [];
   const skipped: RetryAttempt[] = [];
   const seen = new Set<string>();
-  const usedIndexes = new Set<number>();
-  let fallbackIndex = 1;
+  const indexes = createIndexAllocator();
+  let deduplicated = 0;
   let truncated = false;
 
   for (const failure of report.failures) {
@@ -111,6 +112,7 @@ export async function executeCrawlRetry(
       continue;
     }
     if (seen.has(normalized.href)) {
+      deduplicated += 1;
       continue;
     }
     if (requests.length >= limits.maxPages) {
@@ -119,12 +121,7 @@ export async function executeCrawlRetry(
       continue;
     }
     seen.add(normalized.href);
-    let index = failure.index ?? fallbackIndex;
-    while (usedIndexes.has(index)) {
-      index += 1;
-    }
-    usedIndexes.add(index);
-    fallbackIndex = Math.max(fallbackIndex, index + 1);
+    const index = indexes.allocate(failure.index);
     requests.push({
       url: normalized.href,
       index,
@@ -139,6 +136,7 @@ export async function executeCrawlRetry(
     source: reportSource,
     original_failures: report.failures.length,
     attempted: requests.length,
+    deduplicated,
     skipped,
     truncated,
   };

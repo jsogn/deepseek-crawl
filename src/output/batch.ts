@@ -57,6 +57,7 @@ export function formatBatchFetchHuman(result: BatchFetchResult, outputDirectory:
     lines.push(
       `Retry of: ${result.retry_of.source}`,
       `Retry attempted: ${result.retry_of.attempted} of ${result.retry_of.original_failures} original failures`,
+      `Retry deduplicated: ${result.retry_of.deduplicated}`,
       `Retry skipped: ${result.retry_of.skipped.length}`,
       `Retry truncated: ${result.retry_of.truncated ? "yes" : "no"}`,
     );

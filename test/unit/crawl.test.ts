@@ -628,6 +628,35 @@ describe("executeCrawlPlan", () => {
     ]);
   });
 
+  it("bounds retained Plan candidates for link-dense pages", async () => {
+    const linkCount = 2_000;
+    const content = Array.from(
+      { length: linkCount },
+      (_, index) => `[Page ${index}](/docs/${index})`,
+    ).join(" ");
+    const plan = await executeCrawlPlan(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async () => ({ title: "Seed", content })),
+      },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 1,
+        maxPages: 5,
+        discoveryLimit: 100,
+        pageContentLimit: 1_000_000,
+        includePaths: ["/docs/*"],
+        sitemapMode: "skip",
+      },
+    );
+
+    expect(plan.stats.eligible).toBeLessThan(linkCount);
+    expect(plan.stats.eligible).toBeGreaterThan(plan.stats.selected);
+    expect(plan.stats.discovery_limit_reached).toBe(true);
+    expect(plan.diagnostics_truncated).toBe(true);
+  });
+
   it("propagates cancellation before the billable seed request", async () => {
     const controller = new AbortController();
     const reason = new Error("cancelled");
@@ -742,6 +771,7 @@ describe("executeCrawlRetry", () => {
         source: "crawl.json",
         original_failures: 3,
         attempted: 1,
+        deduplicated: 0,
         skipped: [
           {
             index: 3,
@@ -876,6 +906,7 @@ describe("executeCrawlRetry", () => {
     expect(result.retry_of).toMatchObject({
       original_failures: 3,
       attempted: 2,
+      deduplicated: 0,
       truncated: true,
     });
     expect(result.retry_of?.skipped).toHaveLength(1);
@@ -921,5 +952,52 @@ describe("executeCrawlRetry", () => {
         },
       ],
     });
+  });
+
+  it("stops launching retry requests when page output fails", async () => {
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content: "retried",
+    }));
+
+    await expect(
+      executeCrawlRetry(
+        { search: vi.fn(), fetch },
+        {
+          version: 1,
+          seed_url: "https://example.com/",
+          settings: {
+            max_depth: 2,
+            max_pages: 5,
+            concurrency: 1,
+            delay_ms: 0,
+            sitemap_mode: "include",
+          },
+          failures: [
+            {
+              index: 1,
+              url: "https://example.com/a",
+              depth: 1,
+              sources: ["markdown"],
+              kind: "timeout",
+              message: "first",
+            },
+            {
+              index: 2,
+              url: "https://example.com/b",
+              depth: 1,
+              sources: ["markdown"],
+              kind: "timeout",
+              message: "second",
+            },
+          ],
+        },
+        "crawl.json",
+        async () => {
+          throw new Error("write failed");
+        },
+      ),
+    ).rejects.toThrow("write failed");
+    expect(fetch).toHaveBeenCalledOnce();
   });
 });

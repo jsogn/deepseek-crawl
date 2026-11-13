@@ -249,6 +249,7 @@ describe("formatCrawlHuman", () => {
           source: "crawl.json",
           original_failures: 4,
           attempted: 2,
+          deduplicated: 0,
           skipped: [],
           truncated: false,
         },
@@ -258,6 +259,7 @@ describe("formatCrawlHuman", () => {
 
     expect(output).toContain("Retry of: crawl.json");
     expect(output).toContain("Retry attempted: 2 of 4 original failures");
+    expect(output).toContain("Retry deduplicated: 0");
   });
 
   it("reports Sitemap mode, candidates, and warnings when present", () => {

@@ -10,6 +10,7 @@ export interface RetrySummary {
   original_source?: string;
   original_failures: number;
   attempted: number;
+  deduplicated: number;
   skipped: RetryAttempt[];
   truncated: boolean;
 }

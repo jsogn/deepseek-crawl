@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, stat } from "node:fs/promises";
+import { mkdtemp, readdir, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -84,6 +84,7 @@ describe("CLI SIGINT handling", () => {
     expect(result).toEqual({ code: 130, signal: null });
     expect(process.stderr()).toMatch(/cancelled/i);
     await expect(stat(output)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await readdir(root)).filter((name) => name.startsWith(".result-"))).toEqual([]);
   }, 10_000);
 
   it("preserves default SIGINT termination for Fetch", async () => {

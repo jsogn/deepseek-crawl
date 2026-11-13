@@ -1,5 +1,8 @@
 import http from "node:http";
 import https from "node:https";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
+import { normalizeHttpUrl, sameOrigin } from "../crawl/links.js";
+import type { MapWarning } from "../crawl/types.js";
 import { packageVersion } from "../version.js";
 import {
   isPublicIpAddress,
@@ -20,6 +23,21 @@ export interface SitemapFetchResponse {
 
 export interface SitemapFetcher {
   fetch(url: URL, signal?: AbortSignal): Promise<SitemapFetchResponse>;
+}
+
+export interface SitemapReaderOptions {
+  fetcher?: SitemapFetcher;
+}
+
+export interface SitemapReadOptions {
+  maxDocuments: number;
+  maxCandidates: number;
+}
+
+export interface SitemapDiscovery {
+  urls: URL[];
+  warnings: MapWarning[];
+  truncated: boolean;
 }
 
 interface SitemapHttpResponse {
@@ -209,4 +227,204 @@ export function createPublicSitemapFetcher(
   }
 
   return { fetch };
+}
+
+interface ParsedSitemap {
+  kind: "urlset" | "sitemapindex";
+  locations: string[];
+}
+
+const sitemapParser = new XMLParser({
+  removeNSPrefix: true,
+  ignoreAttributes: true,
+  trimValues: true,
+  parseTagValue: false,
+  isArray: (name) => name === "url" || name === "sitemap",
+});
+
+function warning(code: MapWarning["code"], message: string): MapWarning {
+  return { code, message };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function asArray(value: unknown): unknown[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
+}
+
+function locationsFrom(entries: unknown[]): string[] {
+  const locations: string[] = [];
+  for (const entry of entries) {
+    if (typeof entry !== "object" || entry === null || !("loc" in entry)) {
+      continue;
+    }
+    const location = (entry as { loc?: unknown }).loc;
+    if (typeof location === "string" && location.trim()) {
+      locations.push(location.trim());
+    }
+  }
+  return locations;
+}
+
+function parseSitemap(body: string): ParsedSitemap {
+  if (XMLValidator.validate(body) !== true) {
+    throw new Error("Sitemap is not valid XML.");
+  }
+
+  const parsed = sitemapParser.parse(body) as Record<string, unknown>;
+  const urlset = parsed.urlset;
+  if (typeof urlset === "object" && urlset !== null) {
+    return {
+      kind: "urlset",
+      locations: locationsFrom(asArray((urlset as Record<string, unknown>).url)),
+    };
+  }
+
+  const sitemapindex = parsed.sitemapindex;
+  if (typeof sitemapindex === "object" && sitemapindex !== null) {
+    return {
+      kind: "sitemapindex",
+      locations: locationsFrom(asArray((sitemapindex as Record<string, unknown>).sitemap)),
+    };
+  }
+
+  throw new Error("Sitemap root element is not urlset or sitemapindex.");
+}
+
+function validateReadOptions(options: SitemapReadOptions): void {
+  if (!Number.isInteger(options.maxDocuments) || options.maxDocuments < 1) {
+    throw new Error("maxDocuments must be a positive integer.");
+  }
+  if (!Number.isInteger(options.maxCandidates) || options.maxCandidates < 1) {
+    throw new Error("maxCandidates must be a positive integer.");
+  }
+}
+
+export class SitemapReader {
+  readonly #fetcher: SitemapFetcher;
+
+  constructor(options: SitemapReaderOptions = {}) {
+    this.#fetcher = options.fetcher ?? createPublicSitemapFetcher();
+  }
+
+  async read(
+    seedUrl: URL,
+    options: SitemapReadOptions,
+    signal?: AbortSignal,
+  ): Promise<SitemapDiscovery> {
+    validateReadOptions(options);
+    if (!["http:", "https:"].includes(seedUrl.protocol) || !seedUrl.hostname) {
+      throw new Error("Seed URL must use HTTP or HTTPS.");
+    }
+    if (signal?.aborted) {
+      throw abortReason(signal);
+    }
+
+    const root = new URL("/sitemap.xml", seedUrl.origin);
+    const queue = [root];
+    const seenDocuments = new Set([root.href]);
+    const urls = new Map<string, URL>();
+    const warnings: MapWarning[] = [];
+    let documentsRead = 0;
+    let truncated = false;
+    let candidateLimitWarningAdded = false;
+
+    while (queue.length > 0 && documentsRead < options.maxDocuments) {
+      if (signal?.aborted) {
+        throw abortReason(signal);
+      }
+      const documentUrl = queue.shift();
+      if (!documentUrl) {
+        break;
+      }
+      documentsRead += 1;
+
+      let fetched: SitemapFetchResponse;
+      try {
+        fetched = await this.#fetcher.fetch(documentUrl, signal);
+      } catch (error) {
+        if (signal?.aborted) {
+          throw abortReason(signal);
+        }
+        warnings.push(
+          warning(
+            "sitemap_unavailable",
+            `Could not read Sitemap ${documentUrl.href}: ${errorMessage(error)}`,
+          ),
+        );
+        continue;
+      }
+
+      let parsed: ParsedSitemap;
+      try {
+        parsed = parseSitemap(fetched.body);
+      } catch (error) {
+        warnings.push(
+          warning(
+            "sitemap_invalid",
+            `Could not parse Sitemap ${fetched.finalUrl.href}: ${errorMessage(error)}`,
+          ),
+        );
+        continue;
+      }
+
+      if (parsed.kind === "urlset") {
+        for (const location of parsed.locations) {
+          const url = normalizeHttpUrl(location, fetched.finalUrl);
+          if (!url || !sameOrigin(url, seedUrl)) {
+            continue;
+          }
+          if (urls.has(url.href)) {
+            continue;
+          }
+          if (urls.size >= options.maxCandidates) {
+            truncated = true;
+            if (!candidateLimitWarningAdded) {
+              candidateLimitWarningAdded = true;
+              warnings.push(
+                warning(
+                  "sitemap_limit_reached",
+                  `Sitemap candidate limit of ${options.maxCandidates} was reached.`,
+                ),
+              );
+            }
+            break;
+          }
+          urls.set(url.href, url);
+        }
+      } else {
+        for (const location of parsed.locations) {
+          const url = normalizeHttpUrl(location, fetched.finalUrl);
+          if (!url || !sameOrigin(url, seedUrl) || seenDocuments.has(url.href)) {
+            continue;
+          }
+          seenDocuments.add(url.href);
+          queue.push(url);
+        }
+      }
+    }
+
+    if (queue.length > 0) {
+      truncated = true;
+      warnings.push(
+        warning(
+          "sitemap_limit_reached",
+          `Sitemap document limit of ${options.maxDocuments} was reached.`,
+        ),
+      );
+    }
+
+    return {
+      urls: [...urls.values()].sort((left, right) =>
+        left.href < right.href ? -1 : left.href > right.href ? 1 : 0,
+      ),
+      warnings,
+      truncated,
+    };
+  }
 }

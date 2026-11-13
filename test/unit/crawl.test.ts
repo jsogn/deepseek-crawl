@@ -160,6 +160,40 @@ describe("executeCrawl", () => {
     expect(result.stats.discovery_limit_reached).toBe(true);
   });
 
+  it("applies path filters and query normalization to discovered links", async () => {
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content:
+        url === "https://example.com/"
+          ? "[Doc one](/docs/a?utm=1) [Doc two](/docs/a?utm=2) [Blog](/blog) [Private](/docs/private/x) [API](/api/v?x=1)"
+          : "No links",
+    }));
+    const result = await executeCrawl(
+      { search: vi.fn(), fetch },
+      { url: "https://example.com/?from=seed" },
+      {
+        ...options,
+        maxDepth: 1,
+        includePaths: ["/docs/*", "/api/?"],
+        excludePaths: ["/docs/private/*"],
+        ignoreQueryParameters: true,
+      },
+    );
+
+    expect(result.seed_url).toBe("https://example.com/");
+    expect(result.pages.map((page) => page.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/api/v",
+      "https://example.com/docs/a",
+    ]);
+    expect(result.stats.discovered).toBe(3);
+    expect(fetch.mock.calls.map(([input]) => input.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/api/v",
+      "https://example.com/docs/a",
+    ]);
+  });
+
   it("records content truncation metadata", async () => {
     const result = await executeCrawl(
       client(),

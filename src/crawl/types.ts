@@ -39,6 +39,9 @@ export interface CrawlOptions {
   delayMs: number;
   discoveryLimit: number;
   pageContentLimit: number;
+  includePaths?: string[];
+  excludePaths?: string[];
+  ignoreQueryParameters?: boolean;
   now?: () => Date;
 }
 

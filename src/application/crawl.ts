@@ -1,4 +1,5 @@
-import { extractMarkdownLinks, normalizeHttpUrl, sameOrigin } from "../crawl/links.js";
+import { extractMarkdownLinks, sameOrigin } from "../crawl/links.js";
+import { canonicalizeCrawlUrl, createCrawlPathFilter } from "../crawl/filters.js";
 import { runLayeredTasks } from "../crawl/queue.js";
 import type {
   CrawlFailure,
@@ -44,6 +45,9 @@ export function normalizeCrawlOptions(options: CrawlOptions): CrawlOptions {
       1,
       CRAWL_MAX_PAGE_CONTENT_LIMIT,
     ),
+    includePaths: options.includePaths ?? [],
+    excludePaths: options.excludePaths ?? [],
+    ignoreQueryParameters: options.ignoreQueryParameters ?? false,
   };
   if (options.now !== undefined) {
     normalized.now = options.now;
@@ -137,10 +141,14 @@ export async function executeCrawl(
 ): Promise<CrawlRunResult> {
   const limits = normalizeCrawlOptions(options);
   const parsed = fetchInputSchema.parse(input);
-  const seed = normalizeHttpUrl(parsed.url);
+  const seed = canonicalizeCrawlUrl(parsed.url, undefined, limits.ignoreQueryParameters);
   if (!seed) {
     throw new Error("Crawl URL must be an HTTP(S) URL with a host and no credentials.");
   }
+  const pathFilter = createCrawlPathFilter(
+    limits.includePaths ?? [],
+    limits.excludePaths ?? [],
+  );
 
   const now = limits.now ?? (() => new Date());
   const crawlController = new AbortController();
@@ -178,7 +186,13 @@ export async function executeCrawl(
       links =
         depth < limits.maxDepth
           ? extractMarkdownLinks(bounded.content, new URL(url))
-              .filter((candidate) => sameOrigin(candidate, seed))
+              .map((candidate) =>
+                canonicalizeCrawlUrl(candidate, undefined, limits.ignoreQueryParameters),
+              )
+              .filter(
+                (candidate): candidate is URL =>
+                  candidate !== undefined && sameOrigin(candidate, seed) && pathFilter(candidate),
+              )
               .map((candidate) => candidate.href)
           : [];
     } catch (error) {

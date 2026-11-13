@@ -1,7 +1,7 @@
 {
   "name": "deepseek-crawl",
-  "version": "0.1.0",
-  "description": "CLI and MCP tools for DeepSeek Search and Fetch",
+  "version": "0.2.0",
+  "description": "AI-facing CLI and MCP tools for DeepSeek Search, Fetch, Map, and Crawl",
   "type": "module",
   "private": true,
   "license": "UNLICENSED",
@@ -33,6 +33,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
+    "fast-xml-parser": "5.12.1",
+    "markdown-it": "15.0.3",
     "zod": "4.6.7"
   },
   "devDependencies": {

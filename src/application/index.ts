@@ -1,18 +1,9 @@
+import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { fetchInputSchema, searchInputSchema } from "../deepseek/schemas.js";
 import { boundFetchOutput, boundSearchOutput } from "../output/bounds.js";
-import type {
-  FetchInput,
-  FetchOutput,
-  RawFetchResponse,
-  RawSearchResponse,
-  SearchInput,
-  SearchOutput,
-} from "../types.js";
+import type { FetchOutput, SearchOutput } from "../types.js";
 
-export interface DeepSeekGateway {
-  search(input: SearchInput, signal?: AbortSignal): Promise<RawSearchResponse>;
-  fetch(input: FetchInput, signal?: AbortSignal): Promise<RawFetchResponse>;
-}
+export type { DeepSeekGateway } from "../deepseek/gateway.js";
 
 export async function executeSearch(
   client: DeepSeekGateway,

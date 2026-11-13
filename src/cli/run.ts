@@ -67,6 +67,7 @@ Options:
 
 Options:
   --limit <1..1000> (default: 500)
+  --search <text>
   --json
   --output, -o <path>
 `,
@@ -77,7 +78,7 @@ Options:
   --max-pages <1..100>
   --concurrency <1..5>
   --delay-ms <0..5000>
-  --output <dir>
+  --output, -o <dir>
   --json
 `,
   doctor: `Usage: deepseek-crawl doctor [--live] [--json]
@@ -180,6 +181,7 @@ async function runMap(command: Extract<ParsedCommand, { kind: "map" }>, deps: Cl
       limit: command.limit,
       discoveryLimit: 10_000,
       pageContentLimit: 1_000_000,
+      ...(command.search === undefined ? {} : { search: command.search }),
     },
     deps.signal,
   );

@@ -98,6 +98,34 @@ describe("runCli", () => {
     expect(stderr.value()).toBe("sitemap_unavailable: Could not read Sitemap: Sitemap missing\n");
   });
 
+  it("forwards Map search and returns only matching URLs", async () => {
+    const sitemapReader = {
+      read: vi.fn(async () => ({
+        urls: [new URL("https://example.com/docs/guide")],
+        warnings: [],
+        truncated: false,
+      })),
+    };
+    const mapClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => ({
+        title: "Seed",
+        content: "[API](/docs/api) [Blog](/blog)",
+      })),
+    };
+    const { deps, stdout, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(["map", "https://example.com/", "--search", "api"], {
+        ...deps,
+        mapClient,
+        sitemapReader,
+      }),
+    ).toBe(0);
+    expect(stdout.value()).toBe("https://example.com/docs/api\n");
+    expect(stderr.value()).toBe("");
+  });
+
   it("writes Map JSON without overwriting an existing file", async () => {
     const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-map-"));
     const output = join(root, "urls.json");

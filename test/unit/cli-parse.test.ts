@@ -59,6 +59,16 @@ describe("parseCli", () => {
       limit: 500,
       json: true,
     });
+
+    expect(
+      parseCli(["map", "https://example.com", "--search", "docs", "--limit", "20"]),
+    ).toEqual({
+      kind: "map",
+      url: "https://example.com",
+      limit: 20,
+      search: "docs",
+      json: false,
+    });
   });
 
   it("parses crawl options and defaults", () => {
@@ -99,6 +109,11 @@ describe("parseCli", () => {
       output: "out",
       json: false,
     });
+
+    expect(parseCli(["crawl", "https://example.com", "-o", "out"])).toMatchObject({
+      kind: "crawl",
+      output: "out",
+    });
   });
 
   it("parses doctor and help", () => {
@@ -120,6 +135,7 @@ describe("parseCli", () => {
     [["fetch", "https://example.com", "--max-chars=1000001"], /content limit/i],
     [["map", "https://example.com", "--limit", "0"], /limit/i],
     [["map", "https://example.com", "--limit", "1001"], /limit/i],
+    [["map", "https://example.com", "--search", "   "], /search/i],
     [["map", "https://example.com", "--unknown"], /unknown option/i],
     [["crawl", "https://example.com"], /output is required/i],
     [["crawl", "https://example.com", "--output", "out", "--max-depth", "6"], /max-depth/i],

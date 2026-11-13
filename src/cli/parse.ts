@@ -30,6 +30,7 @@ export type ParsedCommand =
       kind: "map";
       url: string;
       limit: number;
+      search?: string;
       json: boolean;
       output?: string;
     }
@@ -177,6 +178,7 @@ export function parseCli(argv: string[]): ParsedCommand {
           strict: true,
           options: {
             limit: { type: "string" },
+            search: { type: "string" },
             json: { type: "boolean" },
             output: { type: "string", short: "o" },
             help: { type: "boolean", short: "h" },
@@ -194,6 +196,13 @@ export function parseCli(argv: string[]): ParsedCommand {
               : parseInteger(parsed.values.limit, "limit", 1, 1000),
           json: parsed.values.json ?? false,
         };
+        if (parsed.values.search !== undefined) {
+          const search = parsed.values.search.trim();
+          if (!search) {
+            throw new CliUsageError("search must contain non-whitespace text.");
+          }
+          result.search = search;
+        }
         if (parsed.values.output !== undefined) {
           result.output = parsed.values.output;
         }
@@ -209,7 +218,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             "max-pages": { type: "string" },
             concurrency: { type: "string" },
             "delay-ms": { type: "string" },
-            output: { type: "string" },
+            output: { type: "string", short: "o" },
             json: { type: "boolean" },
             help: { type: "boolean", short: "h" },
           },

@@ -1,7 +1,7 @@
 {
   "name": "deepseek-crawl",
-  "version": "0.2.0",
-  "description": "AI-facing CLI and MCP tools for DeepSeek Search, Fetch, Map, and Crawl",
+  "version": "0.3.0",
+  "description": "CLI-first AI web search, page reading, mapping, and crawling with optional MCP",
   "type": "module",
   "private": true,
   "license": "UNLICENSED",
@@ -13,7 +13,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "skills"
   ],
   "engines": {
     "node": ">=22.12.0"

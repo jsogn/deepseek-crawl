@@ -8,8 +8,17 @@ describe("package executable", () => {
       encoding: "utf8",
     });
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("0.2.0");
+    expect(result.stdout.trim()).toBe("0.3.0");
     expect(result.stderr).toBe("");
+  });
+
+  it("publishes the bundled Agent Skill", async () => {
+    const packageJson = JSON.parse(
+      await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    ) as { files?: string[]; description?: string };
+    expect(packageJson.files).toContain("skills");
+    expect(packageJson.description).toMatch(/CLI-first/i);
+    expect(packageJson.description).toMatch(/optional MCP/i);
   });
 });
 

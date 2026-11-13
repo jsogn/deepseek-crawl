@@ -11,9 +11,15 @@ export type {
   CrawlPageIndex,
   CrawlPageSummary,
   CrawlRunResult,
+  MapResult,
+  MapUrl,
+  MapUrlSource,
+  MapWarning,
 } from "../crawl/types.js";
 export type { DeepSeekGateway } from "../deepseek/gateway.js";
 export { executeCrawl } from "./crawl.js";
+export type { MapOptions, MapSitemapReader } from "./map.js";
+export { executeMap } from "./map.js";
 
 export async function executeSearch(
   client: DeepSeekGateway,

@@ -9,6 +9,24 @@ export interface MapWarning {
   message: string;
 }
 
+export type MapUrlSource = "seed_url" | "seed_page" | "sitemap";
+
+export interface MapUrl {
+  url: string;
+  sources: MapUrlSource[];
+}
+
+export interface MapResult {
+  version: 1;
+  seed_url: string;
+  generated_at: string;
+  limit: number;
+  total: number;
+  truncated: boolean;
+  urls: MapUrl[];
+  warnings: MapWarning[];
+}
+
 export interface CrawlInput {
   url: string;
 }

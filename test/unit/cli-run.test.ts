@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { FileFetchCache } from "../../src/cache/file-cache.js";
 import { runCli } from "../../src/cli/run.js";
+import { contentHash } from "../../src/content/hash.js";
 
 const searchResponse = {
   results: [
@@ -307,7 +308,7 @@ describe("runCli", () => {
     expect(
       await runCli(
         ["crawl", "https://example.com/", "--plan-only", "--max-depth", "0", "--output", output],
-        { ...deps, crawlClient },
+        { ...deps, crawlClient, sitemapReader: sitemap() },
       ),
     ).toBe(1);
     expect(crawlClient.fetch).not.toHaveBeenCalled();
@@ -751,6 +752,97 @@ describe("runCli", () => {
     expect(JSON.parse(stdout.value())).toMatchObject({
       seed_url: "https://example.com/",
       pages: [{ path: "pages/0001-page.md", content_length: 9 }],
+    });
+  });
+
+  it("writes only changed Crawl pages against a baseline directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-incremental-"));
+    const baseline = join(root, "baseline");
+    const output = join(root, "changes");
+    await mkdir(baseline);
+    const seedContent = "[Same](/same) [Changed](/changed)";
+    await writeFile(
+      join(baseline, "crawl.json"),
+      JSON.stringify({
+        version: 1,
+        pages: [
+          { url: "https://example.com/", content_hash: contentHash(seedContent) },
+          { url: "https://example.com/same", content_hash: contentHash("same") },
+          { url: "https://example.com/changed", content_hash: contentHash("old") },
+          { url: "https://example.com/removed", content_hash: contentHash("removed") },
+        ],
+      }),
+    );
+    const crawlClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async ({ url }: { url: string }) => ({
+        title: url,
+        content:
+          url === "https://example.com/"
+            ? seedContent
+            : url === "https://example.com/same"
+              ? "same"
+              : "new",
+      })),
+    };
+    const { deps, stdout } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        [
+          "crawl",
+          "https://example.com/",
+          "--max-depth",
+          "1",
+          "--max-pages",
+          "3",
+          "--delay-ms",
+          "0",
+          "--baseline",
+          baseline,
+          "--changed-only",
+          "--output",
+          output,
+          "--json",
+        ],
+        { ...deps, crawlClient, sitemapReader: sitemap() },
+      ),
+    ).toBe(0);
+
+    expect(crawlClient.fetch).toHaveBeenCalledTimes(3);
+    const report = JSON.parse(stdout.value());
+    expect(report).toMatchObject({
+      baseline: { source: join(baseline, "crawl.json") },
+      changes: {
+        added: [],
+        modified: [
+          {
+            url: "https://example.com/changed",
+            content_hash: contentHash("new"),
+            previous_content_hash: contentHash("old"),
+          },
+        ],
+        unchanged: [
+          { url: "https://example.com/", content_hash: contentHash(seedContent) },
+          { url: "https://example.com/same", content_hash: contentHash("same") },
+        ],
+        removed: [
+          {
+            url: "https://example.com/removed",
+            content_hash: contentHash("removed"),
+          },
+        ],
+      },
+      stats: { added: 0, modified: 1, unchanged: 2, removed: 1 },
+      pages: [
+        { url: "https://example.com/", written: false },
+        { url: "https://example.com/changed", written: true },
+        { url: "https://example.com/same", written: false },
+      ],
+    });
+    expect(await readFile(join(output, "pages", "0002-changed.md"), "utf8")).toContain("new");
+    await expect(stat(join(output, "pages", "0001-page.md"))).rejects.toMatchObject({
+      code: "ENOENT",
     });
   });
 

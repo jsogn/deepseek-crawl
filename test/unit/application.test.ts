@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeFetch, executeSearch } from "../../src/application/index.js";
+import { contentHash } from "../../src/content/hash.js";
 
 const result = {
   rerank_score: 2.4,
@@ -69,6 +70,7 @@ describe("executeFetch", () => {
       title: "Page",
       url: "https://example.com/page",
       content: "abcd",
+      content_hash: contentHash("abcdef"),
       page_extra: true,
       truncated: true,
       original_length: 6,

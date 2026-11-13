@@ -15,7 +15,14 @@ export interface CrawlOutputWriter {
   abort(): Promise<void>;
 }
 
-export async function createCrawlOutputWriter(finalDirectory: string): Promise<CrawlOutputWriter> {
+export interface CrawlOutputWriterOptions {
+  allowMissingPages?: boolean;
+}
+
+export async function createCrawlOutputWriter(
+  finalDirectory: string,
+  options: CrawlOutputWriterOptions = {},
+): Promise<CrawlOutputWriter> {
   const directory = await createStagedDirectoryOutput(
     finalDirectory,
     "Crawl output writer is no longer writable.",
@@ -31,9 +38,12 @@ export async function createCrawlOutputWriter(finalDirectory: string): Promise<C
         const pages = result.pages.map((summary) => {
           const path = pagePaths.get(summary.index);
           if (!path) {
+            if (options.allowMissingPages && summary.change_status === "unchanged") {
+              return { ...summary, written: false };
+            }
             throw new Error(`Crawl page ${summary.index} was not written.`);
           }
-          return { ...summary, path };
+          return { ...summary, written: true, path };
         });
         const output: CrawlOutputResult = { ...result, pages };
 
@@ -91,6 +101,19 @@ export function formatCrawlHuman(result: CrawlRunResult, outputDirectory: string
       `Cache hits: ${result.stats.cache_hits ?? 0}`,
       `Cache misses: ${result.stats.cache_misses ?? 0}`,
       `Cache errors: ${result.stats.cache_errors ?? 0}`,
+    );
+  }
+  if (result.baseline) {
+    lines.push(`Baseline: ${result.baseline.source}`);
+  }
+  if (
+    result.stats.added !== undefined ||
+    result.stats.modified !== undefined ||
+    result.stats.unchanged !== undefined ||
+    result.stats.removed !== undefined
+  ) {
+    lines.push(
+      `Changes: +${result.stats.added ?? 0} ~${result.stats.modified ?? 0} =${result.stats.unchanged ?? 0} -${result.stats.removed ?? 0}`,
     );
   }
   lines.push(`Output: ${outputDirectory}`);

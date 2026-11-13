@@ -1,11 +1,17 @@
 import { fetchSourceFor } from "../cache/cached-gateway.js";
+import { contentHash } from "../content/hash.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { fetchInputSchema, searchInputSchema } from "../deepseek/schemas.js";
 import { boundFetchOutput, boundSearchOutput } from "../output/bounds.js";
 import type { FetchOutput, SearchOutput } from "../types.js";
 
 export type {
+  CrawlBaseline,
+  CrawlChangeStatus,
+  CrawlChanges,
+  CrawlContentVersion,
   CrawlFailure,
+  CrawlModifiedContent,
   CrawlOptions,
   CrawlOutputResult,
   CrawlPage,
@@ -56,6 +62,7 @@ export async function executeFetch(
   const source = fetchSourceFor(client, parsed.url);
   return {
     ...boundFetchOutput({ ...response, url: parsed.url }, options.maxChars),
+    content_hash: contentHash(response.content),
     ...(source ? { retrieved_from: source } : {}),
   };
 }

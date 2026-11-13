@@ -18,6 +18,7 @@ export type CrawlSitemapMode = "include" | "only" | "skip";
 
 export type CrawlUrlSource = "markdown" | "sitemap";
 export type CrawlPageSource = "seed_url" | CrawlUrlSource;
+export type CrawlChangeStatus = "added" | "modified" | "unchanged";
 
 export interface CrawlSitemapReader {
   read(
@@ -64,7 +65,14 @@ export interface CrawlOptions {
   ignoreQueryParameters?: boolean;
   sitemapMode?: CrawlSitemapMode;
   sitemapReader?: CrawlSitemapReader;
+  baseline?: CrawlBaseline;
+  changedOnly?: boolean;
   now?: () => Date;
+}
+
+export interface CrawlBaseline {
+  source: string;
+  hashes: ReadonlyMap<string, string>;
 }
 
 export interface CrawlPage {
@@ -73,6 +81,9 @@ export interface CrawlPage {
   title: string;
   depth: number;
   content: string;
+  content_hash: string;
+  change_status?: CrawlChangeStatus;
+  previous_content_hash?: string;
   retrievedFrom?: FetchRetrievalSource;
   sources: CrawlPageSource[];
   content_truncated: boolean;
@@ -87,6 +98,9 @@ export interface CrawlPageSummary {
   depth: number;
   sources: CrawlPageSource[];
   content_length: number;
+  content_hash: string;
+  change_status?: CrawlChangeStatus;
+  previous_content_hash?: string;
   content_truncated: boolean;
   content_original_length?: number;
   retrieved_from?: FetchRetrievalSource;
@@ -113,6 +127,7 @@ export interface CrawlPlanSeed {
   title: string;
   depth: 0;
   content_length: number;
+  content_hash: string;
   content_truncated: boolean;
   content_original_length?: number;
   retrieved_from?: FetchRetrievalSource;
@@ -146,7 +161,8 @@ export interface CrawlPlanResult {
 }
 
 export interface CrawlPageIndex extends CrawlPageSummary {
-  path: string;
+  written: boolean;
+  path?: string;
 }
 
 export interface CrawlFailure {
@@ -182,11 +198,35 @@ export interface CrawlRunResult {
     cache_hits?: number;
     cache_misses?: number;
     cache_errors?: number;
+    added?: number;
+    modified?: number;
+    unchanged?: number;
+    removed?: number;
   };
   pages: CrawlPageSummary[];
   failures: CrawlFailure[];
   warnings: MapWarning[];
   retry_of?: RetrySummary;
+  baseline?: {
+    source: string;
+  };
+  changes?: CrawlChanges;
+}
+
+export interface CrawlContentVersion {
+  url: string;
+  content_hash: string;
+}
+
+export interface CrawlModifiedContent extends CrawlContentVersion {
+  previous_content_hash: string;
+}
+
+export interface CrawlChanges {
+  added: CrawlContentVersion[];
+  modified: CrawlModifiedContent[];
+  unchanged: CrawlContentVersion[];
+  removed: CrawlContentVersion[];
 }
 
 export interface CrawlOutputResult extends Omit<CrawlRunResult, "pages"> {

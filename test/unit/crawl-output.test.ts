@@ -2,6 +2,7 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { contentHash } from "../../src/content/hash.js";
 import type { CrawlPage, CrawlPlanResult, CrawlRunResult } from "../../src/crawl/types.js";
 import {
   createCrawlOutputWriter,
@@ -16,6 +17,7 @@ function page(overrides: Partial<CrawlPage> = {}): CrawlPage {
     title: "Example",
     depth: 0,
     content: "# Example",
+    content_hash: contentHash("# Example"),
     sources: ["seed_url"],
     content_truncated: false,
     content_original_length: 9,
@@ -51,6 +53,7 @@ function result(overrides: Partial<CrawlRunResult> = {}): CrawlRunResult {
         depth: 0,
         sources: ["seed_url"],
         content_length: 9,
+        content_hash: contentHash("# Example"),
         content_truncated: false,
       },
     ],
@@ -158,6 +161,7 @@ describe("formatCrawlPlanHuman", () => {
         title: "Example",
         depth: 0,
         content_length: 100,
+        content_hash: contentHash("seed"),
         content_truncated: false,
       },
       urls: [
@@ -222,6 +226,7 @@ describe("formatCrawlHuman", () => {
             depth: 0,
             sources: ["seed_url"],
             content_length: 9,
+            content_hash: contentHash("# Example"),
             content_truncated: false,
           },
           {
@@ -231,6 +236,7 @@ describe("formatCrawlHuman", () => {
             depth: 1,
             sources: ["markdown", "sitemap"],
             content_length: 20,
+            content_hash: contentHash("docs"),
             content_truncated: false,
           },
         ],
@@ -277,6 +283,31 @@ describe("formatCrawlHuman", () => {
 
     expect(output).toContain("Cache hits: 2");
     expect(output).toContain("Cache misses: 1");
+  });
+
+  it("reports incremental change counts against a baseline", () => {
+    const output = formatCrawlHuman(
+      result({
+        baseline: { source: "previous/crawl.json" },
+        changes: {
+          added: [{ url: "https://example.com/new", content_hash: "a".repeat(64) }],
+          modified: [],
+          unchanged: [],
+          removed: [],
+        },
+        stats: {
+          ...result().stats,
+          added: 1,
+          modified: 0,
+          unchanged: 0,
+          removed: 0,
+        },
+      }),
+      "changes",
+    );
+
+    expect(output).toContain("Baseline: previous/crawl.json");
+    expect(output).toContain("Changes: +1 ~0 =0 -0");
   });
 
   it("reports Sitemap mode, candidates, and warnings when present", () => {

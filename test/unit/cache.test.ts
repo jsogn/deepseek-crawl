@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FileFetchCache } from "../../src/cache/file-cache.js";
 import { resolveCacheDirectory } from "../../src/cache/paths.js";
+import { contentHash } from "../../src/content/hash.js";
 
 describe("FileFetchCache", () => {
   it("persists successful Fetch responses across cache instances", async () => {
@@ -18,6 +19,7 @@ describe("FileFetchCache", () => {
       version: 1,
       url: "https://example.com/page",
       fetched_at: fetchedAt,
+      content_hash: contentHash(response.content),
       response,
     });
     expect((await stat(root)).mode & 0o777).toBe(0o700);
@@ -42,6 +44,12 @@ describe("FileFetchCache", () => {
     expect(await readFile(join(root, files[0] ?? ""), "utf8")).toContain(
       "https://example.com/private/path",
     );
+    const parsed = JSON.parse(await readFile(join(root, files[0] ?? ""), "utf8"));
+    await writeFile(
+      join(root, files[0] ?? ""),
+      JSON.stringify({ ...parsed, content_hash: "0".repeat(64) }),
+    );
+    await expect(cache.read("https://example.com/private/path")).resolves.toBeNull();
   });
 
   it("clears the dedicated cache directory", async () => {

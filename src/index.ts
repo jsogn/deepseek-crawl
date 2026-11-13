@@ -30,8 +30,14 @@ export {
 export { FileFetchCache } from "./cache/file-cache.js";
 export { resolveCacheDirectory } from "./cache/paths.js";
 export type { FetchCache, FetchCacheEntry } from "./cache/types.js";
+export { compareCrawlBaseline, parseCrawlBaseline } from "./crawl/baseline.js";
 export type {
+  CrawlBaseline,
+  CrawlChangeStatus,
+  CrawlChanges,
+  CrawlContentVersion,
   CrawlFailure,
+  CrawlModifiedContent,
   CrawlOptions,
   CrawlOutputResult,
   CrawlPage,

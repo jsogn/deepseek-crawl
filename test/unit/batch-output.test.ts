@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { BatchFetchResult } from "../../src/batch/types.js";
+import { contentHash } from "../../src/content/hash.js";
 import { createBatchFetchOutputWriter, formatBatchFetchHuman } from "../../src/output/batch.js";
 
 function result(): BatchFetchResult {
@@ -19,6 +20,7 @@ function result(): BatchFetchResult {
         url: "https://example.com/",
         title: "Example",
         content_length: 9,
+        content_hash: contentHash("# Example"),
         content_truncated: false,
       },
     ],
@@ -36,6 +38,7 @@ describe("batch fetch output", () => {
       url: "https://example.com/",
       title: "Example",
       content: "# Example",
+      contentHash: contentHash("# Example"),
       contentTruncated: false,
       contentOriginalLength: 9,
     });

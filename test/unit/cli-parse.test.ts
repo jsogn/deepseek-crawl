@@ -194,6 +194,23 @@ describe("parseCli", () => {
       output: "out",
     });
 
+    expect(
+      parseCli([
+        "crawl",
+        "https://example.com",
+        "--baseline",
+        "previous/crawl.json",
+        "--changed-only",
+        "--output",
+        "changes",
+      ]),
+    ).toMatchObject({
+      kind: "crawl",
+      baseline: "previous/crawl.json",
+      changedOnly: true,
+      output: "changes",
+    });
+
     expect(parseCli(["crawl", "https://example.com", "-o", "out"])).toMatchObject({
       kind: "crawl",
       sitemapMode: "include",
@@ -347,6 +364,19 @@ describe("parseCli", () => {
       /retry|argument/i,
     ],
     [["crawl", "--retry-failed", "crawl.json", "-o", "retry", "--plan-only"], /retry|plan/i],
+    [["crawl", "https://example.com", "-o", "out", "--changed-only"], /baseline/i],
+    [
+      [
+        "crawl",
+        "https://example.com",
+        "-o",
+        "plan.json",
+        "--plan-only",
+        "--baseline",
+        "crawl.json",
+      ],
+      /baseline|plan/i,
+    ],
     [["setup"], /skills|subcommand/i],
     [["setup", "unknown"], /unknown|skills/i],
     [["setup", "skills", "--global", "--project"], /global|project/i],

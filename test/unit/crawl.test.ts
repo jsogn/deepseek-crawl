@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { executeCrawl, normalizeCrawlOptions } from "../../src/application/crawl.js";
 import { executeCrawlPlan } from "../../src/application/crawl-plan.js";
 import { executeCrawlRetry } from "../../src/application/crawl-retry.js";
+import { contentHash } from "../../src/content/hash.js";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
 
 const options = {
@@ -32,6 +33,88 @@ function client() {
 }
 
 describe("executeCrawl", () => {
+  it("classifies changes against a baseline and skips unchanged page writes", async () => {
+    const seedContent = "[A](/a) [B](/b)";
+    const aContent = "same";
+    const bContent = "new";
+    const written: string[] = [];
+    const result = await executeCrawl(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async ({ url }: { url: string }) => ({
+          title: url,
+          content:
+            url === "https://example.com/"
+              ? seedContent
+              : url === "https://example.com/a"
+                ? aContent
+                : bContent,
+        })),
+      },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 1,
+        maxPages: 3,
+        baseline: {
+          source: "previous/crawl.json",
+          hashes: new Map([
+            ["https://example.com/", contentHash(seedContent)],
+            ["https://example.com/a", contentHash(aContent)],
+            ["https://example.com/b", contentHash("old")],
+            ["https://example.com/removed", contentHash("removed")],
+          ]),
+        },
+        changedOnly: true,
+      },
+      async (page) => {
+        written.push(page.url);
+      },
+    );
+
+    expect(written).toEqual(["https://example.com/b"]);
+    expect(result.baseline).toEqual({ source: "previous/crawl.json" });
+    expect(result.changes).toEqual({
+      added: [],
+      modified: [
+        {
+          url: "https://example.com/b",
+          content_hash: contentHash(bContent),
+          previous_content_hash: contentHash("old"),
+        },
+      ],
+      unchanged: [
+        { url: "https://example.com/", content_hash: contentHash(seedContent) },
+        { url: "https://example.com/a", content_hash: contentHash(aContent) },
+      ],
+      removed: [
+        {
+          url: "https://example.com/removed",
+          content_hash: contentHash("removed"),
+        },
+      ],
+    });
+    expect(result.stats).toMatchObject({
+      added: 0,
+      modified: 1,
+      unchanged: 2,
+      removed: 1,
+    });
+  });
+
+  it("requires a baseline when changed-only is enabled", async () => {
+    await expect(
+      executeCrawl(
+        client(),
+        { url: "https://example.com/" },
+        {
+          ...options,
+          changedOnly: true,
+        },
+      ),
+    ).rejects.toThrow(/baseline/i);
+  });
+
   it("clamps resource limits and rejects invalid options before fetching", async () => {
     expect(
       normalizeCrawlOptions({

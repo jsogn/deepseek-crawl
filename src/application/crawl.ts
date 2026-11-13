@@ -1,4 +1,6 @@
 import { cacheStatsFor, fetchSourceFor } from "../cache/cached-gateway.js";
+import { contentHash } from "../content/hash.js";
+import { compareCrawlBaseline } from "../crawl/baseline.js";
 import { canonicalizeCrawlUrl, createCrawlPathFilter } from "../crawl/filters.js";
 import { extractMarkdownLinks, sameOrigin } from "../crawl/links.js";
 import { runLayeredTasks } from "../crawl/queue.js";
@@ -59,6 +61,10 @@ export function normalizeCrawlOptions(options: CrawlOptions): CrawlOptions {
     ignoreQueryParameters: options.ignoreQueryParameters ?? false,
     sitemapMode,
   };
+  if (options.baseline !== undefined) {
+    normalized.baseline = options.baseline;
+  }
+  normalized.changedOnly = options.changedOnly ?? false;
   if (options.sitemapReader !== undefined) {
     normalized.sitemapReader = options.sitemapReader;
   }
@@ -93,6 +99,9 @@ function summaryFor(page: CrawlPage): CrawlPageSummary {
     sources: page.sources,
     ...(page.retrievedFrom ? { retrieved_from: page.retrievedFrom } : {}),
     content_length: codepointLength(page.content),
+    content_hash: page.content_hash,
+    ...(page.change_status ? { change_status: page.change_status } : {}),
+    ...(page.previous_content_hash ? { previous_content_hash: page.previous_content_hash } : {}),
     content_truncated: page.content_truncated,
   };
   if (page.content_truncated) {
@@ -151,6 +160,9 @@ export async function executeCrawl(
   signal?: AbortSignal,
 ): Promise<CrawlRunResult> {
   const limits = normalizeCrawlOptions(options);
+  if (limits.changedOnly && !limits.baseline) {
+    throw new Error("Crawl --changed-only requires a baseline report.");
+  }
   const sitemapMode = limits.sitemapMode ?? "skip";
   if (sitemapMode !== "skip" && !limits.sitemapReader) {
     throw new Error("Sitemap reader is required when sitemap mode is include or only.");
@@ -199,6 +211,15 @@ export async function executeCrawl(
     let links: string[];
     try {
       const response = await client.fetch({ url }, crawlSignal);
+      const hash = contentHash(response.content);
+      const previousHash = limits.baseline?.hashes.get(url);
+      const changeStatus = limits.baseline
+        ? previousHash === undefined
+          ? "added"
+          : previousHash === hash
+            ? "unchanged"
+            : "modified"
+        : undefined;
       const retrievedFrom = fetchSourceFor(client, url);
       const bounded = boundFetchOutput({ ...response, url }, limits.pageContentLimit);
       page = {
@@ -207,6 +228,9 @@ export async function executeCrawl(
         title: bounded.title,
         depth,
         content: bounded.content,
+        content_hash: hash,
+        ...(changeStatus ? { change_status: changeStatus } : {}),
+        ...(previousHash ? { previous_content_hash: previousHash } : {}),
         ...(retrievedFrom ? { retrievedFrom } : {}),
         sources: pageSourcesInOrder(sourcesByUrl.get(url) ?? new Set<CrawlPageSource>()),
         content_truncated: bounded.truncated ?? false,
@@ -231,7 +255,7 @@ export async function executeCrawl(
       return { url, summary: null, links: [], error };
     }
     const summary = summaryFor(page);
-    if (onPage) {
+    if (onPage && (page.change_status !== "unchanged" || !limits.changedOnly)) {
       try {
         await onPage(page);
       } catch (error) {
@@ -360,6 +384,7 @@ export async function executeCrawl(
   failures.sort((left, right) => left.depth - right.depth || left.url.localeCompare(right.url));
 
   const cacheStats = cacheStatsFor(client);
+  const changes = limits.baseline ? compareCrawlBaseline(pages, seen, limits.baseline) : undefined;
   return {
     version: 1,
     seed_url: seed.href,
@@ -386,10 +411,20 @@ export async function executeCrawl(
             cache_errors: cacheStats.errors,
           }
         : {}),
+      ...(changes
+        ? {
+            added: changes.added.length,
+            modified: changes.modified.length,
+            unchanged: changes.unchanged.length,
+            removed: changes.removed.length,
+          }
+        : {}),
       ...(options.sitemapMode === undefined ? {} : { sitemap_candidates: sitemapCandidates }),
     },
     pages,
     failures,
     warnings,
+    ...(limits.baseline ? { baseline: { source: limits.baseline.source } } : {}),
+    ...(changes ? { changes } : {}),
   };
 }

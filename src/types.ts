@@ -49,6 +49,7 @@ export interface SearchOutput extends Record<string, unknown> {
 
 export interface FetchOutput extends RawFetchResponse {
   url: string;
+  content_hash?: string;
   retrieved_from?: FetchRetrievalSource;
   truncated?: boolean;
   original_length?: number;

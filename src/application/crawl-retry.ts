@@ -1,4 +1,5 @@
 import { cacheStatsFor, fetchSourceFor } from "../cache/cached-gateway.js";
+import { contentHash } from "../content/hash.js";
 import { canonicalizeCrawlUrl } from "../crawl/filters.js";
 import { sameOrigin } from "../crawl/links.js";
 import { runLayeredTasks } from "../crawl/queue.js";
@@ -56,6 +57,7 @@ function summaryFor(page: CrawlPage): CrawlPageSummary {
     sources: page.sources,
     ...(page.retrievedFrom ? { retrieved_from: page.retrievedFrom } : {}),
     content_length: codepointLength(page.content),
+    content_hash: page.content_hash,
     content_truncated: page.content_truncated,
     ...(page.content_truncated ? { content_original_length: page.content_original_length } : {}),
     ...(page.retryOf ? { retry_of: page.retryOf } : {}),
@@ -155,6 +157,7 @@ export async function executeCrawlRetry(
       run: async (request) => {
         try {
           const response = await client.fetch({ url: request.url }, combinedSignal);
+          const hash = contentHash(response.content);
           const retrievedFrom = fetchSourceFor(client, request.url);
           const bounded = boundFetchOutput(
             { ...response, url: request.url },
@@ -166,6 +169,7 @@ export async function executeCrawlRetry(
             title: bounded.title,
             depth: request.depth,
             content: bounded.content,
+            content_hash: hash,
             ...(retrievedFrom ? { retrievedFrom } : {}),
             sources: request.sources,
             content_truncated: bounded.truncated ?? false,

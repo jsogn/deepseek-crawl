@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +18,7 @@ import { FileFetchCache } from "../cache/file-cache.js";
 import { resolveCacheDirectory } from "../cache/paths.js";
 import type { FetchCache } from "../cache/types.js";
 import { loadConfig } from "../config.js";
+import { parseCrawlBaseline } from "../crawl/baseline.js";
 import { readSecret } from "../credentials/input.js";
 import { type CredentialStore, createCredentialStore } from "../credentials/store.js";
 import { DeepSeekClient } from "../deepseek/client.js";
@@ -130,6 +132,8 @@ Options:
   --max-pages <1..100>
   --cache-ttl <1..31536000>
   --fresh
+  --baseline <crawl.json|dir>
+  --changed-only
   --concurrency <1..5>
   --delay-ms <0..5000>
   --include-paths <patterns>
@@ -146,6 +150,9 @@ Sitemap only; it does not fetch discovered child pages.
 
 With --retry-failed, Crawl reads settings from the existing report and retries
 only its failed pages into a new output directory.
+
+With --baseline and --changed-only, Crawl writes only added or modified pages
+while retaining the complete change classification in crawl.json.
 `,
   doctor: `Usage: deepseek-crawl doctor [--live] [--json]
 
@@ -421,6 +428,21 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
     deps,
   );
   const reader = deps.sitemapReader ?? new SitemapReader();
+  let baseline: ReturnType<typeof parseCrawlBaseline> | undefined;
+  if (command.baseline) {
+    let baselinePath = command.baseline;
+    try {
+      if ((await stat(baselinePath)).isDirectory()) {
+        baselinePath = join(baselinePath, "crawl.json");
+      }
+    } catch {
+      // The bounded reader below reports missing or unreadable paths.
+    }
+    baseline = parseCrawlBaseline(
+      await readJsonFileBounded(baselinePath, "Crawl baseline"),
+      baselinePath,
+    );
+  }
   const crawlOptions = {
     maxDepth: command.maxDepth,
     maxPages: command.maxPages,
@@ -433,6 +455,8 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
     ignoreQueryParameters: command.ignoreQueryParameters ?? false,
     sitemapMode: command.sitemapMode,
     sitemapReader: reader,
+    ...(baseline ? { baseline } : {}),
+    changedOnly: command.changedOnly ?? false,
   };
 
   if (command.planOnly) {
@@ -444,7 +468,9 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
     return 0;
   }
 
-  const writer = await createCrawlOutputWriter(command.output);
+  const writer = await createCrawlOutputWriter(command.output, {
+    allowMissingPages: command.changedOnly ?? false,
+  });
 
   try {
     const result = await executeCrawl(

@@ -13,6 +13,7 @@ export interface BatchFetchPage {
   url: string;
   title: string;
   content: string;
+  contentHash: string;
   contentTruncated: boolean;
   contentOriginalLength: number;
   retrievedFrom?: FetchRetrievalSource;
@@ -24,6 +25,7 @@ export interface BatchFetchPageSummary {
   url: string;
   title: string;
   content_length: number;
+  content_hash: string;
   content_truncated: boolean;
   content_original_length?: number;
   retrieved_from?: FetchRetrievalSource;

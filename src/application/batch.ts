@@ -6,6 +6,7 @@ import type {
   BatchFetchResult,
 } from "../batch/types.js";
 import { cacheStatsFor, fetchSourceFor } from "../cache/cached-gateway.js";
+import { contentHash } from "../content/hash.js";
 import { normalizeHttpUrl } from "../crawl/links.js";
 import { runLayeredTasks } from "../crawl/queue.js";
 import { DeepSeekError } from "../deepseek/errors.js";
@@ -135,6 +136,7 @@ function summaryFor(page: BatchFetchPage): BatchFetchPageSummary {
     url: page.url,
     title: page.title,
     content_length: codepointLength(page.content),
+    content_hash: page.contentHash,
     content_truncated: page.contentTruncated,
   };
   if (page.contentTruncated) {
@@ -183,6 +185,7 @@ async function executeBatchRequests(
     run: async (request) => {
       try {
         const response = await client.fetch({ url: request.url }, combinedSignal);
+        const hash = contentHash(response.content);
         const retrievedFrom = fetchSourceFor(client, request.url);
         const bounded = boundFetchOutput({ ...response, url: request.url }, settings.maxChars);
         const page: BatchFetchPage = {
@@ -190,6 +193,7 @@ async function executeBatchRequests(
           url: request.url,
           title: bounded.title,
           content: bounded.content,
+          contentHash: hash,
           contentTruncated: bounded.truncated ?? false,
           contentOriginalLength: bounded.original_length ?? codepointLength(bounded.content),
           ...(retrievedFrom ? { retrievedFrom } : {}),

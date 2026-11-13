@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, parse, resolve } from "node:path";
+import { contentHash } from "../content/hash.js";
 import type { FetchCache, FetchCacheEntry } from "./types.js";
 
 const MAX_CACHE_ENTRY_BYTES = 16 * 1024 * 1024;
@@ -20,6 +21,7 @@ function validEntry(value: unknown, url: string): value is FetchCacheEntry {
     entry.version === 1 &&
     entry.url === url &&
     typeof entry.fetched_at === "string" &&
+    typeof entry.content_hash === "string" &&
     entry.response !== null &&
     typeof entry.response === "object" &&
     typeof entry.response.title === "string" &&
@@ -60,7 +62,9 @@ export class FileFetchCache implements FetchCache {
     }
     try {
       const value = JSON.parse(content) as unknown;
-      return validEntry(value, url) ? value : null;
+      return validEntry(value, url) && value.content_hash === contentHash(value.response.content)
+        ? value
+        : null;
     } catch {
       return null;
     }
@@ -74,7 +78,17 @@ export class FileFetchCache implements FetchCache {
     await this.#ensureLocation();
     const target = entryPath(this.location, url);
     const temporary = join(this.location, `.${basename(target)}.${randomUUID()}.tmp`);
-    const content = `${JSON.stringify({ version: 1, url, fetched_at: fetchedAt, response }, null, 2)}\n`;
+    const content = `${JSON.stringify(
+      {
+        version: 1,
+        url,
+        fetched_at: fetchedAt,
+        content_hash: contentHash(response.content),
+        response,
+      },
+      null,
+      2,
+    )}\n`;
     if (Buffer.byteLength(content, "utf8") > MAX_CACHE_ENTRY_BYTES) {
       throw new Error("Fetch cache entry exceeds the 16 MiB limit.");
     }

@@ -4,6 +4,7 @@ export interface FetchCacheEntry {
   version: 1;
   url: string;
   fetched_at: string;
+  content_hash: string;
   response: RawFetchResponse;
 }
 

@@ -67,6 +67,8 @@ export type ParsedCommand =
       planOnly: boolean;
       cacheTtl?: number;
       fresh?: boolean;
+      baseline?: string;
+      changedOnly?: boolean;
       output: string;
       json: boolean;
     }
@@ -366,6 +368,8 @@ export function parseCli(argv: string[]): ParsedCommand {
           options: {
             "max-depth": { type: "string" },
             "max-pages": { type: "string" },
+            baseline: { type: "string" },
+            "changed-only": { type: "boolean" },
             "cache-ttl": { type: "string" },
             fresh: { type: "boolean" },
             concurrency: { type: "string" },
@@ -407,6 +411,8 @@ export function parseCli(argv: string[]): ParsedCommand {
             parsed.values["include-paths"] !== undefined ||
             parsed.values["exclude-paths"] !== undefined ||
             parsed.values["ignore-query-parameters"] ||
+            parsed.values.baseline !== undefined ||
+            parsed.values["changed-only"] ||
             parsed.values.sitemap !== undefined;
           if (incompatible) {
             throw new CliUsageError("Crawl retry uses settings from the existing report.");
@@ -418,6 +424,17 @@ export function parseCli(argv: string[]): ParsedCommand {
             ...parseCacheOptions(parsed.values["cache-ttl"], parsed.values.fresh),
             json: parsed.values.json ?? false,
           };
+        }
+        const baseline = parsed.values.baseline?.trim();
+        const changedOnly = parsed.values["changed-only"] ?? false;
+        if (parsed.values.baseline !== undefined && !baseline) {
+          throw new CliUsageError("baseline requires a report path.");
+        }
+        if (changedOnly && !baseline) {
+          throw new CliUsageError("--changed-only requires --baseline.");
+        }
+        if (parsed.values["plan-only"] && baseline) {
+          throw new CliUsageError("--baseline cannot be used with --plan-only.");
         }
         return {
           kind: "crawl",
@@ -451,6 +468,7 @@ export function parseCli(argv: string[]): ParsedCommand {
               : parseSitemapMode(parsed.values.sitemap),
           planOnly: parsed.values["plan-only"] ?? false,
           ...parseCacheOptions(parsed.values["cache-ttl"], parsed.values.fresh),
+          ...(baseline ? { baseline, changedOnly } : {}),
           output,
           json: parsed.values.json ?? false,
         };

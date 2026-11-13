@@ -1,4 +1,5 @@
 import { cacheStatsFor, fetchSourceFor } from "../cache/cached-gateway.js";
+import { contentHash } from "../content/hash.js";
 import { canonicalizeCrawlUrl, createCrawlPathFilter } from "../crawl/filters.js";
 import { sameOrigin, visitMarkdownLinks } from "../crawl/links.js";
 import type {
@@ -131,6 +132,7 @@ export async function executeCrawlPlan(
   };
 
   const response = await client.fetch({ url: seed.href }, planSignal);
+  const hash = contentHash(response.content);
   const retrievedFrom = fetchSourceFor(client, seed.href);
   const bounded = boundFetchOutput({ ...response, url: seed.href }, limits.pageContentLimit);
   if (limits.maxDepth > 0) {
@@ -210,6 +212,7 @@ export async function executeCrawlPlan(
       title: bounded.title,
       depth: 0,
       content_length: codepointLength(bounded.content),
+      content_hash: hash,
       content_truncated: bounded.truncated ?? false,
       ...(retrievedFrom ? { retrieved_from: retrievedFrom } : {}),
       ...(bounded.truncated

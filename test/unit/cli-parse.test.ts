@@ -1,0 +1,68 @@
+import { describe, expect, it } from "vitest";
+import { CliUsageError, parseCli } from "../../src/cli/parse.js";
+
+describe("parseCli", () => {
+  it("parses search defaults and explicit options", () => {
+    expect(
+      parseCli([
+        "search",
+        "DeepSeek docs",
+        "--count",
+        "3",
+        "--content",
+        "--max-content-chars",
+        "0",
+        "--ori-question",
+        "What is new?",
+        "--localization",
+        "203.0.113.7",
+        "--json",
+        "--output",
+        "out.json",
+      ]),
+    ).toEqual({
+      kind: "search",
+      query: "DeepSeek docs",
+      count: 3,
+      needContent: true,
+      maxContentChars: 0,
+      oriQuestion: "What is new?",
+      localization: "203.0.113.7",
+      json: true,
+      output: "out.json",
+    });
+  });
+
+  it("parses fetch options", () => {
+    expect(parseCli(["fetch", "https://example.com", "--max-chars", "20", "--json"])).toEqual({
+      kind: "fetch",
+      url: "https://example.com",
+      maxChars: 20,
+      json: true,
+    });
+  });
+
+  it("parses doctor and help", () => {
+    expect(parseCli(["doctor", "--live", "--json"])).toEqual({
+      kind: "doctor",
+      live: true,
+      json: true,
+    });
+    expect(parseCli(["search", "--help"])).toEqual({ kind: "help", command: "search" });
+    expect(parseCli(["--version"])).toEqual({ kind: "version" });
+  });
+
+  it.each([
+    [["search"], /query is required/i],
+    [["fetch"], /url is required/i],
+    [["search", "x", "--count", "0"], /count/i],
+    [["search", "x", "--count", "1.5"], /count/i],
+    [["search", "x", "--max-content-chars=-1"], /content limit/i],
+    [["fetch", "https://example.com", "--max-chars=1000001"], /content limit/i],
+    [["unknown"], /unknown command/i],
+    [["search", "x", "--unknown"], /unknown option/i],
+  ])("rejects invalid input %#", (argv, message) => {
+    expect(() => parseCli(argv as string[])).toThrow(CliUsageError);
+    expect(() => parseCli(argv as string[])).toThrow(message);
+  });
+});

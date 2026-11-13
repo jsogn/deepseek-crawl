@@ -134,6 +134,9 @@ Default locations:
 The directory is `0700`; entry files are `0600`. Cache read/write failures do
 not fail the web request and increment `cache_errors`.
 
+Cache hits bypass the API delay scheduler. Only cache misses are throttled by
+`--delay-ms` and network concurrency.
+
 ## Map
 
 ```text

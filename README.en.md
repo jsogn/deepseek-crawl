@@ -234,6 +234,9 @@ refreshes the cache. Only successful Fetch responses are cached.
 `retrieved_from: api|cache` reports page provenance. Batch, Crawl, Plan, and
 Retry also report `cache_hits`, `cache_misses`, and `cache_errors`.
 
+Cache hits are resolved before entering the network scheduler, so API
+`--delay-ms` and network concurrency waits apply only to cache misses.
+
 Default cache locations:
 
 - macOS: `~/Library/Caches/deepseek-crawl`.

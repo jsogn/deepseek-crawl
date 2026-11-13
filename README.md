@@ -251,6 +251,9 @@ deepseek-crawl fetch "https://api-docs.deepseek.com/" \
 Plan 和 Retry 还会在 `stats` 中提供 `cache_hits`、`cache_misses` 和
 `cache_errors`。
 
+缓存命中在进入网络 scheduler 前解析，不应用 API 的 `--delay-ms` 和网络并发等待；
+只有 cache miss 会进入 DeepSeek 请求限速。
+
 默认缓存目录：
 
 - macOS：`~/Library/Caches/deepseek-crawl`。

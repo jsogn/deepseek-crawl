@@ -23,8 +23,8 @@ Required environment:
 
 ```text
 No URL → Search → Fetch selected URL(s)
-Known site, unknown page → Map --search → Fetch selected URL(s)
-Known docs section requiring many pages → bounded Crawl
+Known site, unknown page → Map --search → Batch Fetch selected URL(s)
+Known docs section requiring many pages → Sitemap-assisted bounded Crawl
 ```
 
 ## Search
@@ -148,6 +148,7 @@ deepseek-crawl crawl <url>
   [--include-paths <patterns>]
   [--exclude-paths <patterns>]
   [--ignore-query-parameters]
+  [--sitemap <include|only|skip>]
   --output, -o <dir>
   [--json]
 ```
@@ -158,10 +159,21 @@ Defaults:
 - pages: `20`
 - concurrency: `2`
 - delay: `250 ms`
+- Sitemap mode: `include`
 
-The seed is depth `0`. Crawl remains inside the exact origin, follows Markdown
-links from DeepSeek Fetch, processes deterministic depth layers, and records
-partial page failures.
+The seed is depth `0`. CLI Crawl merges same-origin Sitemap URLs with Markdown
+links from DeepSeek Fetch, remains inside the exact origin, processes
+deterministic depth layers, and records partial page failures.
+
+Sitemap modes:
+
+- `include`: merge Sitemap URLs and seed-page Markdown links.
+- `only`: ignore Markdown links and use Sitemap URLs only.
+- `skip`: use Markdown links only, preserving `0.6.0` behavior.
+
+Sitemap URLs are enqueued at depth `1` and obey origin, path, query, depth,
+page, and discovery limits. Sitemap failures are warnings; seed failure is
+fatal. MCP Crawl does not expose Sitemap options and remains Markdown-only.
 
 Path filters match the URL pathname. Prefix matching is used without `*` or `?`;
 includes are ORed, excludes win, and the seed bypasses filters.
@@ -176,8 +188,8 @@ Output:
     0001-page.md
 ```
 
-Read `crawl.json` first. It contains page paths, failures, settings, and stats,
-but not duplicate page bodies.
+Read `crawl.json` first. It contains page paths, failures, settings, stats,
+Sitemap mode/candidate metadata, and `warnings`, but not duplicate page bodies.
 
 ## Output Rules
 
@@ -185,7 +197,8 @@ but not duplicate page bodies.
 - Prefer `--json` for automation and `-o` for reusable results.
 - New Map files and Crawl directories are never overwritten.
 - Search and Fetch `-o` use the existing compatible overwrite behavior.
-- Warnings go to stderr and are also retained in JSON where applicable.
+- Map warnings go to stderr and are retained in JSON. Crawl warnings are shown
+  in human summary output and retained in `crawl.json`.
 - Use bounded file reads such as `jq`, `head`, `rg`, and `wc`.
 
 ## Hard Limits
@@ -214,7 +227,8 @@ but not duplicate page bodies.
   `PATH`.
 - `DEEPSEEK_API_KEY is required` — configure the environment; never pass the key
   as a CLI flag.
-- Sitemap warnings — Map may still succeed from seed-page links.
+- Sitemap warnings — Map may still succeed from seed-page links, and CLI Crawl
+  may still succeed from whichever discovery source is available.
 - Private/reserved Sitemap target — Map rejects direct network access to
   non-public addresses.
 - Map or Crawl billing warning — reduce `--limit`, `--max-pages`, or depth before

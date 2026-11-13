@@ -255,7 +255,8 @@ deepseek-crawl fetch \
 Retry reads the existing `fetch.json`, ignores successful pages, and requests
 only normalized failed URLs. Output goes to a new directory and preserves
 `retry_of`, original indexes, and previous failure reasons. Invalid URLs are
-recorded under `retry_of.skipped`.
+recorded under `retry_of.skipped`; duplicate failures are counted under
+`retry_of.deduplicated`.
 
 ### Map
 
@@ -347,6 +348,11 @@ identifies URLs delayed by the page limit. `filtered` identifies URLs omitted
 because of cross-origin, path, or discovery limits. The plan covers the initial
 depth-1 frontier; it is not a recursive inventory of deeper URLs.
 
+For link-dense pages, Plan retains only the discovery limit plus 1,000
+diagnostic candidates. Input beyond that window is not retained and is reported
+with `diagnostics_truncated`; stats then describe the retained window rather
+than a complete inventory.
+
 ```bash
 deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
   --max-depth 1 \
@@ -400,7 +406,8 @@ Crawl Retry does not fetch the seed or previously successful pages. It retries
 only failed URLs that remain same-origin and within the report's depth limit.
 Original `index`, `depth`, `sources`, and failure reasons are preserved, and the
 original `max_pages` remains a hard bound. Cross-origin, invalid, and over-limit
-items are recorded under `retry_of.skipped`.
+items are recorded under `retry_of.skipped`; duplicate failures are counted in
+`retry_of.deduplicated`.
 
 ### Doctor
 
@@ -528,6 +535,8 @@ MCP structured content also has a 100,000-code-point aggregate cap.
 | Area                         | Hard limit                    |
 | ---------------------------- | ----------------------------- |
 | DeepSeek Fetch response body | 8 MiB                         |
+| CLI Batch input file/report  | 8 MiB                         |
+| Batch Fetch URLs             | 10,000                        |
 | Crawl page content           | 1,000,000 Unicode code points |
 | Crawl discovery, CLI         | 10,000 unique URLs            |
 | Crawl discovery, MCP         | 2,000 unique URLs             |

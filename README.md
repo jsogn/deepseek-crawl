@@ -269,7 +269,7 @@ deepseek-crawl fetch \
 
 Retry 会读取既有 `fetch.json`，忽略已成功页面，只请求可规范化的失败 URL。输出仍
 写入一个全新的目录，并保留 `retry_of`、原始索引和上次失败原因；无效 URL 会进入
-`retry_of.skipped`。
+`retry_of.skipped`，重复失败计入 `retry_of.deduplicated`。
 
 ## Map
 
@@ -356,6 +356,9 @@ Batch Fetch 的输入；`deferred` 说明被页数限制延后的 URL，`filtere
 cross-origin、路径过滤或发现数量限制而省略的 URL。Plan 描述初始深度 1
 frontier，不代表递归发现全部深层 URL。
 
+链接非常密集时，Plan 只保留 discovery limit 加 1,000 条诊断候选。超出窗口后不再
+保存明细，只设置 `diagnostics_truncated`；此时统计描述保留窗口，不保证全量精确。
+
 ```bash
 deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
   --max-depth 1 \
@@ -405,7 +408,8 @@ deepseek-crawl crawl \
 
 Crawl Retry 不读取种子页或已成功页面，只重试同一 origin 且仍在原报告 depth 范围内
 的失败 URL。原始 `index`、`depth`、`sources` 和失败原因会保留，并受原报告的
-`max_pages` 限制。跨域、无效或超出限制的项目进入 `retry_of.skipped`。
+`max_pages` 限制。跨域、无效或超出限制的项目进入 `retry_of.skipped`，重复项
+计入 `retry_of.deduplicated`。
 
 ## 计费
 
@@ -441,6 +445,8 @@ MCP 不写本地文件。结构化内容有总长度限制，页面正文被视�
 | 范围                     | 硬限制                 |
 | ------------------------ | ---------------------- |
 | DeepSeek Fetch 响应体    | 8 MiB                  |
+| CLI Batch 输入文件/报告  | 8 MiB                  |
+| Batch Fetch URL 数       | 10,000                 |
 | Crawl 单页内容           | 1,000,000 Unicode 字符 |
 | CLI Crawl URL 发现       | 10,000                 |
 | MCP Crawl URL 发现       | 2,000                  |

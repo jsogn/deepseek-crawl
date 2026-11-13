@@ -103,7 +103,8 @@ publishes the report and exits `1`.
 Retry mode reads an existing `fetch.json`, retries only its failed URLs, and
 preserves each available original index and previous failure under `retry_of`.
 Invalid or unsupported failures are listed in `retry_of.skipped`. The retry
-output directory must be new.
+output directory must be new. Duplicate failures are counted in
+`retry_of.deduplicated`.
 
 ## Map
 
@@ -220,6 +221,10 @@ The plan contains:
   counts.
 - `warnings` and `diagnostics_truncated`.
 
+Link-dense plans retain at most the discovery limit plus 1,000 diagnostic
+candidates. When `diagnostics_truncated` is true, stats describe the retained
+window rather than a complete inventory.
+
 Plan covers the initial frontier only. Deeper pages require fetching the
 selected child pages.
 
@@ -236,6 +241,7 @@ deepseek-crawl crawl --retry-failed crawl.json -o retry-output --json
 - Retry requests remain same-origin and within the original depth limit.
 - Original `index`, `depth`, `sources`, and failure reason are retained.
 - The original `max_pages` bounds the number of retry requests.
+- Duplicate failed URLs are counted in `retry_of.deduplicated`.
 - Invalid, cross-origin, depth-exceeding, or over-limit failures are listed in
   `retry_of.skipped`; `retry_of.truncated` reports the page-limit case.
 - `--concurrency`, `--delay-ms`, filters, Sitemap mode, and plan mode cannot be
@@ -273,6 +279,8 @@ but not duplicate page bodies.
 | Resource            | Limit                 |
 | ------------------- | --------------------- |
 | Fetch response body | 8 MiB                 |
+| Batch CLI input     | 8 MiB                 |
+| Batch Fetch URLs    | 10,000                |
 | Crawl page content  | 1,000,000 code points |
 | Crawl discovery CLI | 10,000 URLs           |
 | Map candidates      | 10,000 URLs           |

@@ -126,6 +126,7 @@ describe("parseCli", () => {
       includePaths: ["/docs/*", "/api/?"],
       excludePaths: ["/docs/private/*"],
       ignoreQueryParameters: true,
+      sitemapMode: "include",
       output: "out",
       json: true,
     });
@@ -137,12 +138,22 @@ describe("parseCli", () => {
       maxPages: 20,
       concurrency: 2,
       delayMs: 250,
+      sitemapMode: "include",
       output: "out",
       json: false,
     });
 
+    expect(
+      parseCli(["crawl", "https://example.com", "--sitemap", "only", "--output", "out"]),
+    ).toMatchObject({
+      kind: "crawl",
+      sitemapMode: "only",
+      output: "out",
+    });
+
     expect(parseCli(["crawl", "https://example.com", "-o", "out"])).toMatchObject({
       kind: "crawl",
+      sitemapMode: "include",
       output: "out",
     });
   });
@@ -220,6 +231,7 @@ describe("parseCli", () => {
     [["crawl", "https://example.com", "--output", "out", "--max-pages", "0"], /max-pages/i],
     [["crawl", "https://example.com", "--output", "out", "--concurrency", "6"], /concurrency/i],
     [["crawl", "https://example.com", "--output", "out", "--delay-ms", "5001"], /delay-ms/i],
+    [["crawl", "https://example.com", "--output", "out", "--sitemap", "sometimes"], /sitemap/i],
     [["setup"], /skills|subcommand/i],
     [["setup", "unknown"], /unknown|skills/i],
     [["setup", "skills", "--global", "--project"], /global|project/i],

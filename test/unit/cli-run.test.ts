@@ -53,7 +53,20 @@ function dependencies(
   };
 }
 
+function sitemap(urls: URL[] = []) {
+  return {
+    read: vi.fn(async () => ({ urls, warnings: [], truncated: false })),
+  };
+}
+
 describe("runCli", () => {
+  it("documents the Crawl Sitemap flag", async () => {
+    const { deps, stdout } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(await runCli(["help", "crawl"], deps)).toBe(0);
+    expect(stdout.value()).toContain("--sitemap <include|only|skip> (default: include)");
+  });
+
   it("renders deduplicated Map URLs in sorted human order", async () => {
     const sitemapReader = {
       read: vi.fn(async () => ({
@@ -165,9 +178,10 @@ describe("runCli", () => {
       search: vi.fn(),
       fetch: vi.fn(async ({ url }: { url: string }) => ({
         title: url.endsWith("/") ? "Example" : "Next",
-        content: url.endsWith("/") ? "[Next](/next)" : "# Next",
+        content: url.endsWith("/") ? "No Markdown links" : "# Next",
       })),
     };
+    const sitemapReader = sitemap([new URL("https://example.com/next")]);
     const { deps, stdout, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
 
     expect(
@@ -184,14 +198,22 @@ describe("runCli", () => {
           "--output",
           output,
         ],
-        { ...deps, crawlClient },
+        { ...deps, crawlClient, sitemapReader },
       ),
     ).toBe(0);
     expect(crawlClient.fetch).toHaveBeenCalledTimes(2);
+    expect(sitemapReader.read).toHaveBeenCalledOnce();
     expect(JSON.parse(await readFile(join(output, "crawl.json"), "utf8"))).toMatchObject({
       seed_url: "https://example.com/",
-      stats: { discovered: 2, fetched: 2, failed: 0 },
+      settings: { sitemap_mode: "include" },
+      stats: {
+        discovered: 2,
+        fetched: 2,
+        failed: 0,
+        sitemap_candidates: 1,
+      },
       pages: [{ path: "pages/0001-page.md" }, { path: "pages/0002-next.md" }],
+      warnings: [],
     });
     expect(await readFile(join(output, "pages", "0001-page.md"), "utf8")).toContain("# Example");
     expect(stdout.value()).toContain(`Output: ${output}`);
@@ -302,6 +324,7 @@ describe("runCli", () => {
       })),
     };
     const { deps } = dependencies(vi.fn() as unknown as typeof fetch);
+    const sitemapReader = sitemap();
 
     expect(
       await runCli(
@@ -320,7 +343,7 @@ describe("runCli", () => {
           "--output",
           output,
         ],
-        { ...deps, crawlClient },
+        { ...deps, crawlClient, sitemapReader },
       ),
     ).toBe(0);
     const report = JSON.parse(await readFile(join(output, "crawl.json"), "utf8")) as {
@@ -340,10 +363,12 @@ describe("runCli", () => {
     const controller = new AbortController();
     controller.abort();
     const { deps, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+    const sitemapReader = sitemap();
 
     expect(
       await runCli(["crawl", "https://example.com", "--output", output], {
         ...deps,
+        sitemapReader,
         signal: controller.signal,
       }),
     ).toBe(130);
@@ -358,17 +383,98 @@ describe("runCli", () => {
       search: vi.fn(),
       fetch: vi.fn(async () => ({ title: "Example", content: "No links." })),
     };
+    const sitemapReader = sitemap();
     const { deps, stdout } = dependencies(vi.fn() as unknown as typeof fetch);
 
     expect(
       await runCli(
         ["crawl", "https://example.com", "--max-depth", "0", "--output", output, "--json"],
-        { ...deps, crawlClient },
+        { ...deps, crawlClient, sitemapReader },
       ),
     ).toBe(0);
     expect(JSON.parse(stdout.value())).toMatchObject({
       seed_url: "https://example.com/",
       pages: [{ path: "pages/0001-page.md", content_length: 9 }],
+    });
+  });
+
+  it("records a Sitemap warning without failing Crawl", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-sitemap-warning-"));
+    const output = join(root, "crawl");
+    const crawlClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async ({ url }: { url: string }) => ({
+        title: url,
+        content: url === "https://example.com/" ? "[Next](/next)" : "Body",
+      })),
+    };
+    const sitemapReader = {
+      read: vi.fn(async () => Promise.reject(new Error("Sitemap missing"))),
+    };
+    const { deps, stdout, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        [
+          "crawl",
+          "https://example.com/",
+          "--max-depth",
+          "1",
+          "--max-pages",
+          "2",
+          "--delay-ms",
+          "0",
+          "--output",
+          output,
+        ],
+        { ...deps, crawlClient, sitemapReader },
+      ),
+    ).toBe(0);
+    expect(JSON.parse(await readFile(join(output, "crawl.json"), "utf8"))).toMatchObject({
+      warnings: [
+        {
+          code: "sitemap_unavailable",
+          message: "Could not read Sitemap: Sitemap missing",
+        },
+      ],
+    });
+    expect(stdout.value()).toContain("Warnings: 1");
+    expect(stdout.value()).toContain(
+      "sitemap_unavailable: Could not read Sitemap: Sitemap missing",
+    );
+    expect(stderr.value()).toBe("");
+  });
+
+  it("does not read Sitemap when Crawl uses skip mode", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-sitemap-skip-"));
+    const output = join(root, "crawl");
+    const crawlClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async () => ({ title: "Example", content: "No links" })),
+    };
+    const sitemapReader = sitemap([new URL("https://example.com/unused")]);
+    const { deps } = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        [
+          "crawl",
+          "https://example.com/",
+          "--sitemap",
+          "skip",
+          "--max-depth",
+          "1",
+          "--output",
+          output,
+        ],
+        { ...deps, crawlClient, sitemapReader },
+      ),
+    ).toBe(0);
+    expect(sitemapReader.read).not.toHaveBeenCalled();
+    expect(JSON.parse(await readFile(join(output, "crawl.json"), "utf8"))).toMatchObject({
+      settings: { sitemap_mode: "skip" },
+      stats: { sitemap_candidates: 0 },
+      warnings: [],
     });
   });
 

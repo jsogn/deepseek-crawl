@@ -159,7 +159,7 @@ export async function createCrawlOutputWriter(finalDirectory: string): Promise<C
 }
 
 export function formatCrawlHuman(result: CrawlRunResult, outputDirectory: string): string {
-  return [
+  const lines = [
     `Seed: ${result.seed_url}`,
     `Depth: ${result.settings.max_depth}`,
     `Page limit: ${result.settings.max_pages}`,
@@ -170,6 +170,19 @@ export function formatCrawlHuman(result: CrawlRunResult, outputDirectory: string
     `Content truncated: ${result.stats.content_truncated}`,
     `Page limit reached: ${result.stats.limit_reached ? "yes" : "no"}`,
     `Discovery limit reached: ${result.stats.discovery_limit_reached ? "yes" : "no"}`,
-    `Output: ${outputDirectory}`,
-  ].join("\n");
+  ];
+  if (result.settings.sitemap_mode !== undefined) {
+    lines.push(`Sitemap: ${result.settings.sitemap_mode}`);
+  }
+  if (result.stats.sitemap_candidates !== undefined) {
+    lines.push(`Sitemap candidates: ${result.stats.sitemap_candidates}`);
+  }
+  if (result.warnings.length > 0) {
+    lines.push(`Warnings: ${result.warnings.length}`);
+    for (const warning of result.warnings) {
+      lines.push(`- ${warning.code}: ${warning.message}`);
+    }
+  }
+  lines.push(`Output: ${outputDirectory}`);
+  return lines.join("\n");
 }

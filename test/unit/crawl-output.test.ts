@@ -56,6 +56,7 @@ function result(overrides: Partial<CrawlRunResult> = {}): CrawlRunResult {
         message: "Missing",
       },
     ],
+    warnings: [],
     ...overrides,
   };
 }
@@ -140,5 +141,35 @@ describe("formatCrawlHuman", () => {
     expect(formatCrawlHuman(result(), "crawl-output")).toContain("Failed: 1");
     expect(formatCrawlHuman(result(), "crawl-output")).toContain("Page limit reached: yes");
     expect(formatCrawlHuman(result(), "crawl-output")).toContain("Page limit: 20");
+  });
+
+  it("reports Sitemap mode, candidates, and warnings when present", () => {
+    const output = formatCrawlHuman(
+      result({
+        settings: {
+          max_depth: 2,
+          max_pages: 20,
+          concurrency: 2,
+          delay_ms: 250,
+          sitemap_mode: "include",
+        },
+        stats: {
+          discovered: 2,
+          fetched: 1,
+          failed: 1,
+          content_truncated: 0,
+          limit_reached: true,
+          discovery_limit_reached: false,
+          sitemap_candidates: 3,
+        },
+        warnings: [{ code: "sitemap_invalid", message: "child Sitemap was invalid" }],
+      }),
+      "crawl-output",
+    );
+
+    expect(output).toContain("Sitemap: include");
+    expect(output).toContain("Sitemap candidates: 3");
+    expect(output).toContain("Warnings: 1");
+    expect(output).toContain("sitemap_invalid: child Sitemap was invalid");
   });
 });

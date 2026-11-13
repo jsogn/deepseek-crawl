@@ -110,6 +110,7 @@ Options:
   --include-paths <patterns>
   --exclude-paths <patterns>
   --ignore-query-parameters
+  --sitemap <include|only|skip> (default: include)
   --output, -o <dir>
   --json
 `,
@@ -309,6 +310,7 @@ async function runMap(command: Extract<ParsedCommand, { kind: "map" }>, deps: Cl
 async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps: CliDependencies) {
   const config = loadConfig(deps.env, deps.credentialStore);
   const client = deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+  const reader = deps.sitemapReader ?? new SitemapReader();
   const writer = await createCrawlOutputWriter(command.output);
 
   try {
@@ -325,6 +327,8 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
         includePaths: command.includePaths ?? [],
         excludePaths: command.excludePaths ?? [],
         ignoreQueryParameters: command.ignoreQueryParameters ?? false,
+        sitemapMode: command.sitemapMode,
+        sitemapReader: reader,
       },
       async (page) => {
         await writer.writePage(page);

@@ -44,6 +44,7 @@ Version `0.7.0` provides:
 - Crawl Plan previews the initial frontier before child pages are fetched.
 - Batch Fetch and Crawl can retry only failed items from an existing report.
 - Fetch, Batch, Crawl, Plan, and Retry can share an explicit-TTL local page cache.
+- Fetch, Batch, and Crawl expose stable `content_hash`; Crawl can compare a baseline and write only changed pages.
 
 The project is open source under the MIT License.
 
@@ -343,6 +344,8 @@ deepseek-crawl crawl <url> -o <dir>
   [--plan-only]
   [--cache-ttl <1..31536000>]
   [--fresh]
+  [--baseline <crawl.json|dir>]
+  [--changed-only]
   [--json]
 ```
 
@@ -428,10 +431,31 @@ the complete directory only after success. SIGINT aborts active work, removes
 staging, and exits with code `130`.
 
 `crawl.json` contains settings, statistics, failures, content metadata,
-`warnings`, the Sitemap candidate count, per-page `sources`, and stable page
+`warnings`, the Sitemap candidate count, per-page `sources`, `content_hash`, and stable page
 paths. It does not duplicate page bodies. Page sources distinguish `seed_url`,
 `markdown`, and `sitemap`. Prefer `map --search` followed by Batch Fetch for
 known URL lists; use Crawl when a bounded section must be traversed.
+
+Incremental comparison:
+
+```bash
+deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
+  --baseline .deepseek-crawl/crawl-deepseek-guides/crawl.json \
+  --changed-only \
+  --cache-ttl 3600 \
+  -o .deepseek-crawl/crawl-deepseek-guides-changes
+```
+
+`--baseline` accepts an older `crawl.json` or its containing Crawl output
+directory. `content_hash` is SHA-256 of the raw DeepSeek Markdown before local
+content truncation. `changes` classifies `added`, `modified`, `unchanged`, and
+`removed`; `removed` means a baseline URL was not discovered in the current
+scope.
+
+`--changed-only` writes only added and modified pages. Unchanged pages remain in
+the report and stats with `pages[].written: false` and no `path`. This first
+incremental version still reads content or resolves it from cache to compute
+hashes. Skipping fetches with Sitemap `lastmod` is a later optimization.
 
 Retry only failed Crawl pages:
 

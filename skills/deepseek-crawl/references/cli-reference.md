@@ -193,6 +193,8 @@ deepseek-crawl crawl <url>
   [--plan-only]
   [--cache-ttl <1..31536000>]
   [--fresh]
+  [--baseline <crawl.json|dir>]
+  [--changed-only]
   --output, -o <dir>
   [--json]
 
@@ -259,6 +261,32 @@ window rather than a complete inventory.
 
 Plan covers the initial frontier only. Deeper pages require fetching the
 selected child pages.
+
+### Incremental Crawl
+
+```bash
+deepseek-crawl crawl <url> \
+  --baseline previous/crawl.json \
+  --changed-only \
+  --cache-ttl 3600 \
+  -o changes
+```
+
+The baseline can be a prior `crawl.json` or its containing Crawl directory. A
+baseline must contain valid SHA-256 `content_hash` values; older reports without
+hashes are rejected.
+
+`content_hash` covers the raw DeepSeek Markdown before local truncation.
+`--changed-only` requires `--baseline` and writes only added or modified pages.
+All fetched pages remain in the report:
+
+- added/modified pages have `written: true` and `path`.
+- unchanged pages have `written: false` and no `path`.
+- `changes.removed` lists baseline URLs absent from the current discovery scope.
+- `stats.added`, `modified`, `unchanged`, and `removed` provide counts.
+
+This version still reads pages or resolves cache entries to compute hashes.
+Sitemap `lastmod` request skipping is not part of this version.
 
 ### Crawl Retry
 

@@ -232,6 +232,21 @@ Crawl Retry uses the existing report settings, skips the seed and successful
 pages, and preserves the original page index, depth, sources, and failure
 reason. It is bounded by the report's `max_pages`; inspect `retry_of.skipped`.
 
+For repeated documentation checks, compare against the prior Crawl report:
+
+```bash
+deepseek-crawl crawl "<section-url>" \
+  --baseline .deepseek-crawl/crawl-site-section/crawl.json \
+  --changed-only \
+  --cache-ttl 3600 \
+  -o .deepseek-crawl/crawl-site-section-changes
+```
+
+Read `changes.added`, `changes.modified`, `changes.unchanged`, and
+`changes.removed`. `--changed-only` writes only added/modified page files while
+the report still includes all fetched pages. This version still reads or
+cache-resolves pages to calculate content hashes.
+
 ## Billing and Safety
 
 - Search, the seed page used by Map, and every successfully read Crawl page can

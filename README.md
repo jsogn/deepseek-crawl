@@ -38,6 +38,7 @@ CLI + Skill。
 - Crawl Plan 预览初始 frontier，避免在确认 URL 列表前读取所有子页面。
 - Batch Fetch 和 Crawl 可从既有报告只重试失败项，避免重复读取成功页面。
 - Fetch、Batch、Crawl、Plan 和 Retry 可共享显式 TTL 的本地页面缓存。
+- Fetch、Batch 和 Crawl 输出稳定 `content_hash`，Crawl 可对比 baseline 只写变更页面。
 - macOS Keychain 或其他平台私有文件凭据存储。
 - `auth set`、`auth status`、`auth remove`。
 - 可选的四个 MCP 工具。
@@ -353,6 +354,8 @@ deepseek-crawl crawl <url> -o <dir>
   [--plan-only]
   [--cache-ttl <1..31536000>]
   [--fresh]
+  [--baseline <crawl.json|dir>]
+  [--changed-only]
   [--json]
 ```
 
@@ -431,10 +434,29 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
 SIGINT 会中止请求、清理 staging，并以代码 `130` 退出。
 
 `crawl.json` 包含设置、统计、失败记录、内容截断元数据、`warnings`、Sitemap
-候选数量、每页 `sources` 和稳定页面路径，不重复保存正文。页面来源会区分
+候选数量、每页 `sources`、`content_hash` 和稳定页面路径，不重复保存正文。页面来源会区分
 `seed_url`、`markdown` 和 `sitemap`。已知 URL 列表优先使用
 `map --search` 后接批量 Fetch；需要遍历一个文档区域时再使用 Crawl，可减少不必
 要的整站发现开销。
+
+增量对比：
+
+```bash
+deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
+  --baseline .deepseek-crawl/crawl-deepseek-guides/crawl.json \
+  --changed-only \
+  --cache-ttl 3600 \
+  -o .deepseek-crawl/crawl-deepseek-guides-changes
+```
+
+`--baseline` 可以指向旧 `crawl.json`，也可以指向包含该文件的 Crawl 输出目录。
+`content_hash` 是 DeepSeek 原始 Markdown 内容的 SHA-256，在本地字符截断前计算。
+结果 `changes` 分为 `added`、`modified`、`unchanged`、`removed`；`removed`
+表示 baseline URL 没有出现在当前发现范围中。
+
+`--changed-only` 只写入新增和修改页面。未变化页面仍保留在报告和统计中，但
+`pages[].written` 为 `false` 且没有 `path`。第一版增量 Crawl 仍会读取页面内容
+或命中缓存后计算 hash；Sitemap `lastmod` 跳过请求属于下一阶段优化。
 
 只重试 Crawl 失败页面：
 

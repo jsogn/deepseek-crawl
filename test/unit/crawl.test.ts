@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { executeCrawl } from "../../src/application/crawl.js";
+import { executeCrawl, normalizeCrawlOptions } from "../../src/application/crawl.js";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
 
 const options = {
@@ -30,6 +30,35 @@ function client() {
 }
 
 describe("executeCrawl", () => {
+  it("clamps resource limits and rejects invalid options before fetching", async () => {
+    expect(
+      normalizeCrawlOptions({
+        maxDepth: 9,
+        maxPages: 500,
+        concurrency: 20,
+        delayMs: 20_000,
+        discoveryLimit: 100_000,
+        pageContentLimit: 5_000_000,
+      }),
+    ).toMatchObject({
+      maxDepth: 5,
+      maxPages: 100,
+      concurrency: 5,
+      delayMs: 5_000,
+      discoveryLimit: 10_000,
+      pageContentLimit: 1_000_000,
+    });
+
+    const gateway = client();
+    await expect(
+      executeCrawl(gateway, { url: "https://example.com/" }, { ...options, concurrency: 0 }),
+    ).rejects.toThrow(/concurrency/i);
+    await expect(
+      executeCrawl(gateway, { url: "https://example.com/" }, { ...options, pageContentLimit: 0 }),
+    ).rejects.toThrow(/pageContentLimit/i);
+    expect(gateway.fetch).not.toHaveBeenCalled();
+  });
+
   it("traverses deterministically, deduplicates, and records failures", async () => {
     const pages = new Map<number, string>();
     const result = await executeCrawl(

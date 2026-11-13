@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { safePageSlug } from "../crawl/links.js";
 import type {
@@ -22,6 +22,38 @@ function existingPathError(path: string): NodeJS.ErrnoException {
 
 function lockPath(finalPath: string): string {
   return join(dirname(finalPath), `.${basename(finalPath)}.lock`);
+}
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+async function acquirePublicationLock(path: string): Promise<void> {
+  const payload = JSON.stringify({ pid: process.pid, created_at: new Date().toISOString() });
+  try {
+    await writeFile(path, payload, { encoding: "utf8", flag: "wx" });
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
+    }
+  }
+
+  const existing = JSON.parse(await readFile(path, "utf8")) as { pid?: unknown };
+  if (!Number.isSafeInteger(existing.pid) || (existing.pid as number) < 1) {
+    throw existingPathError(path);
+  }
+  if (processIsAlive(existing.pid as number)) {
+    throw existingPathError(path);
+  }
+
+  await rm(path, { force: true });
+  await writeFile(path, payload, { encoding: "utf8", flag: "wx" });
 }
 
 async function requireMissingPath(path: string): Promise<void> {
@@ -97,7 +129,7 @@ export async function createCrawlOutputWriter(finalDirectory: string): Promise<C
           `${JSON.stringify(output, null, 2)}\n`,
           "utf8",
         );
-        await writeFile(publicationLock, "", { encoding: "utf8", flag: "wx" });
+        await acquirePublicationLock(publicationLock);
         ownsLock = true;
         await requireMissingPath(finalPath);
         await rename(stagingPath, finalPath);
@@ -130,7 +162,7 @@ export function formatCrawlHuman(result: CrawlRunResult, outputDirectory: string
   return [
     `Seed: ${result.seed_url}`,
     `Depth: ${result.settings.max_depth}`,
-    `Pages requested: ${result.settings.max_pages}`,
+    `Page limit: ${result.settings.max_pages}`,
     `Concurrency: ${result.settings.concurrency}`,
     `Delay: ${result.settings.delay_ms} ms`,
     `Fetched: ${result.stats.fetched}`,

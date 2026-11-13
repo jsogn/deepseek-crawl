@@ -1,5 +1,6 @@
 import http from "node:http";
 import https from "node:https";
+import { isIP } from "node:net";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { normalizeHttpUrl, sameOrigin } from "../crawl/links.js";
 import type { MapWarning } from "../crawl/types.js";
@@ -49,7 +50,7 @@ interface SitemapHttpResponse {
 }
 
 export interface PublicSitemapFetcherOptions {
-  resolve?: (hostname: string) => Promise<ResolvedAddress>;
+  resolve?: (hostname: string, signal?: AbortSignal) => Promise<ResolvedAddress>;
   request?: (
     url: URL,
     address: ResolvedAddress,
@@ -76,13 +77,34 @@ function abortReason(signal: AbortSignal | undefined): Error {
   return new Error("Sitemap request cancelled.");
 }
 
-async function requestWithTimeout(
-  request: NonNullable<PublicSitemapFetcherOptions["request"]>,
-  url: URL,
-  address: ResolvedAddress,
+function waitForAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason);
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function withOperationTimeout<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
   signal: AbortSignal | undefined,
-): Promise<SitemapHttpResponse> {
+): Promise<T> {
   if (signal?.aborted) {
     throw abortReason(signal);
   }
@@ -91,30 +113,18 @@ async function requestWithTimeout(
   const requestSignal = signal
     ? AbortSignal.any([signal, timeoutController.signal])
     : timeoutController.signal;
-  let timedOut = false;
   const timer = setTimeout(() => {
-    timedOut = true;
     timeoutController.abort(new Error("Sitemap request timed out."));
   }, timeoutMs);
 
-  const aborted = new Promise<never>((_resolve, reject) => {
-    requestSignal.addEventListener(
-      "abort",
-      () => {
-        reject(timedOut ? new Error("Sitemap request timed out.") : abortReason(signal));
-      },
-      { once: true },
-    );
-  });
-
   try {
-    return await Promise.race([request(url, address, requestSignal), aborted]);
+    return await waitForAbort(operation(requestSignal), requestSignal);
   } finally {
     clearTimeout(timer);
   }
 }
 
-function defaultRequest(
+export function requestSitemapDocument(
   url: URL,
   address: ResolvedAddress,
   signal: AbortSignal | undefined,
@@ -129,12 +139,17 @@ function defaultRequest(
         "User-Agent": `deepseek-crawl/${packageVersion}`,
       },
       signal,
-      lookup: (_hostname, _options, callback) => {
+      lookup: (_hostname, lookupOptions, callback) => {
+        if (lookupOptions.all) {
+          callback(null, [{ address: address.address, family: address.family }]);
+          return;
+        }
         callback(null, address.address, address.family);
       },
     };
-    if (url.protocol === "https:") {
-      options.servername = stripIpv6Brackets(url.hostname);
+    const hostname = stripIpv6Brackets(url.hostname);
+    if (url.protocol === "https:" && isIP(hostname) === 0) {
+      options.servername = hostname;
     }
 
     const request = transport.request(url, options, (response) => {
@@ -166,14 +181,16 @@ function defaultRequest(
 export function createPublicSitemapFetcher(
   options: PublicSitemapFetcherOptions = {},
 ): SitemapFetcher {
-  const resolve = options.resolve ?? resolvePublicAddress;
+  const resolve =
+    options.resolve ??
+    ((hostname: string, signal?: AbortSignal) => resolvePublicAddress(hostname, undefined, signal));
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const bodyLimitBytes = options.bodyLimitBytes ?? DEFAULT_BODY_LIMIT_BYTES;
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
   const request =
     options.request ??
     ((url: URL, address: ResolvedAddress, signal?: AbortSignal) =>
-      defaultRequest(url, address, signal, bodyLimitBytes));
+      requestSitemapDocument(url, address, signal, bodyLimitBytes));
 
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1) {
     throw new Error("Sitemap timeout must be a positive integer.");
@@ -195,11 +212,17 @@ export function createPublicSitemapFetcher(
       if (signal?.aborted) {
         throw abortReason(signal);
       }
-      const address = await resolve(stripIpv6Brackets(current.hostname));
-      if (!isPublicIpAddress(address.address)) {
-        throw new Error("Refusing non-public Sitemap address.");
-      }
-      const response = await requestWithTimeout(request, current, address, timeoutMs, signal);
+      const response = await withOperationTimeout(
+        async (operationSignal) => {
+          const address = await resolve(stripIpv6Brackets(current.hostname), operationSignal);
+          if (!isPublicIpAddress(address.address)) {
+            throw new Error("Refusing non-public Sitemap address.");
+          }
+          return request(current, address, operationSignal);
+        },
+        timeoutMs,
+        signal,
+      );
       if (Buffer.byteLength(response.body, "utf8") > bodyLimitBytes) {
         throw new Error("Sitemap response exceeded the 5 MiB body limit.");
       }

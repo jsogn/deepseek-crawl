@@ -1,6 +1,7 @@
+import { createServer } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 import { isPublicIpAddress, resolvePublicAddress } from "../../src/sitemap/network-policy.js";
-import { createPublicSitemapFetcher } from "../../src/sitemap/reader.js";
+import { createPublicSitemapFetcher, requestSitemapDocument } from "../../src/sitemap/reader.js";
 
 describe("isPublicIpAddress", () => {
   it.each([
@@ -27,6 +28,8 @@ describe("isPublicIpAddress", () => {
     "64:ff9b::7f00:1",
     "64:ff9b::c0a8:1",
     "100::1",
+    "2001::1",
+    "2001:0:4136:e378:8000:63bf:3fff:fdd2",
     "2001:2::1",
     "2001:db8::1",
     "fc00::1",
@@ -100,6 +103,18 @@ describe("resolvePublicAddress", () => {
 
     await expect(resolvePublicAddress("[::1]", lookup)).rejects.toThrow(/non-public/i);
     expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it("stops waiting for DNS when cancelled", async () => {
+    const controller = new AbortController();
+    const pending = resolvePublicAddress(
+      "example.com",
+      async () => new Promise(() => undefined),
+      controller.signal,
+    );
+    controller.abort(new Error("cancelled"));
+
+    await expect(pending).rejects.toThrow(/cancelled/i);
   });
 });
 
@@ -215,7 +230,7 @@ describe("createPublicSitemapFetcher", () => {
     ).resolves.toMatchObject({
       finalUrl: new URL("https://[2606:4700:4700::1111]/sitemap.xml"),
     });
-    expect(resolve).toHaveBeenCalledWith("2606:4700:4700::1111");
+    expect(resolve).toHaveBeenCalledWith("2606:4700:4700::1111", expect.any(AbortSignal));
   });
 
   it("times out a request that does not settle", async () => {
@@ -228,5 +243,62 @@ describe("createPublicSitemapFetcher", () => {
     await expect(fetcher.fetch(new URL("https://example.com/sitemap.xml"))).rejects.toThrow(
       /timed out/i,
     );
+  });
+
+  it("includes a stalled DNS lookup in the operation timeout", async () => {
+    const request = vi.fn();
+    const fetcher = createPublicSitemapFetcher({
+      resolve: async () => new Promise(() => undefined),
+      request,
+      timeoutMs: 10,
+    });
+
+    await expect(fetcher.fetch(new URL("https://example.com/sitemap.xml"))).rejects.toThrow(
+      /timed out/i,
+    );
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("cancels while DNS resolution is pending", async () => {
+    const controller = new AbortController();
+    const request = vi.fn();
+    const fetcher = createPublicSitemapFetcher({
+      resolve: async () => new Promise(() => undefined),
+      request,
+    });
+    const pending = fetcher.fetch(new URL("https://example.com/sitemap.xml"), controller.signal);
+    controller.abort(new Error("cancelled"));
+
+    await expect(pending).rejects.toThrow(/cancelled/i);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("uses the default request transport with all-address socket lookups", async () => {
+    const server = createServer((_request, response) => {
+      response.end("<urlset />");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("test server did not bind");
+    }
+
+    try {
+      await expect(
+        requestSitemapDocument(
+          new URL(`http://sitemap.test:${address.port}/sitemap.xml`),
+          { address: "127.0.0.1", family: 4 },
+          undefined,
+          1024,
+        ),
+      ).resolves.toEqual({
+        status: 200,
+        body: "<urlset />",
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 });

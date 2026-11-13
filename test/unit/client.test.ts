@@ -103,6 +103,29 @@ describe("DeepSeekClient", () => {
     );
   });
 
+  it("clamps an oversized Fetch response byte limit to 8 MiB", async () => {
+    const { client } = createClient(
+      async () =>
+        new Response("", {
+          headers: { "content-length": String(8 * 1024 * 1024 + 1) },
+          status: 200,
+        }),
+      { fetchResponseByteLimit: 16 * 1024 * 1024 },
+    );
+
+    await expect(client.fetch({ url: "https://example.com" })).rejects.toMatchObject({
+      kind: "resource_limit",
+    });
+  });
+
+  it("rejects a non-positive Fetch response byte limit", () => {
+    expect(() =>
+      createClient(async () => Response.json({ title: "Page", content: "" }), {
+        fetchResponseByteLimit: 0,
+      }),
+    ).toThrow(/fetchResponseByteLimit/i);
+  });
+
   it.each([408, 429, 500, 502, 503, 504])("retries HTTP %s", async (status) => {
     let calls = 0;
     const { client, delays } = createClient(async () => {
@@ -269,5 +292,25 @@ describe("DeepSeekClient", () => {
       expect((error as Error).message).not.toContain(secretQuery);
       expect((error as Error).message.length).toBeLessThan(700);
     }
+  });
+
+  it("bounds oversized error response bodies and keeps request IDs", async () => {
+    const { client } = createClient(
+      async () =>
+        new Response("x".repeat(100_000), {
+          status: 502,
+          headers: {
+            "content-length": "100000",
+            "x-request-id": "request-123",
+          },
+        }),
+      { maxRetries: 0 },
+    );
+
+    await expect(client.fetch({ url: "https://example.com" })).rejects.toMatchObject({
+      kind: "server",
+      status: 502,
+      requestId: "request-123",
+    });
   });
 });

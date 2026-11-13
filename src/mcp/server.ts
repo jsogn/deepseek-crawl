@@ -41,27 +41,39 @@ export interface ResolvedMcpCrawlLimits {
   aggregateContentLimit: number;
 }
 
-function cappedLimit(value: number | undefined, name: string, maximum: number): number {
+function cappedLimit(
+  value: number | undefined,
+  name: string,
+  minimum: number,
+  maximum: number,
+): number {
   if (value === undefined) {
     return maximum;
   }
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`${name} must be a non-negative safe integer.`);
+  if (!Number.isSafeInteger(value) || value < minimum) {
+    throw new Error(`${name} must be an integer from ${minimum} to ${maximum}.`);
   }
   return Math.min(value, maximum);
 }
 
 export function resolveMcpCrawlLimits(config: McpCrawlConfig = {}): ResolvedMcpCrawlLimits {
   return {
-    discoveryLimit: cappedLimit(config.discoveryLimit, "discoveryLimit", MCP_CRAWL_DISCOVERY_LIMIT),
+    discoveryLimit: cappedLimit(
+      config.discoveryLimit,
+      "discoveryLimit",
+      1,
+      MCP_CRAWL_DISCOVERY_LIMIT,
+    ),
     pageContentLimit: cappedLimit(
       config.pageContentLimit,
       "pageContentLimit",
+      1,
       MCP_CRAWL_PAGE_CONTENT_LIMIT,
     ),
     aggregateContentLimit: cappedLimit(
       config.aggregateContentLimit,
       "aggregateContentLimit",
+      0,
       MCP_CRAWL_AGGREGATE_CONTENT_LIMIT,
     ),
   };
@@ -170,7 +182,7 @@ type CrawlMcpPage = z.infer<typeof crawlPageOutputSchema>;
 type CrawlMcpOutput = z.infer<typeof crawlOutputSchema>;
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return truncateText(error instanceof Error ? error.message : String(error), 1_000).value;
 }
 
 function codepointLength(value: string): number {
@@ -256,20 +268,30 @@ function formatCrawlMcpHuman(output: CrawlMcpOutput): string {
     lines.push("No pages.");
   } else {
     for (const page of output.pages) {
-      const title = page.title.trim() || "Untitled";
+      const title = truncateText(
+        page.title.replace(/[\r\n]+/g, " ").trim() || "Untitled",
+        200,
+      ).value;
       const flags = [
         `depth ${page.depth}`,
         `${codepointLength(page.content)} characters`,
         page.content_truncated ? "truncated" : "",
         page.content_omitted ? "content omitted" : "",
       ].filter(Boolean);
-      lines.push(`- [${title}](${page.url}) — ${flags.join(", ")}`);
+      lines.push(
+        `- ${title}`,
+        `  URL: ${truncateText(page.url, 2_048).value}`,
+        `  ${flags.join(", ")}`,
+      );
     }
   }
   if (output.failures.length > 0) {
     lines.push("", "## Failures");
     for (const failure of output.failures) {
-      lines.push(`- ${failure.url}: ${failure.kind} — ${failure.message}`);
+      lines.push(
+        `- ${truncateText(failure.url, 2_048).value}: ${truncateText(failure.kind, 100).value}`,
+        `  ${truncateText(failure.message.replace(/[\r\n]+/g, " "), 500).value}`,
+      );
     }
   }
   return lines.join("\n");

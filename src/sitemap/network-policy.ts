@@ -8,6 +8,7 @@ export interface ResolvedAddress {
 
 export type AddressLookup = (
   hostname: string,
+  signal?: AbortSignal,
 ) => Promise<ReadonlyArray<{ address: string; family: number }>>;
 
 const blockedIpv4 = new BlockList();
@@ -38,6 +39,7 @@ for (const [network, prefix] of [
   ["::ffff:0:0", 96],
   ["64:ff9b:1::", 48],
   ["100::", 64],
+  ["2001::", 23],
   ["2001:2::", 48],
   ["2001:10::", 28],
   ["2001:20::", 28],
@@ -138,12 +140,45 @@ export function isPublicIpAddress(address: string): boolean {
   return !blockedIpv6.check(normalized, "ipv6");
 }
 
-const defaultLookup: AddressLookup = (hostname) => lookup(hostname, { all: true, verbatim: true });
+const defaultLookup: AddressLookup = async (hostname, signal) => {
+  signal?.throwIfAborted();
+  const addresses = await lookup(hostname, { all: true, verbatim: true });
+  signal?.throwIfAborted();
+  return addresses;
+};
+
+function waitForAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(signal.reason);
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
 
 export async function resolvePublicAddress(
   hostname: string,
   lookupImpl: AddressLookup = defaultLookup,
+  signal?: AbortSignal,
 ): Promise<ResolvedAddress> {
+  signal?.throwIfAborted();
   const normalizedHostname = stripIpv6Brackets(hostname);
   const literalFamily = isIP(normalizedHostname);
   if (literalFamily === 4 || literalFamily === 6) {
@@ -155,8 +190,14 @@ export async function resolvePublicAddress(
 
   let addresses: ReadonlyArray<{ address: string; family: number }>;
   try {
-    addresses = await lookupImpl(normalizedHostname);
+    addresses = await waitForAbort(
+      Promise.resolve().then(() => lookupImpl(normalizedHostname, signal)),
+      signal,
+    );
   } catch (error) {
+    if (signal?.aborted) {
+      throw signal.reason;
+    }
     throw new Error(`Could not resolve Sitemap host ${normalizedHostname}.`, { cause: error });
   }
 

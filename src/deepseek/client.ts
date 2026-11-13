@@ -6,6 +6,8 @@ import { fetchResponseSchema, searchResponseSchema } from "./schemas.js";
 
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_UPSTREAM_MESSAGE_LENGTH = 500;
+const MAX_FETCH_RESPONSE_BYTES = 8 * 1024 * 1024;
+const MAX_ERROR_RESPONSE_BYTES = 64 * 1024;
 
 export interface DeepSeekClientOptions {
   apiKey: string;
@@ -99,13 +101,18 @@ function safeUpstreamMessage(value: unknown): string | undefined {
   return normalized ? normalized.slice(0, MAX_UPSTREAM_MESSAGE_LENGTH) : undefined;
 }
 
-async function readUpstreamMessage(response: Response): Promise<string | undefined> {
-  const text = await response.text().catch(() => "");
-  if (!text) {
+async function readUpstreamMessage(
+  response: Response,
+  signal: AbortSignal,
+): Promise<string | undefined> {
+  const body = await readResponseBodyWithLimit(response, MAX_ERROR_RESPONSE_BYTES, signal).catch(
+    () => undefined,
+  );
+  if (!body || body.truncated || body.bytes.length === 0) {
     return undefined;
   }
   try {
-    const data = JSON.parse(text) as { error?: { message?: unknown } };
+    const data = JSON.parse(body.bytes.toString("utf8")) as { error?: { message?: unknown } };
     return safeUpstreamMessage(data.error?.message);
   } catch {
     return undefined;
@@ -183,14 +190,30 @@ async function readJsonWithByteLimit<T>(
   schema: z.ZodType<T>,
   signal: AbortSignal,
 ): Promise<T> {
+  const body = await readResponseBodyWithLimit(response, maxBytes, signal);
+  if (body.truncated) {
+    throw responseTooLargeError();
+  }
+  return schema.parse(JSON.parse(body.bytes.toString("utf8")));
+}
+
+async function readResponseBodyWithLimit(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<{ bytes: Buffer; truncated: boolean }> {
   const contentLength = response.headers.get("content-length");
   if (contentLength !== null && Number(contentLength) > maxBytes) {
     await response.body?.cancel().catch(() => undefined);
-    throw responseTooLargeError();
+    return { bytes: Buffer.alloc(0), truncated: true };
   }
 
   if (!response.body) {
-    return schema.parse(JSON.parse(await response.text()));
+    const bytes = Buffer.from(await response.text(), "utf8");
+    return {
+      bytes: bytes.subarray(0, maxBytes),
+      truncated: bytes.byteLength > maxBytes,
+    };
   }
 
   const reader = response.body.getReader();
@@ -204,12 +227,12 @@ async function readJsonWithByteLimit<T>(
     total += chunk.value.byteLength;
     if (total > maxBytes) {
       await reader.cancel().catch(() => undefined);
-      throw responseTooLargeError();
+      return { bytes: Buffer.concat(chunks), truncated: true };
     }
     chunks.push(chunk.value);
   }
 
-  return schema.parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+  return { bytes: Buffer.concat(chunks), truncated: false };
 }
 
 export class DeepSeekClient {
@@ -230,7 +253,11 @@ export class DeepSeekClient {
     this.#fetchImpl = options.fetchImpl ?? globalThis.fetch;
     this.#sleep = options.sleep ?? defaultSleep;
     this.#random = options.random ?? Math.random;
-    this.#fetchResponseByteLimit = options.fetchResponseByteLimit ?? 8 * 1024 * 1024;
+    const fetchResponseByteLimit = options.fetchResponseByteLimit ?? MAX_FETCH_RESPONSE_BYTES;
+    if (!Number.isSafeInteger(fetchResponseByteLimit) || fetchResponseByteLimit < 1) {
+      throw new Error("fetchResponseByteLimit must be a positive safe integer.");
+    }
+    this.#fetchResponseByteLimit = Math.min(fetchResponseByteLimit, MAX_FETCH_RESPONSE_BYTES);
   }
 
   search(input: SearchInput, signal?: AbortSignal): Promise<RawSearchResponse> {
@@ -273,7 +300,7 @@ export class DeepSeekClient {
         });
 
         if (!response.ok) {
-          const upstreamMessage = await readUpstreamMessage(response);
+          const upstreamMessage = await readUpstreamMessage(response, requestSignal);
           if (timeoutController.signal.aborted) {
             throw new DeepSeekError("DeepSeek request timed out.", { kind: "timeout" });
           }

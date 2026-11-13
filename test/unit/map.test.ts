@@ -261,6 +261,20 @@ describe("executeMap", () => {
     expect(result.truncated).toBe(true);
   });
 
+  it("uses the 1,000,000-code-point seed-page extraction default", async () => {
+    const sitemapReader = reader({ urls: [] });
+    const content = `${"x".repeat(1_000_000)}[Late](/late)`;
+
+    const result = await executeMap(
+      gateway(content),
+      sitemapReader,
+      { url: "https://example.com/" },
+      { limit: 500, discoveryLimit: 10_000 },
+    );
+
+    expect(result.urls).toEqual([{ url: "https://example.com/", sources: ["seed_url"] }]);
+  });
+
   it("preserves Sitemap warnings and truncation metadata", async () => {
     const sitemapReader = reader({
       urls: [new URL("https://example.com/a")],

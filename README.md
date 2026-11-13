@@ -138,7 +138,8 @@ deepseek-crawl map "https://example.com/" --limit 100
 deepseek-crawl map "https://example.com/" --json --output urls.json
 ```
 
-Warnings are printed to stderr in human mode and retained in the JSON result.
+Warnings are printed to stderr in both human and JSON modes and retained in the
+JSON result.
 A Sitemap failure can still produce a successful seed-page result, and vice
 versa. Map fails only when neither source can be read.
 
@@ -182,7 +183,7 @@ Output layout:
 crawl-output/
   crawl.json
   pages/
-    0001-example.md
+    0001-page.md
     0002-example-docs.md
 ```
 

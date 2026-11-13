@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -118,6 +118,19 @@ describe("createCrawlOutputWriter", () => {
     });
     expect(await readdir(root)).toEqual(["result"]);
   });
+
+  it("recovers a publication lock left by a dead process", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-output-"));
+    const output = join(root, "result");
+    const writer = await createCrawlOutputWriter(output);
+    await writer.writePage(page());
+    await writeFile(join(root, ".result.lock"), JSON.stringify({ pid: 99_999_999 }), "utf8");
+
+    await expect(writer.finish(result())).resolves.toMatchObject({
+      pages: [{ path: "pages/0001-page.md" }],
+    });
+    expect(await readdir(root)).toEqual(["result"]);
+  });
 });
 
 describe("formatCrawlHuman", () => {
@@ -126,5 +139,6 @@ describe("formatCrawlHuman", () => {
     expect(formatCrawlHuman(result(), "crawl-output")).toContain("Fetched: 1");
     expect(formatCrawlHuman(result(), "crawl-output")).toContain("Failed: 1");
     expect(formatCrawlHuman(result(), "crawl-output")).toContain("Page limit reached: yes");
+    expect(formatCrawlHuman(result(), "crawl-output")).toContain("Page limit: 20");
   });
 });

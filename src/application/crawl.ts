@@ -12,6 +12,45 @@ import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { fetchInputSchema } from "../deepseek/schemas.js";
 import { boundFetchOutput } from "../output/bounds.js";
 
+const CRAWL_MAX_DEPTH = 5;
+const CRAWL_MAX_PAGES = 100;
+const CRAWL_MAX_CONCURRENCY = 5;
+const CRAWL_MAX_DELAY_MS = 5_000;
+const CRAWL_MAX_DISCOVERY_LIMIT = 10_000;
+const CRAWL_MAX_PAGE_CONTENT_LIMIT = 1_000_000;
+
+function clampInteger(value: number, name: string, minimum: number, maximum: number): number {
+  if (!Number.isSafeInteger(value) || value < minimum) {
+    throw new Error(`${name} must be an integer from ${minimum} to ${maximum}.`);
+  }
+  return Math.min(value, maximum);
+}
+
+export function normalizeCrawlOptions(options: CrawlOptions): CrawlOptions {
+  const normalized: CrawlOptions = {
+    maxDepth: clampInteger(options.maxDepth, "maxDepth", 0, CRAWL_MAX_DEPTH),
+    maxPages: clampInteger(options.maxPages, "maxPages", 1, CRAWL_MAX_PAGES),
+    concurrency: clampInteger(options.concurrency, "concurrency", 1, CRAWL_MAX_CONCURRENCY),
+    delayMs: clampInteger(options.delayMs, "delayMs", 0, CRAWL_MAX_DELAY_MS),
+    discoveryLimit: clampInteger(
+      options.discoveryLimit,
+      "discoveryLimit",
+      1,
+      CRAWL_MAX_DISCOVERY_LIMIT,
+    ),
+    pageContentLimit: clampInteger(
+      options.pageContentLimit,
+      "pageContentLimit",
+      1,
+      CRAWL_MAX_PAGE_CONTENT_LIMIT,
+    ),
+  };
+  if (options.now !== undefined) {
+    normalized.now = options.now;
+  }
+  return normalized;
+}
+
 interface PageOutcome {
   url: string;
   summary: CrawlPageSummary | null;
@@ -96,13 +135,14 @@ export async function executeCrawl(
   onPage?: (page: CrawlPage) => Promise<void>,
   signal?: AbortSignal,
 ): Promise<CrawlRunResult> {
+  const limits = normalizeCrawlOptions(options);
   const parsed = fetchInputSchema.parse(input);
   const seed = normalizeHttpUrl(parsed.url);
   if (!seed) {
     throw new Error("Crawl URL must be an HTTP(S) URL with a host and no credentials.");
   }
 
-  const now = options.now ?? (() => new Date());
+  const now = limits.now ?? (() => new Date());
   const crawlController = new AbortController();
   const crawlSignal = signal
     ? AbortSignal.any([signal, crawlController.signal])
@@ -125,7 +165,7 @@ export async function executeCrawl(
     let links: string[];
     try {
       const response = await client.fetch({ url }, crawlSignal);
-      const bounded = boundFetchOutput({ ...response, url }, options.pageContentLimit);
+      const bounded = boundFetchOutput({ ...response, url }, limits.pageContentLimit);
       page = {
         index,
         url,
@@ -136,7 +176,7 @@ export async function executeCrawl(
         content_original_length: bounded.original_length ?? codepointLength(bounded.content),
       };
       links =
-        depth < options.maxDepth
+        depth < limits.maxDepth
           ? extractMarkdownLinks(bounded.content, new URL(url))
               .filter((candidate) => sameOrigin(candidate, seed))
               .map((candidate) => candidate.href)
@@ -169,7 +209,7 @@ export async function executeCrawl(
   pages.push(seedOutcome.summary);
 
   const seedLinks = createBoundedLinkCollector(
-    Math.max(0, options.discoveryLimit - seen.size),
+    Math.max(0, limits.discoveryLimit - seen.size),
     seen,
   );
   for (const link of seedOutcome.links) {
@@ -181,9 +221,9 @@ export async function executeCrawl(
   frontier = seedCollection.links;
 
   let depth = 1;
-  while (frontier.length > 0 && depth <= options.maxDepth && attemptedPages < options.maxPages) {
+  while (frontier.length > 0 && depth <= limits.maxDepth && attemptedPages < limits.maxPages) {
     const sorted = [...frontier].sort();
-    const remaining = options.maxPages - attemptedPages;
+    const remaining = limits.maxPages - attemptedPages;
     const selected = sorted.slice(0, remaining);
     if (selected.length < sorted.length) {
       limitReached = true;
@@ -195,12 +235,12 @@ export async function executeCrawl(
       return index;
     });
     const layerLinks = createBoundedLinkCollector(
-      Math.max(0, options.discoveryLimit - seen.size),
+      Math.max(0, limits.discoveryLimit - seen.size),
       seen,
     );
     const outcomes = await runLayeredTasks<string, PageOutcome>(selected, {
-      concurrency: options.concurrency,
-      delayMs: options.delayMs,
+      concurrency: limits.concurrency,
+      delayMs: limits.delayMs,
       signal: crawlSignal,
       run: async (url, index) => {
         const outcome = await fetchPage(url, depth, selectedIndexes[index] ?? 0);
@@ -232,7 +272,7 @@ export async function executeCrawl(
     depth += 1;
   }
 
-  if (attemptedPages >= options.maxPages && frontier.length > 0) {
+  if (attemptedPages >= limits.maxPages && frontier.length > 0) {
     limitReached = true;
   }
 
@@ -245,10 +285,10 @@ export async function executeCrawl(
     started_at: startedAt,
     finished_at: now().toISOString(),
     settings: {
-      max_depth: options.maxDepth,
-      max_pages: options.maxPages,
-      concurrency: options.concurrency,
-      delay_ms: options.delayMs,
+      max_depth: limits.maxDepth,
+      max_pages: limits.maxPages,
+      concurrency: limits.concurrency,
+      delay_ms: limits.delayMs,
     },
     stats: {
       discovered: seen.size,

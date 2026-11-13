@@ -236,7 +236,7 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
     );
     return 0;
   } catch (error) {
-    await writer.abort();
+    await writer.abort().catch(() => undefined);
     throw error;
   }
 }

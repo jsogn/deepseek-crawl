@@ -60,6 +60,8 @@ describe("MCP server", () => {
 
   it.each([
     [{ discoveryLimit: -1 }, /discoveryLimit/i],
+    [{ discoveryLimit: 0 }, /discoveryLimit/i],
+    [{ pageContentLimit: 0 }, /pageContentLimit/i],
     [{ pageContentLimit: 1.5 }, /pageContentLimit/i],
     [{ aggregateContentLimit: Number.NaN }, /aggregateContentLimit/i],
   ])("rejects invalid Crawl resource overrides", (crawl, message) => {
@@ -257,6 +259,35 @@ describe("MCP server", () => {
       (result as { structuredContent?: { pages?: Array<{ path?: string }> } }).structuredContent
         ?.pages?.[0]?.path,
     ).toBeUndefined();
+  });
+
+  it("bounds untrusted titles and failure messages in the human summary", async () => {
+    const { client, gateway } = await connectedServer();
+    gateway.fetch.mockImplementation(async ({ url }: { url: string }) => {
+      if (url === "https://example.com/broken") {
+        throw new DeepSeekError("F".repeat(100_000), { kind: "not_found" });
+      }
+      return {
+        title: "T".repeat(100_000),
+        content: "[Broken](/broken)",
+      };
+    });
+
+    const result = await client.callTool({
+      name: "deepseek_crawl",
+      arguments: {
+        url: "https://example.com/",
+        max_pages: 2,
+        max_depth: 1,
+        delay_ms: 0,
+      },
+    });
+    const text = result.content?.[0];
+    expect(text?.type).toBe("text");
+    if (text?.type === "text") {
+      expect([...text.text].length).toBeLessThan(5_000);
+      expect(text.text).toContain("not_found");
+    }
   });
 
   it("bounds each Crawl page to 4000 characters by default", async () => {

@@ -37,7 +37,7 @@ export interface SearchResultItem extends RawSearchResult {
   content_original_length?: number;
 }
 
-export interface SearchOutput {
+export interface SearchOutput extends Record<string, unknown> {
   results: SearchResultItem[];
   truncation?: {
     content_limit: number;

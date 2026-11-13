@@ -1,7 +1,12 @@
 import http from "node:http";
 import https from "node:https";
 import { packageVersion } from "../version.js";
-import { isPublicIpAddress, type ResolvedAddress, resolvePublicAddress } from "./network-policy.js";
+import {
+  isPublicIpAddress,
+  type ResolvedAddress,
+  resolvePublicAddress,
+  stripIpv6Brackets,
+} from "./network-policy.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_BODY_LIMIT_BYTES = 5 * 1024 * 1024;
@@ -109,7 +114,7 @@ function defaultRequest(
       },
     };
     if (url.protocol === "https:") {
-      options.servername = url.hostname;
+      options.servername = stripIpv6Brackets(url.hostname);
     }
 
     const request = transport.request(url, options, (response) => {
@@ -170,7 +175,7 @@ export function createPublicSitemapFetcher(
       if (signal?.aborted) {
         throw abortReason(signal);
       }
-      const address = await resolve(current.hostname);
+      const address = await resolve(stripIpv6Brackets(current.hostname));
       if (!isPublicIpAddress(address.address)) {
         throw new Error("Refusing non-public Sitemap address.");
       }

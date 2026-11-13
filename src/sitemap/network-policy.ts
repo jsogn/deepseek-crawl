@@ -92,25 +92,50 @@ function mappedIpv4Address(address: string): string | undefined {
   if (!groups || groups.slice(0, 5).some((group) => group !== 0) || groups[5] !== 0xffff) {
     return undefined;
   }
+  return ipv4FromFinalGroups(groups);
+}
+
+function nat64Ipv4Address(address: string): string | undefined {
+  const groups = ipv6Groups(address);
+  if (groups?.[0] !== 0x0064) {
+    return undefined;
+  }
+  if (groups[1] !== 0xff9b || groups.slice(2, 6).some((group) => group !== 0)) {
+    return undefined;
+  }
+  return ipv4FromFinalGroups(groups);
+}
+
+function ipv4FromFinalGroups(groups: number[]): string {
   const high = groups[6] ?? 0;
   const low = groups[7] ?? 0;
   return [high >> 8, high & 0xff, low >> 8, low & 0xff].join(".");
 }
 
+export function stripIpv6Brackets(hostname: string): string {
+  const value = hostname.trim();
+  return value.startsWith("[") && value.endsWith("]") ? value.slice(1, -1) : value;
+}
+
 export function isPublicIpAddress(address: string): boolean {
-  const version = isIP(address);
+  const normalized = stripIpv6Brackets(address);
+  const version = isIP(normalized);
   if (version === 4) {
-    return !blockedIpv4.check(address, "ipv4");
+    return !blockedIpv4.check(normalized, "ipv4");
   }
   if (version !== 6) {
     return false;
   }
 
-  const mapped = mappedIpv4Address(address);
+  const mapped = mappedIpv4Address(normalized);
   if (mapped) {
     return isPublicIpAddress(mapped);
   }
-  return !blockedIpv6.check(address, "ipv6");
+  const nat64 = nat64Ipv4Address(normalized);
+  if (nat64) {
+    return isPublicIpAddress(nat64);
+  }
+  return !blockedIpv6.check(normalized, "ipv6");
 }
 
 const defaultLookup: AddressLookup = (hostname) => lookup(hostname, { all: true, verbatim: true });
@@ -119,30 +144,39 @@ export async function resolvePublicAddress(
   hostname: string,
   lookupImpl: AddressLookup = defaultLookup,
 ): Promise<ResolvedAddress> {
+  const normalizedHostname = stripIpv6Brackets(hostname);
+  const literalFamily = isIP(normalizedHostname);
+  if (literalFamily === 4 || literalFamily === 6) {
+    if (!isPublicIpAddress(normalizedHostname)) {
+      throw new Error(`Refusing non-public Sitemap address for ${normalizedHostname}.`);
+    }
+    return { address: normalizedHostname, family: literalFamily };
+  }
+
   let addresses: ReadonlyArray<{ address: string; family: number }>;
   try {
-    addresses = await lookupImpl(hostname);
+    addresses = await lookupImpl(normalizedHostname);
   } catch (error) {
-    throw new Error(`Could not resolve Sitemap host ${hostname}.`, { cause: error });
+    throw new Error(`Could not resolve Sitemap host ${normalizedHostname}.`, { cause: error });
   }
 
   if (addresses.length === 0) {
-    throw new Error(`Sitemap host ${hostname} did not resolve to an address.`);
+    throw new Error(`Sitemap host ${normalizedHostname} did not resolve to an address.`);
   }
 
   for (const result of addresses) {
     if (!isPublicIpAddress(result.address)) {
-      throw new Error(`Refusing non-public Sitemap address for ${hostname}.`);
+      throw new Error(`Refusing non-public Sitemap address for ${normalizedHostname}.`);
     }
   }
 
   const first = addresses[0];
   if (!first) {
-    throw new Error(`Sitemap host ${hostname} did not resolve to an address.`);
+    throw new Error(`Sitemap host ${normalizedHostname} did not resolve to an address.`);
   }
   const family = isIP(first.address);
   if (family !== 4 && family !== 6) {
-    throw new Error(`Sitemap host ${hostname} returned an invalid IP address.`);
+    throw new Error(`Sitemap host ${normalizedHostname} returned an invalid IP address.`);
   }
   return { address: first.address, family };
 }

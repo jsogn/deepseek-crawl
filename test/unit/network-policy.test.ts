@@ -23,6 +23,9 @@ describe("isPublicIpAddress", () => {
     "::",
     "::1",
     "::ffff:127.0.0.1",
+    "64:ff9b::a00:1",
+    "64:ff9b::7f00:1",
+    "64:ff9b::c0a8:1",
     "100::1",
     "2001:2::1",
     "2001:db8::1",
@@ -33,12 +36,15 @@ describe("isPublicIpAddress", () => {
     expect(isPublicIpAddress(address)).toBe(false);
   });
 
-  it.each(["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111", "2606:4700:4700:0:0:0:0:1111"])(
-    "accepts public address %s",
-    (address) => {
-      expect(isPublicIpAddress(address)).toBe(true);
-    },
-  );
+  it.each([
+    "1.1.1.1",
+    "8.8.8.8",
+    "2606:4700:4700::1111",
+    "2606:4700:4700:0:0:0:0:1111",
+    "64:ff9b::808:808",
+  ])("accepts public address %s", (address) => {
+    expect(isPublicIpAddress(address)).toBe(true);
+  });
 
   it("rejects malformed addresses", () => {
     expect(isPublicIpAddress("example.com")).toBe(false);
@@ -73,6 +79,27 @@ describe("resolvePublicAddress", () => {
         vi.fn(async () => []),
       ),
     ).rejects.toThrow(/did not resolve/i);
+  });
+
+  it("handles a direct public IPv6 URL without DNS lookup", async () => {
+    const lookup = vi.fn(async () => {
+      throw new Error("lookup should not run");
+    });
+
+    await expect(resolvePublicAddress("[2606:4700:4700::1111]", lookup)).resolves.toEqual({
+      address: "2606:4700:4700::1111",
+      family: 6,
+    });
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it("rejects a direct non-public IPv6 URL without DNS lookup", async () => {
+    const lookup = vi.fn(async () => {
+      throw new Error("lookup should not run");
+    });
+
+    await expect(resolvePublicAddress("[::1]", lookup)).rejects.toThrow(/non-public/i);
+    expect(lookup).not.toHaveBeenCalled();
   });
 });
 
@@ -170,6 +197,25 @@ describe("createPublicSitemapFetcher", () => {
       /non-public/i,
     );
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("normalizes a direct IPv6 hostname before resolution", async () => {
+    const resolve = vi.fn(async () => ({
+      address: "2606:4700:4700::1111",
+      family: 6 as const,
+    }));
+    const request = vi.fn(async () => ({
+      status: 200,
+      body: "<urlset />",
+    }));
+    const fetcher = createPublicSitemapFetcher({ resolve, request });
+
+    await expect(
+      fetcher.fetch(new URL("https://[2606:4700:4700::1111]/sitemap.xml")),
+    ).resolves.toMatchObject({
+      finalUrl: new URL("https://[2606:4700:4700::1111]/sitemap.xml"),
+    });
+    expect(resolve).toHaveBeenCalledWith("2606:4700:4700::1111");
   });
 
   it("times out a request that does not settle", async () => {

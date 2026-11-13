@@ -14,6 +14,8 @@ import {
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_BODY_LIMIT_BYTES = 5 * 1024 * 1024;
 const DEFAULT_MAX_REDIRECTS = 3;
+const MAX_SITEMAP_DOCUMENTS = 10;
+const MAX_SITEMAP_CANDIDATES = 10_000;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 export interface SitemapFetchResponse {
@@ -296,13 +298,17 @@ function parseSitemap(body: string): ParsedSitemap {
   throw new Error("Sitemap root element is not urlset or sitemapindex.");
 }
 
-function validateReadOptions(options: SitemapReadOptions): void {
-  if (!Number.isInteger(options.maxDocuments) || options.maxDocuments < 1) {
+function resolveReadOptions(options: SitemapReadOptions): SitemapReadOptions {
+  if (!Number.isSafeInteger(options.maxDocuments) || options.maxDocuments < 1) {
     throw new Error("maxDocuments must be a positive integer.");
   }
-  if (!Number.isInteger(options.maxCandidates) || options.maxCandidates < 1) {
+  if (!Number.isSafeInteger(options.maxCandidates) || options.maxCandidates < 1) {
     throw new Error("maxCandidates must be a positive integer.");
   }
+  return {
+    maxDocuments: Math.min(options.maxDocuments, MAX_SITEMAP_DOCUMENTS),
+    maxCandidates: Math.min(options.maxCandidates, MAX_SITEMAP_CANDIDATES),
+  };
 }
 
 export class SitemapReader {
@@ -317,7 +323,7 @@ export class SitemapReader {
     options: SitemapReadOptions,
     signal?: AbortSignal,
   ): Promise<SitemapDiscovery> {
-    validateReadOptions(options);
+    const limits = resolveReadOptions(options);
     if (!["http:", "https:"].includes(seedUrl.protocol) || !seedUrl.hostname) {
       throw new Error("Seed URL must use HTTP or HTTPS.");
     }
@@ -334,7 +340,7 @@ export class SitemapReader {
     let truncated = false;
     let candidateLimitWarningAdded = false;
 
-    while (queue.length > 0 && documentsRead < options.maxDocuments) {
+    while (queue.length > 0 && documentsRead < limits.maxDocuments) {
       if (signal?.aborted) {
         throw abortReason(signal);
       }
@@ -382,14 +388,14 @@ export class SitemapReader {
           if (urls.has(url.href)) {
             continue;
           }
-          if (urls.size >= options.maxCandidates) {
+          if (urls.size >= limits.maxCandidates) {
             truncated = true;
             if (!candidateLimitWarningAdded) {
               candidateLimitWarningAdded = true;
               warnings.push(
                 warning(
                   "sitemap_limit_reached",
-                  `Sitemap candidate limit of ${options.maxCandidates} was reached.`,
+                  `Sitemap candidate limit of ${limits.maxCandidates} was reached.`,
                 ),
               );
             }
@@ -414,7 +420,7 @@ export class SitemapReader {
       warnings.push(
         warning(
           "sitemap_limit_reached",
-          `Sitemap document limit of ${options.maxDocuments} was reached.`,
+          `Sitemap document limit of ${limits.maxDocuments} was reached.`,
         ),
       );
     }

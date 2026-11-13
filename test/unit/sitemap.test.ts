@@ -106,6 +106,31 @@ describe("SitemapReader", () => {
     expect(result.warnings.map((warning) => warning.code)).toContain("sitemap_limit_reached");
   });
 
+  it("clamps an oversized document limit to the hard maximum", async () => {
+    const nested = Array.from(
+      { length: 12 },
+      (_, index) => `<sitemap><loc>https://example.com/sitemap-${index}.xml</loc></sitemap>`,
+    ).join("");
+    const documents: Record<string, string> = {
+      "https://example.com/sitemap.xml": `<sitemapindex>${nested}</sitemapindex>`,
+    };
+    for (let index = 0; index < 12; index += 1) {
+      documents[`https://example.com/sitemap-${index}.xml`] =
+        `<urlset><url><loc>https://example.com/page-${index}</loc></url></urlset>`;
+    }
+    const { fetcher, calls } = mappedFetcher(documents);
+    const reader = new SitemapReader({ fetcher });
+
+    const result = await reader.read(new URL("https://example.com/"), {
+      maxDocuments: 12,
+      maxCandidates: 100,
+    });
+
+    expect(calls).toHaveLength(10);
+    expect(result.truncated).toBe(true);
+    expect(result.warnings.map((warning) => warning.code)).toContain("sitemap_limit_reached");
+  });
+
   it("stops at the candidate limit and reports truncation", async () => {
     const body = `<urlset>
       <url><loc>https://example.com/a</loc></url>
@@ -124,6 +149,50 @@ describe("SitemapReader", () => {
     expect(result.truncated).toBe(true);
     expect(result.warnings.map((warning) => warning.code)).toContain("sitemap_limit_reached");
   });
+
+  it("clamps an oversized candidate limit to the hard maximum", async () => {
+    const entries = Array.from(
+      { length: 10_001 },
+      (_, index) =>
+        `<url><loc>https://example.com/page-${String(index).padStart(5, "0")}</loc></url>`,
+    ).join("");
+    const { fetcher } = mappedFetcher({
+      "https://example.com/sitemap.xml": `<urlset>${entries}</urlset>`,
+    });
+    const reader = new SitemapReader({ fetcher });
+
+    const result = await reader.read(new URL("https://example.com/"), {
+      maxDocuments: 10,
+      maxCandidates: 12_000,
+    });
+
+    expect(result.urls).toHaveLength(10_000);
+    expect(result.truncated).toBe(true);
+    expect(result.warnings.map((warning) => warning.code)).toContain("sitemap_limit_reached");
+  });
+
+  it.each([
+    [0, 10],
+    [1.5, 10],
+    [Number.NaN, 10],
+    [10, 0],
+    [10, 1.5],
+    [10, Number.POSITIVE_INFINITY],
+  ])(
+    "rejects invalid sitemap limits (%s documents, %s candidates)",
+    async (documents, candidates) => {
+      const { fetcher } = mappedFetcher({});
+      const reader = new SitemapReader({ fetcher });
+
+      await expect(
+        reader.read(new URL("https://example.com/"), {
+          maxDocuments: documents,
+          maxCandidates: candidates,
+        }),
+      ).rejects.toThrow(/positive integer/i);
+      expect(fetcher.fetch).not.toHaveBeenCalled();
+    },
+  );
 
   it("turns invalid XML into a warning", async () => {
     const { fetcher } = mappedFetcher({

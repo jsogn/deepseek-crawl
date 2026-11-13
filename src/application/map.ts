@@ -1,4 +1,4 @@
-import { extractMarkdownLinks, normalizeHttpUrl, sameOrigin } from "../crawl/links.js";
+import { normalizeHttpUrl, sameOrigin, visitMarkdownLinks } from "../crawl/links.js";
 import type { MapResult, MapUrl, MapUrlSource, MapWarning } from "../crawl/types.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { fetchInputSchema } from "../deepseek/schemas.js";
@@ -79,20 +79,24 @@ function createCandidateCollector(seed: URL, capacity: number): CandidateCollect
   const candidates = new Map<string, Set<MapUrlSource>>([
     [seed.href, new Set<MapUrlSource>(["seed_url"])],
   ]);
+  const nonSeedCapacity = Math.max(0, capacity - 1);
   let truncated = false;
 
   const trim = (): void => {
-    while (candidates.size > capacity) {
-      const largest = [...candidates.keys()]
-        .filter((url) => url !== seed.href)
-        .sort(compareCodeUnits)
-        .at(-1);
-      if (!largest) {
-        break;
-      }
-      candidates.delete(largest);
-      truncated = true;
+    if (candidates.size <= capacity) {
+      return;
     }
+    const retained = [...candidates.keys()]
+      .filter((url) => url !== seed.href)
+      .sort(compareCodeUnits)
+      .slice(0, nonSeedCapacity);
+    const retainedSet = new Set(retained);
+    for (const url of candidates.keys()) {
+      if (url !== seed.href && !retainedSet.has(url)) {
+        candidates.delete(url);
+      }
+    }
+    truncated = true;
   };
 
   return {
@@ -101,15 +105,26 @@ function createCandidateCollector(seed: URL, capacity: number): CandidateCollect
       if (!normalized) {
         return;
       }
+      if (normalized.href === seed.href) {
+        candidates.get(seed.href)?.add(source);
+        return;
+      }
       const sources = candidates.get(normalized.href);
       if (sources) {
         sources.add(source);
         return;
       }
+      if (nonSeedCapacity === 0) {
+        truncated = true;
+        return;
+      }
       candidates.set(normalized.href, new Set<MapUrlSource>([source]));
-      trim();
+      if (candidates.size >= capacity * 2) {
+        trim();
+      }
     },
     finish() {
+      trim();
       return { candidates, truncated };
     },
   };
@@ -192,11 +207,11 @@ export async function executeMap(
 
   if (seedPageResult.status === "fulfilled") {
     const bounded = boundFetchOutput({ ...seedPageResult.value, url: seed.href }, pageContentLimit);
-    for (const url of extractMarkdownLinks(bounded.content, seed)) {
+    visitMarkdownLinks(bounded.content, seed, (url) => {
       if (sameOrigin(url, seed)) {
         candidateCollector.add(url, "seed_page");
       }
-    }
+    });
   } else {
     warnings.push({
       code: "seed_page_failed",

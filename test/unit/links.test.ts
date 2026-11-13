@@ -4,6 +4,7 @@ import {
   normalizeHttpUrl,
   safePageSlug,
   sameOrigin,
+  visitMarkdownLinks,
 } from "../../src/crawl/links.js";
 
 const base = new URL("https://example.com/docs/start");
@@ -37,6 +38,14 @@ describe("extractMarkdownLinks", () => {
 
   it("removes fragments", () => {
     expect(normalizeHttpUrl("/page#part", base)?.href).toBe("https://example.com/page");
+  });
+
+  it("streams each normalized link to a caller-provided sink", () => {
+    const links: string[] = [];
+    visitMarkdownLinks("[A](/a) [A again](/a) [B](/b)", base, (url) => {
+      links.push(url.href);
+    });
+    expect(links).toEqual(["https://example.com/a", "https://example.com/b"]);
   });
 });
 

@@ -237,6 +237,30 @@ describe("executeMap", () => {
     expect(result.truncated).toBe(true);
   });
 
+  it("keeps excessive seed-page links within the discovery cap", async () => {
+    const links = Array.from(
+      { length: 20_000 },
+      (_, index) => `[Page ${index}](/p${index.toString().padStart(5, "0")})`,
+    ).join(" ");
+    const sitemapReader = reader({ urls: [] });
+
+    const result = await executeMap(
+      gateway(links),
+      sitemapReader,
+      { url: "https://example.com/" },
+      { limit: 10, discoveryLimit: 4 },
+    );
+
+    expect(result.urls).toEqual([
+      { url: "https://example.com/", sources: ["seed_url"] },
+      { url: "https://example.com/p00000", sources: ["seed_page"] },
+      { url: "https://example.com/p00001", sources: ["seed_page"] },
+      { url: "https://example.com/p00002", sources: ["seed_page"] },
+    ]);
+    expect(result.total).toBe(4);
+    expect(result.truncated).toBe(true);
+  });
+
   it("preserves Sitemap warnings and truncation metadata", async () => {
     const sitemapReader = reader({
       urls: [new URL("https://example.com/a")],

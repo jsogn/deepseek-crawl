@@ -22,9 +22,8 @@ export function sameOrigin(left: URL, right: URL): boolean {
   return left.origin === right.origin;
 }
 
-export function extractMarkdownLinks(value: string, base: URL): URL[] {
+export function visitMarkdownLinks(value: string, base: URL, visitLink: (url: URL) => void): void {
   const seen = new Set<string>();
-  const links: URL[] = [];
 
   const visit = (tokens: ReturnType<typeof markdown.parse>): void => {
     for (const token of tokens) {
@@ -43,11 +42,18 @@ export function extractMarkdownLinks(value: string, base: URL): URL[] {
         continue;
       }
       seen.add(url.href);
-      links.push(url);
+      visitLink(url);
     }
   };
 
   visit(markdown.parse(value, {}));
+}
+
+export function extractMarkdownLinks(value: string, base: URL): URL[] {
+  const links: URL[] = [];
+  visitMarkdownLinks(value, base, (url) => {
+    links.push(url);
+  });
   return links;
 }
 

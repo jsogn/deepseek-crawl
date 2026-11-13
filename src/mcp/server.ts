@@ -136,6 +136,7 @@ const mapOutputSchema = z.object({
       message: z.string(),
     }),
   ),
+  search: z.string().optional(),
 });
 
 const crawlPageOutputSchema = z.object({
@@ -420,6 +421,12 @@ export function createMcpServer(options: McpServerOptions): McpServer {
       inputSchema: {
         url: z.string().describe("HTTP(S) seed URL."),
         limit: z.number().int().min(1).max(500).default(100).describe("Maximum returned URLs."),
+        search: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("Optional case-insensitive substring used to filter returned URLs."),
       },
       outputSchema: mapOutputSchema,
       annotations: {
@@ -439,6 +446,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
             limit: args.limit,
             discoveryLimit: 10_000,
             pageContentLimit: 1_000_000,
+            ...(args.search === undefined ? {} : { search: args.search }),
           },
           extra.signal,
         );

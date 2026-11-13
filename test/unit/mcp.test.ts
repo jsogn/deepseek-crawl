@@ -180,6 +180,43 @@ describe("MCP server", () => {
     expect(result.structuredContent).toMatchObject({ total: 100, limit: 100, truncated: true });
   });
 
+  it("passes optional Map search through MCP without adding tools", async () => {
+    const { client, gateway, sitemapReader } = await connectedServer();
+    sitemapReader.read.mockResolvedValueOnce({
+      urls: [
+        new URL("https://example.com/docs/reference"),
+        new URL("https://example.com/blog/post"),
+      ],
+      warnings: [],
+      truncated: false,
+    });
+    gateway.fetch.mockResolvedValueOnce({
+      title: "Seed",
+      content: "[Docs](/docs/start)",
+    });
+
+    const result = await client.callTool({
+      name: "deepseek_map",
+      arguments: { url: "https://example.com/", search: "docs" },
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      search: "docs",
+      total: 2,
+      urls: [
+        { url: "https://example.com/docs/reference", sources: ["sitemap"] },
+        { url: "https://example.com/docs/start", sources: ["seed_page"] },
+      ],
+    });
+    expect((await client.listTools()).tools.map((tool) => tool.name).sort()).toEqual([
+      "deepseek_crawl",
+      "deepseek_fetch",
+      "deepseek_map",
+      "deepseek_search",
+    ]);
+  });
+
   it("rejects Map limits above 500", async () => {
     const { client, sitemapReader } = await connectedServer();
     const result = await client.callTool({

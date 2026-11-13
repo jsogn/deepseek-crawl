@@ -20,6 +20,10 @@ function existingPathError(path: string): NodeJS.ErrnoException {
   return error;
 }
 
+function lockPath(finalPath: string): string {
+  return join(dirname(finalPath), `.${basename(finalPath)}.lock`);
+}
+
 async function requireMissingPath(path: string): Promise<void> {
   try {
     await lstat(path);
@@ -76,24 +80,40 @@ export async function createCrawlOutputWriter(finalDirectory: string): Promise<C
 
     async finish(result) {
       ensureWritable();
-      const pages = result.pages.map((summary) => {
-        const path = pagePaths.get(summary.index);
-        if (!path) {
-          throw new Error(`Crawl page ${summary.index} was not written.`);
-        }
-        return { ...summary, path };
-      });
-      const output: CrawlOutputResult = { ...result, pages };
+      const publicationLock = lockPath(finalPath);
+      let ownsLock = false;
+      try {
+        const pages = result.pages.map((summary) => {
+          const path = pagePaths.get(summary.index);
+          if (!path) {
+            throw new Error(`Crawl page ${summary.index} was not written.`);
+          }
+          return { ...summary, path };
+        });
+        const output: CrawlOutputResult = { ...result, pages };
 
-      await writeFile(
-        join(stagingPath, "crawl.json"),
-        `${JSON.stringify(output, null, 2)}\n`,
-        "utf8",
-      );
-      await requireMissingPath(finalPath);
-      await rename(stagingPath, finalPath);
-      finished = true;
-      return output;
+        await writeFile(
+          join(stagingPath, "crawl.json"),
+          `${JSON.stringify(output, null, 2)}\n`,
+          "utf8",
+        );
+        await writeFile(publicationLock, "", { encoding: "utf8", flag: "wx" });
+        ownsLock = true;
+        await requireMissingPath(finalPath);
+        await rename(stagingPath, finalPath);
+        finished = true;
+        return output;
+      } catch (error) {
+        if (!finished) {
+          await rm(stagingPath, { recursive: true, force: true }).catch(() => undefined);
+          aborted = true;
+        }
+        throw error;
+      } finally {
+        if (ownsLock) {
+          await rm(publicationLock, { force: true }).catch(() => undefined);
+        }
+      }
     },
 
     async abort() {

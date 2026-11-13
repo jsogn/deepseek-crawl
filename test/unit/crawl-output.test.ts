@@ -99,6 +99,25 @@ describe("createCrawlOutputWriter", () => {
     expect(await readdir(root)).toEqual([]);
     await writer.abort();
   });
+
+  it("allows only one concurrent writer to publish and leaves no artifacts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-output-"));
+    const output = join(root, "result");
+    const first = await createCrawlOutputWriter(output);
+    const second = await createCrawlOutputWriter(output);
+    await first.writePage(page());
+    await second.writePage(page());
+
+    const settled = await Promise.allSettled([first.finish(result()), second.finish(result())]);
+
+    expect(settled.filter((item) => item.status === "fulfilled")).toHaveLength(1);
+    const rejected = settled.filter((item) => item.status === "rejected");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]).toMatchObject({
+      reason: { code: "EEXIST" },
+    });
+    expect(await readdir(root)).toEqual(["result"]);
+  });
 });
 
 describe("formatCrawlHuman", () => {

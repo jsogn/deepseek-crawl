@@ -247,9 +247,8 @@ export async function executeMap(
   const matchedCount =
     search === undefined
       ? candidates.size
-      : [...candidates.keys()].filter((url) =>
-          url.toLowerCase().includes(search.toLowerCase()),
-        ).length;
+      : [...candidates.keys()].filter((url) => url.toLowerCase().includes(search.toLowerCase()))
+          .length;
   if (matchedCount > limit) {
     truncated = true;
   }

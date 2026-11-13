@@ -1,8 +1,11 @@
 ---
+
 name: deepseek-crawl
 description: Use DeepSeek's official Search and Fetch APIs through the deepseek-crawl CLI for live web search, reading a known URL, mapping a site, or bounded same-origin crawling. Prefer this CLI-first workflow for AI web tasks; not for local files, browser interaction, login, or Firecrawl API compatibility.
 allowed-tools:
-  - Bash(deepseek-crawl *)
+
+- Bash(deepseek-crawl *)
+
 ---
 
 # DeepSeek Crawl

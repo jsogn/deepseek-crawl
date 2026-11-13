@@ -33,6 +33,11 @@ describe("package documentation", () => {
       "deepseek_crawl",
       "robots.txt",
       "Firecrawl",
+      "CLI-first",
+      "skills/deepseek-crawl",
+      "map <url> [--search <text>]",
+      "deepseek-crawl crawl <url> -o <dir>",
+      "MCP is optional",
     ]) {
       expect(readme).toContain(text);
     }

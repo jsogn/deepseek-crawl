@@ -60,9 +60,7 @@ describe("parseCli", () => {
       json: true,
     });
 
-    expect(
-      parseCli(["map", "https://example.com", "--search", "docs", "--limit", "20"]),
-    ).toEqual({
+    expect(parseCli(["map", "https://example.com", "--search", "docs", "--limit", "20"])).toEqual({
       kind: "map",
       url: "https://example.com",
       limit: 20,

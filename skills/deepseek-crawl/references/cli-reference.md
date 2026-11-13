@@ -154,15 +154,15 @@ but not duplicate page bodies.
 
 ## Hard Limits
 
-| Resource | Limit |
-| --- | --- |
-| Fetch response body | 8 MiB |
-| Crawl page content | 1,000,000 code points |
-| Crawl discovery CLI | 10,000 URLs |
-| Map candidates | 10,000 URLs |
-| Sitemap documents | 10 |
-| Sitemap response | 5 MiB |
-| Sitemap redirects | 3, same-origin |
+| Resource            | Limit                 |
+| ------------------- | --------------------- |
+| Fetch response body | 8 MiB                 |
+| Crawl page content  | 1,000,000 code points |
+| Crawl discovery CLI | 10,000 URLs           |
+| Map candidates      | 10,000 URLs           |
+| Sitemap documents   | 10                    |
+| Sitemap response    | 5 MiB                 |
+| Sitemap redirects   | 3, same-origin        |
 
 ## Exit and Cancellation
 

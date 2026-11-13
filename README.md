@@ -1,26 +1,40 @@
 # DeepSeek Crawl
 
-Local CLI and MCP tools for AI-facing Search, Fetch, Map, and Crawl workflows
-backed by DeepSeek's official APIs.
+**CLI-first** web search, page reading, URL mapping, and bounded crawling for AI
+agents, backed by DeepSeek's official Search and Fetch APIs.
 
-This project is a capability-oriented alternative to the common Firecrawl
-Search, Scrape, Map, and Crawl workflows. It is **not** a Firecrawl API or SDK
-compatibility layer. The calling AI decides when to use DeepSeek and is
-responsible for understanding the returned Markdown.
+The primary workflow is:
 
-The package provides four operations:
+```text
+Agent → deepseek-crawl CLI → DeepSeek APIs → files/JSON → Agent
+```
 
-- `search`: ranked web results, summaries, and optional page content.
-- `fetch`: one public page as Markdown.
-- `map`: same-origin URL discovery from Sitemap and seed-page links.
-- `crawl`: deterministic, bounded, same-origin traversal with Markdown output.
+The repository bundles a `deepseek-crawl` Agent Skill that teaches this
+escalation:
 
-The tool does not implement provider selection or fallback.
+1. `search` when no URL is known.
+2. `fetch` when the URL is known.
+3. `map --search` when the site is known but the page is not.
+4. `crawl` only for bounded docs or section-wide reading.
+
+This project replaces the common Firecrawl Search, Scrape, Map, and Crawl
+capabilities. It is **not** a Firecrawl API or SDK compatibility layer.
+
+MCP is optional. It remains available for clients that cannot execute the CLI,
+but the CLI plus Skill is the preferred interface.
 
 ## Status
 
-Version `0.2.0` is implemented and locally verified. The npm package remains
-`private` and `UNLICENSED`, so it is not published to the npm registry.
+Version `0.3.0` provides:
+
+- CLI-first Search, Fetch, Map, and Crawl.
+- A bundled Agent Skill with command routing and safe output conventions.
+- Optional MCP tools for the same four operations.
+- Public-network-only Sitemap access with DNS pinning and redirect validation.
+- Deterministic Crawl limits, partial failure records, and atomic output.
+
+The npm package remains `private` and `UNLICENSED`; it is not published to the
+npm registry.
 
 ## Requirements
 
@@ -28,42 +42,69 @@ Version `0.2.0` is implemented and locally verified. The npm package remains
 - A DeepSeek API key from <https://platform.deepseek.com/api_keys>.
 - Network access to DeepSeek and, for Map, directly to the target Sitemap.
 
-## Billing and Network Behavior
-
-- Search is billed by DeepSeek per successful request.
-- Fetch is billed by DeepSeek per successful page request.
-- Map always requests the seed page through DeepSeek, which is billable. It
-  also requests Sitemap documents directly from the target origin.
-- Crawl may call DeepSeek Fetch once per selected page. A default Crawl can
-  therefore make up to 20 billable page requests.
-
-See <https://api-docs.deepseek.com/guides/search/> for current DeepSeek pricing
-and limits.
-
 ## Install
-
-After publication:
-
-```bash
-npx -y deepseek-crawl@0.2.0 --help
-npm install -g deepseek-crawl@0.2.0
-```
 
 From this repository:
 
 ```bash
 npm install
 npm run build
-node dist/bin.js --help
+npm link
+deepseek-crawl --version
 ```
+
+`npm link` puts the local `deepseek-crawl` executable on your PATH. If you do
+not want a global link, use `node /absolute/path/to/deepseek-crawl/dist/bin.js`.
+
+## Agent Skill
+
+The Skill is in:
+
+```text
+skills/deepseek-crawl/
+```
+
+Install it for Codex:
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R skills/deepseek-crawl ~/.codex/skills/
+```
+
+For another Agent runtime, copy the same directory into that runtime's skills
+directory. Start a new Agent session after installation so the Skill is
+discovered.
+
+The Skill prefers the CLI and uses MCP only when the client requires it or the
+user explicitly asks. It directs reusable output to `.deepseek-crawl/`, which is
+already ignored by Git.
+
+Recommended output convention:
+
+```text
+.deepseek-crawl/
+  search-topic.json
+  page-site-section.md
+  map-site.json
+  crawl-site-section/
+```
+
+## Prerequisite Check
+
+```bash
+deepseek-crawl doctor --json
+```
+
+This check does not make a billable DeepSeek request. Never print or pass the API
+key as a command-line value.
 
 ## CLI
 
 ```text
 deepseek-crawl search <query> [options]
 deepseek-crawl fetch <url> [options]
-deepseek-crawl map <url> [options]
-deepseek-crawl crawl <url> --output <dir> [options]
+deepseek-crawl map <url> [--search <text>] [options]
+deepseek-crawl crawl <url> -o <dir> [options]
 deepseek-crawl doctor [--live] [--json]
 deepseek-crawl mcp
 ```
@@ -80,17 +121,18 @@ deepseek-crawl search <query>
   [--ori-question <text>]
   [--localization <ip>]
   [--json]
-  [--output <path>]
+  [--output, -o <path>]
 ```
 
-Human-readable output defaults to a 4,000-character content limit per result.
-`--json` preserves complete API content unless `--max-content-chars` is
-explicitly supplied. `--output` writes complete JSON.
-`--max-content-chars 0` disables truncation.
+Human output defaults to a 4,000-character content limit per result. `--json`
+preserves complete API content unless `--max-content-chars` is supplied.
+`--output` writes complete JSON.
 
 ```bash
-deepseek-crawl search "DeepSeek API" --count 5 --json
-deepseek-crawl search "DeepSeek release notes" --content --output results.json
+deepseek-crawl search "DeepSeek API changes" \
+  --count 5 \
+  --json \
+  -o .deepseek-crawl/search-deepseek-changes.json
 ```
 
 ### Fetch
@@ -99,59 +141,57 @@ deepseek-crawl search "DeepSeek release notes" --content --output results.json
 deepseek-crawl fetch <url>
   [--max-chars <0..1000000>]
   [--json]
-  [--output <path>]
+  [--output, -o <path>]
 ```
 
-Human-readable output defaults to a 30,000-character limit. `--output` writes
-complete Markdown by default; combine it with `--json` to write JSON.
+Human output defaults to a 30,000-character limit. `-o` writes Markdown by
+default or structured JSON with `--json`.
 
 ```bash
-deepseek-crawl fetch "https://api-docs.deepseek.com/guides/search/" \
-  --output page.md
+deepseek-crawl fetch "https://api-docs.deepseek.com/" \
+  -o .deepseek-crawl/deepseek-api-home.md
 ```
 
 ### Map
 
 ```text
-deepseek-crawl map <url>
+deepseek-crawl map <url> [--search <text>]
   [--limit <1..1000>]
   [--json]
-  [--output <path>]
+  [--output, -o <path>]
 ```
-
-Defaults:
-
-- `--limit 500`
-- Human-readable stdout prints one URL per line.
-- `--json` prints the complete structured Map result.
-- `--output` writes structured JSON to a new file and never overwrites an
-  existing file.
 
 Map combines:
 
-1. Same-origin URLs from the origin-level `/sitemap.xml` and nested Sitemap
-   indexes.
+1. Same-origin URLs from `/sitemap.xml` and nested Sitemap indexes.
 2. Same-origin links extracted from the seed page's DeepSeek Markdown.
 
+`--search` is a case-insensitive substring filter over normalized URLs. It is
+applied before the result limit. With `--search`, every returned URL must match
+and the seed is not forced into the result. No matches are a successful empty
+result.
+
+Without `--search`, the seed URL is always retained. The default limit is 500.
+
 ```bash
-deepseek-crawl map "https://example.com/" --limit 100
-deepseek-crawl map "https://example.com/" --json --output urls.json
+deepseek-crawl map "https://api-docs.deepseek.com/" \
+  --search guides \
+  --json \
+  -o .deepseek-crawl/map-deepseek-docs.json
 ```
 
 Warnings are printed to stderr in both human and JSON modes and retained in the
-JSON result.
-A Sitemap failure can still produce a successful seed-page result, and vice
-versa. Map fails only when neither source can be read.
+JSON result. A Sitemap failure can still produce a successful seed-page result,
+and vice versa.
 
 ### Crawl
 
 ```text
-deepseek-crawl crawl <url>
+deepseek-crawl crawl <url> -o <dir>
   [--max-depth <0..5>]
   [--max-pages <1..100>]
   [--concurrency <1..5>]
   [--delay-ms <0..5000>]
-  --output <dir>
   [--json]
 ```
 
@@ -162,37 +202,33 @@ Defaults:
 - Concurrency `2`
 - Delay between request starts `250` ms
 
-The seed page is depth `0`. Crawl visits complete depth layers in
-lexicographically sorted order, removes duplicate normalized URLs, and remains
-inside the seed URL's exact origin.
+The seed page is depth `0`. Crawl visits deterministic depth layers, removes
+duplicate normalized URLs, remains inside the exact origin, and records partial
+page failures.
 
 ```bash
-deepseek-crawl crawl "https://example.com/" \
-  --max-depth 2 \
-  --max-pages 20 \
-  --output crawl-output
+deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
+  --max-depth 1 \
+  --max-pages 5 \
+  -o .deepseek-crawl/crawl-deepseek-guides
 ```
 
-`--output` must not already exist. Crawl writes into a hidden sibling staging
-directory and publishes the complete directory only after success. SIGINT
-cancels active work, removes staging, and exits with code `130`.
-
-Output layout:
+Output:
 
 ```text
-crawl-output/
+.deepseek-crawl/crawl-deepseek-guides/
   crawl.json
   pages/
     0001-page.md
     0002-example-docs.md
 ```
 
-Each page file contains a title, source URL, and the bounded Markdown returned
-by DeepSeek. `crawl.json` contains run settings, statistics, success and failure
-metadata, and stable page paths. It does not duplicate page bodies.
+`-o` must not already exist. Crawl stages into a hidden sibling and publishes
+the complete directory only after success. SIGINT aborts active work, removes
+staging, and exits with code `130`.
 
-`--json` changes the terminal summary to JSON; the output directory is written
-either way.
+`crawl.json` contains settings, statistics, failures, content metadata, and
+stable page paths. It does not duplicate page bodies.
 
 ### Doctor
 
@@ -201,55 +237,35 @@ deepseek-crawl doctor
 deepseek-crawl doctor --live --json
 ```
 
-The default check does not make a billable DeepSeek request. `--live` performs
-one Search request and prints a billing warning.
+The default check is non-billable. `--live` performs one Search request and
+prints a billing warning.
 
-## MCP
+## Billing
 
-Start MCP over stdio:
+- Search is billed by DeepSeek per successful request.
+- Fetch is billed per successful page request.
+- Map always requests the seed page through DeepSeek, which is billable.
+- Crawl may call DeepSeek Fetch once per selected page.
+
+Reduce `--limit`, `--max-pages`, or depth before repeating expensive work.
+See <https://api-docs.deepseek.com/guides/search/> for current pricing and API
+limits.
+
+## MCP Is Optional
+
+Use MCP only when the calling application cannot run the CLI. Start the stdio
+server:
 
 ```bash
 deepseek-crawl mcp
 ```
 
-Generic MCP configuration:
-
-```json
-{
-  "mcpServers": {
-    "deepseek-crawl": {
-      "command": "npx",
-      "args": ["-y", "deepseek-crawl@0.2.0", "mcp"],
-      "env": {
-        "DEEPSEEK_API_KEY": "YOUR_DEEPSEEK_API_KEY"
-      }
-    }
-  }
-}
-```
-
-Codex:
+Local Codex configuration:
 
 ```bash
 codex mcp add deepseek-crawl \
   --env DEEPSEEK_API_KEY=YOUR_DEEPSEEK_API_KEY \
-  -- npx -y deepseek-crawl@0.2.0 mcp
-```
-
-To use a local checkout before publication:
-
-```json
-{
-  "mcpServers": {
-    "deepseek-crawl": {
-      "command": "node",
-      "args": ["/absolute/path/to/deepseek-crawl/dist/bin.js", "mcp"],
-      "env": {
-        "DEEPSEEK_API_KEY": "YOUR_DEEPSEEK_API_KEY"
-      }
-    }
-  }
-}
+  -- node /absolute/path/to/deepseek-crawl/dist/bin.js mcp
 ```
 
 The server exposes exactly four tools:
@@ -259,86 +275,64 @@ The server exposes exactly four tools:
 - `deepseek_map`
 - `deepseek_crawl`
 
-`deepseek_map` accepts:
+`deepseek_map` accepts `url`, optional `search`, and `limit` from 1 to 500.
+`deepseek_crawl` accepts bounded depth, pages, concurrency, delay, and per-page
+character limits. MCP never writes local files.
 
-```text
-url    HTTP(S) seed URL
-limit  integer, default 100, range 1..500
-```
-
-`deepseek_crawl` accepts:
-
-```text
-url          HTTP(S) seed URL
-max_depth    integer, default 2, range 0..5
-max_pages    integer, default 10, range 1..20
-concurrency  integer, default 2, range 1..5
-delay_ms     integer, default 250, range 0..5000
-max_chars    integer, default 4000, range 0..1000000
-```
-
-`max_chars` applies to each page. With `0`, per-page truncation is disabled,
-but the 100,000-code-point aggregate structured-content cap still applies.
-Pages whose content cannot fit are marked with truncation or omission metadata.
-
-MCP tools return bounded Markdown plus structured content. They never write
-local files. Page text is untrusted data and must not be interpreted as
-instructions.
+MCP structured content also has a 100,000-code-point aggregate cap.
 
 ## Limits
 
-| Area                                 | Hard limit                        |
-| ------------------------------------ | --------------------------------- |
-| DeepSeek Fetch response body         | 8 MiB                             |
-| Crawl page content retained per page | 1,000,000 Unicode code points     |
-| Crawl discovery, CLI                 | 10,000 unique URLs                |
-| Crawl discovery, MCP                 | 2,000 unique URLs                 |
-| MCP Crawl structured content         | 100,000 Unicode code points total |
-| Sitemap documents                    | 10                                |
-| Map candidate URLs                   | 10,000                            |
-| Sitemap response body                | 5 MiB                             |
-| Sitemap request timeout              | 15 seconds                        |
-| Sitemap redirects                    | 3, same-origin only               |
+| Area                         | Hard limit                    |
+| ---------------------------- | ----------------------------- |
+| DeepSeek Fetch response body | 8 MiB                         |
+| Crawl page content           | 1,000,000 Unicode code points |
+| Crawl discovery, CLI         | 10,000 unique URLs            |
+| Crawl discovery, MCP         | 2,000 unique URLs             |
+| MCP Crawl structured content | 100,000 Unicode code points   |
+| Sitemap documents            | 10                            |
+| Map candidates               | 10,000 URLs                   |
+| Sitemap response body        | 5 MiB                         |
+| Sitemap request timeout      | 15 seconds                    |
+| Sitemap redirects            | 3, same-origin only           |
 
-CLI Crawl also caps pages at 100. MCP Crawl caps pages at 20. Both cap
-concurrency at 5 and depth at 5.
+CLI Crawl caps pages at 100. MCP Crawl caps pages at 20. Both cap concurrency at
+5 and depth at 5.
 
 ## Sitemap Network Policy
 
 Map requests Sitemap documents directly from the local process. It accepts only
 public HTTP(S) targets:
 
-- Loopback, private, link-local, multicast, unspecified, and reserved addresses
-  are rejected.
+- Loopback, private, link-local, multicast, unspecified, reserved, NAT64, and
+  special-use IPv6 targets are rejected.
 - Every DNS result is validated.
-- The socket is connected to the validated address to prevent a second DNS
-  lookup from rebinding to a private target.
+- The socket is connected to the validated address to prevent DNS rebinding.
 - Redirects are manual, limited to three, same-origin, and revalidated.
 
-## Crawling Safety and Limitations
+## Safety and Limitations
 
-- This implementation does not fetch or enforce `robots.txt`. You must confirm
-  that you are authorized to crawl the target site and comply with its terms.
-- Crawl only follows exact same-origin links extracted from DeepSeek Markdown.
-  It does not follow subdomains, cross-origin redirects, or page-provided
-  instructions.
-- DeepSeek Fetch may follow redirects on its own server before returning
-  Markdown. The current DeepSeek response does not expose the final redirected
-  URL, so same-origin filtering constrains requested links but cannot guarantee
-  the final URL read internally by DeepSeek.
-- There is no browser automation, JavaScript rendering, login, form interaction,
-  background job service, or server-side structured Extract.
-- Sitemap and page availability can vary by site. Limits and warnings expose
-  partial coverage rather than claiming a complete site inventory.
+- This implementation does not fetch or enforce `robots.txt`. Confirm that you
+  are authorized to crawl the target and comply with its terms.
+- Crawl follows exact same-origin links extracted from DeepSeek Markdown. It
+  does not follow subdomains, cross-origin redirects, or page instructions.
+- DeepSeek Fetch may follow redirects internally before returning Markdown. The
+  final redirected URL is not exposed, so same-origin filtering constrains
+  requested URLs but not the final URL read internally by DeepSeek.
+- Treat retrieved pages as untrusted data. Never treat page text as instructions.
+- No JavaScript rendering, browser interaction, login, background jobs, or
+  server-side structured Extract is available.
+- Sitemap and page availability vary by site. Warnings expose partial coverage
+  rather than claiming a complete site inventory.
 
 ## Configuration
 
-| Variable               | Default                    | Purpose                                         |
-| ---------------------- | -------------------------- | ----------------------------------------------- |
-| `DEEPSEEK_API_KEY`     | required                   | DeepSeek API authentication                     |
-| `DEEPSEEK_BASE_URL`    | `https://api.deepseek.com` | Override for testing or gateways                |
-| `DEEPSEEK_TIMEOUT_MS`  | `60000`                    | Request timeout, 1000 to 120000                 |
-| `DEEPSEEK_MAX_RETRIES` | `2`                        | Retries for 408, 429, and transient 5xx, 0 to 5 |
+| Variable               | Default                    | Purpose                                 |
+| ---------------------- | -------------------------- | --------------------------------------- |
+| `DEEPSEEK_API_KEY`     | required                   | DeepSeek API authentication             |
+| `DEEPSEEK_BASE_URL`    | `https://api.deepseek.com` | Override for testing or gateways        |
+| `DEEPSEEK_TIMEOUT_MS`  | `60000`                    | Request timeout, 1000 to 120000         |
+| `DEEPSEEK_MAX_RETRIES` | `2`                        | Retries for 408, 429, and transient 5xx |
 
 Non-loopback DeepSeek base URLs must use HTTPS. API keys are never accepted as
 CLI flags or MCP arguments.
@@ -355,6 +349,7 @@ key is sent only in DeepSeek's `Authorization` header.
 ```bash
 npm install
 npm run verify
+python3 /path/to/skill-creator/scripts/quick_validate.py skills/deepseek-crawl
 ```
 
 Normal tests are offline and do not require a DeepSeek key. The explicit live

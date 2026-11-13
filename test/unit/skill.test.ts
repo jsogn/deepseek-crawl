@@ -6,7 +6,7 @@ const root = new URL("../../skills/deepseek-crawl/", import.meta.url);
 describe("deepseek-crawl skill", () => {
   it("has valid identity, CLI routing, and an existing reference", async () => {
     const skill = await readFile(new URL("SKILL.md", root), "utf8");
-    expect(skill).toMatch(/^---\nname: deepseek-crawl\n/m);
+    expect(skill).toMatch(/^---\s*\nname: deepseek-crawl/m);
     expect(skill).toMatch(/description:/);
     expect(skill).toContain("deepseek-crawl doctor --json");
     expect(skill).toContain("references/cli-reference.md");

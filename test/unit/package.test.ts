@@ -56,6 +56,11 @@ describe("package documentation", () => {
       "deepseek-crawl auth remove",
       "macOS Keychain",
       "DEEPSEEK_API_KEY",
+      "fetch --input",
+      "--output-dir",
+      "--include-paths",
+      "--exclude-paths",
+      "--ignore-query-parameters",
     ]) {
       expect(allDocumentation).toContain(text);
     }

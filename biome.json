@@ -13,6 +13,13 @@
     }
   },
   "files": {
-    "includes": ["**", "!dist", "!coverage", "!.superpowers", "!docs/superpowers"]
+    "includes": [
+      "**",
+      "!dist",
+      "!coverage",
+      "!.deepseek-crawl",
+      "!.superpowers",
+      "!docs/superpowers"
+    ]
   }
 }

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  canonicalizeCrawlUrl,
-  createCrawlPathFilter,
-} from "../../src/crawl/filters.js";
+import { canonicalizeCrawlUrl, createCrawlPathFilter } from "../../src/crawl/filters.js";
 
 describe("createCrawlPathFilter", () => {
   it("uses prefix matching with path segment boundaries", () => {
@@ -30,9 +27,9 @@ describe("createCrawlPathFilter", () => {
 
 describe("canonicalizeCrawlUrl", () => {
   it("normalizes fragments and optionally removes query parameters", () => {
-    expect(
-      canonicalizeCrawlUrl("https://example.com/page?q=1#section")?.href,
-    ).toBe("https://example.com/page?q=1");
+    expect(canonicalizeCrawlUrl("https://example.com/page?q=1#section")?.href).toBe(
+      "https://example.com/page?q=1",
+    );
     expect(
       canonicalizeCrawlUrl("https://example.com/page?q=1#section", undefined, true)?.href,
     ).toBe("https://example.com/page");

@@ -15,12 +15,7 @@ const MAX_CONCURRENCY = 5;
 const MAX_DELAY_MS = 5_000;
 const MAX_CONTENT_CHARS = 1_000_000;
 
-function normalizeInteger(
-  value: number,
-  name: string,
-  minimum: number,
-  maximum: number,
-): number {
+function normalizeInteger(value: number, name: string, minimum: number, maximum: number): number {
   if (!Number.isSafeInteger(value) || value < minimum) {
     throw new Error(`${name} must be an integer from ${minimum} to ${maximum}.`);
   }
@@ -180,9 +175,7 @@ export async function executeBatchFetch(
   const now = settings.now ?? (() => new Date());
   const startedAt = now().toISOString();
   const controller = new AbortController();
-  const combinedSignal = signal
-    ? AbortSignal.any([signal, controller.signal])
-    : controller.signal;
+  const combinedSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
   const outcomes = await runLayeredTasks<string, BatchOutcome>(urls, {
     concurrency: settings.concurrency,
     delayMs: settings.delayMs,

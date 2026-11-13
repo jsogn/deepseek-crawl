@@ -105,6 +105,22 @@ deepseek-crawl fetch "<url>" -o .deepseek-crawl/page-site-section.md
 Use `--json` with `-o` when title, content, truncation metadata, and stable
 structure are needed.
 
+When multiple URLs are already known, batch them rather than running Fetch in a
+shell loop:
+
+```bash
+deepseek-crawl fetch \
+  --input .deepseek-crawl/map-site.json \
+  --output-dir .deepseek-crawl/pages-site \
+  --concurrency 3 \
+  --delay-ms 250 \
+  --json
+```
+
+The input can be Map JSON, a JSON URL array, objects containing `url`, or a
+newline-separated list. Use `--input -` for stdin. Read `fetch.json` first and
+then only the page files relevant to the task.
+
 ## Map
 
 Use Map to locate the right page on a known site. `--search` applies a
@@ -125,6 +141,9 @@ Map combinations and warnings are useful data:
 - `seed_url`: the requested seed URL without a search filter.
 - Sitemap warnings mean partial coverage, not necessarily command failure.
 
+Feed a Map JSON result directly into Batch Fetch instead of asking the user or
+agent to enumerate every URL manually.
+
 ## Crawl
 
 Crawl is for bounded section-wide reading, such as documentation that must be
@@ -135,11 +154,17 @@ deepseek-crawl crawl "<section-url>" \
   --max-depth 1 \
   --max-pages 5 \
   --concurrency 2 \
+  --include-paths "/docs/*" \
+  --exclude-paths "/docs/private/*" \
+  --ignore-query-parameters \
   -o .deepseek-crawl/crawl-site-section
 ```
 
 Read `crawl.json` first to inspect settings, page paths, failures, and limits.
 Open only the page files relevant to the user's request.
+
+Use path filters for large documentation sites. The seed is always fetched;
+filters apply only to discovered links.
 
 ## Billing and Safety
 

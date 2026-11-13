@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { executeBatchFetch } from "../application/batch.js";
 import {
   executeCrawl,
   executeFetch,
@@ -10,7 +11,6 @@ import {
   executeSearch,
   type MapSitemapReader,
 } from "../application/index.js";
-import { executeBatchFetch } from "../application/batch.js";
 import { loadConfig } from "../config.js";
 import { readSecret } from "../credentials/input.js";
 import { type CredentialStore, createCredentialStore } from "../credentials/store.js";
@@ -18,10 +18,7 @@ import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { runMcpServer } from "../mcp/server.js";
-import {
-  createBatchFetchOutputWriter,
-  formatBatchFetchHuman,
-} from "../output/batch.js";
+import { createBatchFetchOutputWriter, formatBatchFetchHuman } from "../output/batch.js";
 import { createCrawlOutputWriter, formatCrawlHuman } from "../output/crawl.js";
 import { writeFileAtomic, writeFileAtomicNoClobber } from "../output/files.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";

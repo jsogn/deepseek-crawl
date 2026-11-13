@@ -150,10 +150,7 @@ export async function createBatchFetchOutputWriter(
   };
 }
 
-export function formatBatchFetchHuman(
-  result: BatchFetchResult,
-  outputDirectory: string,
-): string {
+export function formatBatchFetchHuman(result: BatchFetchResult, outputDirectory: string): string {
   return [
     `Input: ${result.source}`,
     `URLs: ${result.stats.input} input, ${result.stats.unique} unique`,

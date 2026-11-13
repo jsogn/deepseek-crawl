@@ -1,7 +1,7 @@
 export const packageName = "deepseek-crawl";
+export { executeBatchFetch, parseBatchFetchInput } from "./application/batch.js";
 export type { MapOptions, MapSitemapReader } from "./application/index.js";
 export { executeCrawl, executeFetch, executeMap, executeSearch } from "./application/index.js";
-export { executeBatchFetch, parseBatchFetchInput } from "./application/batch.js";
 export type {
   BatchFetchFailure,
   BatchFetchOptions,

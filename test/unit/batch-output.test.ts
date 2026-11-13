@@ -1,12 +1,9 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { BatchFetchResult } from "../../src/batch/types.js";
-import {
-  createBatchFetchOutputWriter,
-  formatBatchFetchHuman,
-} from "../../src/output/batch.js";
+import { createBatchFetchOutputWriter, formatBatchFetchHuman } from "../../src/output/batch.js";
 
 function result(): BatchFetchResult {
   return {

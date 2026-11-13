@@ -26,12 +26,14 @@ CLI + Skill。
 
 ## 当前版本
 
-`0.5.1` 提供：
+`0.6.0` 提供：
 
 - CLI-first 的 Search、Fetch、Map 和 Crawl。
 - 自带 Agent Skill，包含命令路由、输出组织和安全边界。
 - `setup skills` 一键安装到通用或指定 Agent 目录。
 - `map --search` URL 筛选。
+- Map JSON 直接驱动的批量 Fetch，以及逐页失败记录。
+- Crawl 路径 include/exclude 和 query 参数去重。
 - macOS Keychain 或其他平台私有文件凭据存储。
 - `auth set`、`auth status`、`auth remove`。
 - 可选的四个 MCP 工具。
@@ -60,7 +62,7 @@ deepseek-crawl doctor
 npm registry 发布后也可以使用：
 
 ```bash
-npm install -g deepseek-crawl@0.5.1
+npm install -g deepseek-crawl@0.6.0
 ```
 
 本地开发：
@@ -223,6 +225,34 @@ deepseek-crawl fetch "https://api-docs.deepseek.com/" \
   -o .deepseek-crawl/deepseek-api-home.md
 ```
 
+批量读取已知 URL：
+
+```text
+deepseek-crawl fetch --input <path|->
+  --output-dir <dir>
+  [--concurrency <1..5>]
+  [--delay-ms <0..5000>]
+  [--max-chars <0..1000000>]
+  [--json]
+```
+
+`--input` 可以直接读取 Map JSON，也支持 URL 字符串数组、包含 `url` 字段的对象
+数组，以及逐行 URL 文本。`-` 表示从 stdin 读取。输出目录不能已存在。
+
+```bash
+deepseek-crawl map "https://api-docs.deepseek.com/" \
+  --search guides --json -o .deepseek-crawl/map-docs.json
+
+deepseek-crawl fetch \
+  --input .deepseek-crawl/map-docs.json \
+  --output-dir .deepseek-crawl/pages-docs \
+  --concurrency 3 \
+  --delay-ms 250
+```
+
+输出包含 `fetch.json` 和稳定的 `pages/*.md`。部分失败不会丢弃成功页面；全部
+失败时仍会发布诊断报告，但命令退出码为 `1`。
+
 ## Map
 
 ```text
@@ -261,6 +291,9 @@ deepseek-crawl crawl <url> -o <dir>
   [--max-pages <1..100>]
   [--concurrency <1..5>]
   [--delay-ms <0..5000>]
+  [--include-paths <patterns>]
+  [--exclude-paths <patterns>]
+  [--ignore-query-parameters]
   [--json]
 ```
 
@@ -278,8 +311,19 @@ deepseek-crawl crawl <url> -o <dir>
 deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
   --max-depth 1 \
   --max-pages 5 \
+  --include-paths "/guides/*" \
+  --exclude-paths "/guides/private/*" \
+  --ignore-query-parameters \
   -o .deepseek-crawl/crawl-deepseek-guides
 ```
+
+路径匹配针对 URL pathname：
+
+- 不含通配符时按路径段前缀匹配，例如 `/docs` 匹配 `/docs/start`。
+- `*` 匹配任意字符，`?` 匹配单个字符。
+- include 为 OR；任一 exclude 命中时优先排除。
+- 种子页始终读取，不会因路径过滤被拒绝。
+- `--ignore-query-parameters` 在去重和 Fetch 前移除 query。
 
 输出：
 

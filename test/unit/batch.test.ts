@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  executeBatchFetch,
-  parseBatchFetchInput,
-} from "../../src/application/batch.js";
+import { executeBatchFetch, parseBatchFetchInput } from "../../src/application/batch.js";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
 
 const now = () => new Date("2026-11-14T01:00:00.000Z");
@@ -25,9 +22,10 @@ describe("parseBatchFetchInput", () => {
     expect(parseBatchFetchInput('[{"url":"https://example.com/a"}]')).toEqual([
       "https://example.com/a",
     ]);
-    expect(
-      parseBatchFetchInput(" https://example.com/a\n\nhttps://example.com/b \n"),
-    ).toEqual(["https://example.com/a", "https://example.com/b"]);
+    expect(parseBatchFetchInput(" https://example.com/a\n\nhttps://example.com/b \n")).toEqual([
+      "https://example.com/a",
+      "https://example.com/b",
+    ]);
   });
 
   it.each(["", "[]", '{"urls":[]}', '{"wrong":true}'])(

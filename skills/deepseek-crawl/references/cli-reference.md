@@ -64,6 +64,35 @@ Defaults:
 - `-o` without `--json` writes Markdown
 - `-o` with `--json` writes structured JSON
 
+### Batch Fetch
+
+```text
+deepseek-crawl fetch --input <path|->
+  --output-dir <dir>
+  [--concurrency <1..5>]
+  [--delay-ms <0..5000>]
+  [--max-chars <0..1000000>]
+  [--json]
+```
+
+Defaults:
+
+- concurrency: `3`
+- delay: `250 ms`
+- max chars: `0`
+
+Input formats:
+
+- Map result JSON containing `urls`.
+- JSON string arrays.
+- JSON arrays of objects containing `url`.
+- Newline-separated URLs.
+- `-` for stdin.
+
+The output directory must be new. It contains `fetch.json` and
+`pages/NNNN-slug.md`. Partial failures remain successful; an all-failed batch
+publishes the report and exits `1`.
+
 ## Map
 
 ```text
@@ -116,6 +145,9 @@ deepseek-crawl crawl <url>
   [--max-pages <1..100>]
   [--concurrency <1..5>]
   [--delay-ms <0..5000>]
+  [--include-paths <patterns>]
+  [--exclude-paths <patterns>]
+  [--ignore-query-parameters]
   --output, -o <dir>
   [--json]
 ```
@@ -130,6 +162,10 @@ Defaults:
 The seed is depth `0`. Crawl remains inside the exact origin, follows Markdown
 links from DeepSeek Fetch, processes deterministic depth layers, and records
 partial page failures.
+
+Path filters match the URL pathname. Prefix matching is used without `*` or `?`;
+includes are ORed, excludes win, and the seed bypasses filters.
+`--ignore-query-parameters` strips query strings before deduplication and Fetch.
 
 Output:
 

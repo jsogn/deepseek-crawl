@@ -253,10 +253,11 @@ describe("runCli", () => {
     const { deps } = dependencies(vi.fn() as unknown as typeof fetch);
 
     expect(
-      await runCli(
-        ["fetch", "--input", "-", "--output-dir", output, "--delay-ms", "0"],
-        { ...deps, fetchClient, stdin: Readable.from("https://example.com/a\n") },
-      ),
+      await runCli(["fetch", "--input", "-", "--output-dir", output, "--delay-ms", "0"], {
+        ...deps,
+        fetchClient,
+        stdin: Readable.from("https://example.com/a\n"),
+      }),
     ).toBe(0);
     expect(JSON.parse(await readFile(join(output, "fetch.json"), "utf8"))).toMatchObject({
       source: "stdin",
@@ -276,14 +277,11 @@ describe("runCli", () => {
     const { deps, stdout } = dependencies(vi.fn() as unknown as typeof fetch);
 
     expect(
-      await runCli(
-        ["fetch", "--input", "-", "--output-dir", output, "--delay-ms", "0", "--json"],
-        {
-          ...deps,
-          fetchClient,
-          stdin: Readable.from("https://example.com/a\n"),
-        },
-      ),
+      await runCli(["fetch", "--input", "-", "--output-dir", output, "--delay-ms", "0", "--json"], {
+        ...deps,
+        fetchClient,
+        stdin: Readable.from("https://example.com/a\n"),
+      }),
     ).toBe(1);
     expect(JSON.parse(stdout.value())).toMatchObject({
       stats: { fetched: 0, failed: 1 },

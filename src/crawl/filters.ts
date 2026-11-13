@@ -26,8 +26,7 @@ function compilePathPattern(pattern: string, name: string): (pathname: string) =
   const normalized = normalizePattern(pattern, name);
   if (!normalized.includes("*") && !normalized.includes("?")) {
     const prefix = normalized.replace(/\/+$/, "") || "/";
-    return (pathname) =>
-      prefix === "/" || pathname === prefix || pathname.startsWith(`${prefix}/`);
+    return (pathname) => prefix === "/" || pathname === prefix || pathname.startsWith(`${prefix}/`);
   }
   const expression = wildcardRegExp(normalized);
   return (pathname) => expression.test(pathname);

@@ -27,7 +27,7 @@ but the CLI plus Skill is the preferred interface.
 
 ## Status
 
-Version `0.5.1` provides:
+Version `0.6.0` provides:
 
 - CLI-first Search, Fetch, Map, and Crawl.
 - A bundled Agent Skill with command routing and safe output conventions.
@@ -37,6 +37,8 @@ Version `0.5.1` provides:
 - Built-in one-command Skill setup for the common `.agents/skills` directory or
   selected Agent-specific directories.
 - CLI-managed API credentials with macOS Keychain and private file fallback.
+- Batch Fetch from URL lists and Map JSON with per-page failure records.
+- Crawl include/exclude paths and query-parameter deduplication.
 
 The project is open source under the MIT License.
 
@@ -61,7 +63,7 @@ deepseek-crawl doctor
 After the npm release is available:
 
 ```bash
-npm install -g deepseek-crawl@0.5.1
+npm install -g deepseek-crawl@0.6.0
 ```
 
 From this repository:
@@ -204,6 +206,36 @@ deepseek-crawl fetch "https://api-docs.deepseek.com/" \
   -o .deepseek-crawl/deepseek-api-home.md
 ```
 
+Fetch a known URL list:
+
+```text
+deepseek-crawl fetch --input <path|->
+  --output-dir <dir>
+  [--concurrency <1..5>]
+  [--delay-ms <0..5000>]
+  [--max-chars <0..1000000>]
+  [--json]
+```
+
+`--input` accepts Map JSON directly, JSON string arrays, arrays of objects with
+a `url` field, and newline-separated URLs. Use `-` for stdin. The output
+directory must not exist.
+
+```bash
+deepseek-crawl map "https://api-docs.deepseek.com/" \
+  --search guides --json -o .deepseek-crawl/map-docs.json
+
+deepseek-crawl fetch \
+  --input .deepseek-crawl/map-docs.json \
+  --output-dir .deepseek-crawl/pages-docs \
+  --concurrency 3 \
+  --delay-ms 250
+```
+
+Output contains `fetch.json` and stable `pages/*.md` files. A partial failure
+keeps successful pages. An all-failed batch still publishes its diagnostic report
+and exits with code `1`.
+
 ### Map
 
 ```text
@@ -244,6 +276,9 @@ deepseek-crawl crawl <url> -o <dir>
   [--max-pages <1..100>]
   [--concurrency <1..5>]
   [--delay-ms <0..5000>]
+  [--include-paths <patterns>]
+  [--exclude-paths <patterns>]
+  [--ignore-query-parameters]
   [--json]
 ```
 
@@ -262,8 +297,20 @@ page failures.
 deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
   --max-depth 1 \
   --max-pages 5 \
+  --include-paths "/guides/*" \
+  --exclude-paths "/guides/private/*" \
+  --ignore-query-parameters \
   -o .deepseek-crawl/crawl-deepseek-guides
 ```
+
+Path matching uses the URL pathname:
+
+- A pattern without wildcards uses path-segment prefix matching.
+- `*` matches any characters and `?` matches one character.
+- Includes are ORed; any exclude match wins.
+- The seed is always fetched and bypasses path filters.
+- `--ignore-query-parameters` removes query strings before deduplication and
+  Fetch.
 
 Output:
 

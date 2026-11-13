@@ -1,5 +1,5 @@
-import { extractMarkdownLinks, sameOrigin } from "../crawl/links.js";
 import { canonicalizeCrawlUrl, createCrawlPathFilter } from "../crawl/filters.js";
+import { extractMarkdownLinks, sameOrigin } from "../crawl/links.js";
 import { runLayeredTasks } from "../crawl/queue.js";
 import type {
   CrawlFailure,
@@ -145,10 +145,7 @@ export async function executeCrawl(
   if (!seed) {
     throw new Error("Crawl URL must be an HTTP(S) URL with a host and no credentials.");
   }
-  const pathFilter = createCrawlPathFilter(
-    limits.includePaths ?? [],
-    limits.excludePaths ?? [],
-  );
+  const pathFilter = createCrawlPathFilter(limits.includePaths ?? [], limits.excludePaths ?? []);
 
   const now = limits.now ?? (() => new Date());
   const crawlController = new AbortController();

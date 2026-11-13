@@ -319,9 +319,7 @@ export function parseCli(argv: string[]): ParsedCommand {
           ...(parsed.values["exclude-paths"] === undefined
             ? {}
             : { excludePaths: parsePatterns(parsed.values["exclude-paths"], "exclude-paths") }),
-          ...(parsed.values["ignore-query-parameters"]
-            ? { ignoreQueryParameters: true }
-            : {}),
+          ...(parsed.values["ignore-query-parameters"] ? { ignoreQueryParameters: true } : {}),
           output,
           json: parsed.values.json ?? false,
         };

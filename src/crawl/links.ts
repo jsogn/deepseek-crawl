@@ -22,8 +22,17 @@ export function sameOrigin(left: URL, right: URL): boolean {
   return left.origin === right.origin;
 }
 
-export function visitMarkdownLinks(value: string, base: URL, visitLink: (url: URL) => void): void {
-  const seen = new Set<string>();
+export interface VisitMarkdownLinksOptions {
+  dedupe?: boolean;
+}
+
+export function visitMarkdownLinks(
+  value: string,
+  base: URL,
+  visitLink: (url: URL) => void,
+  options: VisitMarkdownLinksOptions = {},
+): void {
+  const seen = options.dedupe === false ? undefined : new Set<string>();
 
   const visit = (tokens: ReturnType<typeof markdown.parse>): void => {
     for (const token of tokens) {
@@ -38,10 +47,10 @@ export function visitMarkdownLinks(value: string, base: URL, visitLink: (url: UR
         continue;
       }
       const url = normalizeHttpUrl(href, base);
-      if (!url || seen.has(url.href)) {
+      if (!url || seen?.has(url.href)) {
         continue;
       }
-      seen.add(url.href);
+      seen?.add(url.href);
       visitLink(url);
     }
   };

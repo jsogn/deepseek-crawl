@@ -47,6 +47,23 @@ describe("extractMarkdownLinks", () => {
     });
     expect(links).toEqual(["https://example.com/a", "https://example.com/b"]);
   });
+
+  it("can defer deduplication to a bounded consumer", () => {
+    const links: string[] = [];
+    visitMarkdownLinks(
+      "[A](/a) [A again](/a) [B](/b)",
+      base,
+      (url) => {
+        links.push(url.href);
+      },
+      { dedupe: false },
+    );
+    expect(links).toEqual([
+      "https://example.com/a",
+      "https://example.com/a",
+      "https://example.com/b",
+    ]);
+  });
 });
 
 describe("sameOrigin and safePageSlug", () => {

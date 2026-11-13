@@ -207,11 +207,16 @@ export async function executeMap(
 
   if (seedPageResult.status === "fulfilled") {
     const bounded = boundFetchOutput({ ...seedPageResult.value, url: seed.href }, pageContentLimit);
-    visitMarkdownLinks(bounded.content, seed, (url) => {
-      if (sameOrigin(url, seed)) {
-        candidateCollector.add(url, "seed_page");
-      }
-    });
+    visitMarkdownLinks(
+      bounded.content,
+      seed,
+      (url) => {
+        if (sameOrigin(url, seed)) {
+          candidateCollector.add(url, "seed_page");
+        }
+      },
+      { dedupe: false },
+    );
   } else {
     warnings.push({
       code: "seed_page_failed",

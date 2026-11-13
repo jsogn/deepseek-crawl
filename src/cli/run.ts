@@ -17,19 +17,19 @@ export interface CliDependencies {
   stderr: { write(value: string): unknown };
 }
 
-const MAIN_HELP = `deepseek-websearch ${packageVersion}
+const MAIN_HELP = `deepseek-crawl ${packageVersion}
 
 Usage:
-  deepseek-websearch search <query> [options]
-  deepseek-websearch fetch <url> [options]
-  deepseek-websearch doctor [--live] [--json]
-  deepseek-websearch mcp
+  deepseek-crawl search <query> [options]
+  deepseek-crawl fetch <url> [options]
+  deepseek-crawl doctor [--live] [--json]
+  deepseek-crawl mcp
 
-Run "deepseek-websearch help <command>" for command details.
+Run "deepseek-crawl help <command>" for command details.
 `;
 
 const COMMAND_HELP: Record<string, string> = {
-  search: `Usage: deepseek-websearch search <query> [options]
+  search: `Usage: deepseek-crawl search <query> [options]
 
 Options:
   --count <1..50>
@@ -40,18 +40,18 @@ Options:
   --json
   --output, -o <path>
 `,
-  fetch: `Usage: deepseek-websearch fetch <url> [options]
+  fetch: `Usage: deepseek-crawl fetch <url> [options]
 
 Options:
   --max-chars <0..1000000>
   --json
   --output, -o <path>
 `,
-  doctor: `Usage: deepseek-websearch doctor [--live] [--json]
+  doctor: `Usage: deepseek-crawl doctor [--live] [--json]
 
 Without --live, doctor does not make a billable DeepSeek request.
 `,
-  mcp: "Usage: deepseek-websearch mcp\n\nStart the MCP server over stdio.\n",
+  mcp: "Usage: deepseek-crawl mcp\n\nStart the MCP server over stdio.\n",
 };
 
 function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDependencies {

@@ -4,7 +4,7 @@ import { packageVersion } from "../src/version.js";
 
 describe("package", () => {
   it("uses the public package identity", () => {
-    expect(packageName).toBe("deepseek-websearch");
+    expect(packageName).toBe("deepseek-crawl");
     expect(packageVersion).toBe("0.1.0");
   });
 });

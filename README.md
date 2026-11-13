@@ -1,4 +1,4 @@
-# DeepSeek Websearch
+# DeepSeek Crawl
 
 Local CLI and MCP tools for DeepSeek's official Search and Fetch APIs.
 
@@ -29,15 +29,15 @@ Search and Fetch are billed by DeepSeek per successful request. See
 After the package is published:
 
 ```bash
-npx -y deepseek-websearch@0.1.0 search "DeepSeek API"
-npx -y deepseek-websearch@0.1.0 fetch "https://api-docs.deepseek.com/"
+npx -y deepseek-crawl@0.1.0 search "DeepSeek API"
+npx -y deepseek-crawl@0.1.0 fetch "https://api-docs.deepseek.com/"
 ```
 
 Install globally for frequent use:
 
 ```bash
-npm install -g deepseek-websearch@0.1.0
-deepseek-websearch search "DeepSeek API"
+npm install -g deepseek-crawl@0.1.0
+deepseek-crawl search "DeepSeek API"
 ```
 
 From this repository:
@@ -50,7 +50,7 @@ DEEPSEEK_API_KEY=sk-... node dist/bin.js search "DeepSeek API"
 ### Search
 
 ```text
-deepseek-websearch search <query>
+deepseek-crawl search <query>
   [--count <1..50>]
   [--content]
   [--max-content-chars <0..1000000>]
@@ -66,14 +66,14 @@ explicitly supplied. `--output` always writes the complete result.
 `--max-content-chars 0` disables truncation.
 
 ```bash
-deepseek-websearch search "Hyperf 3.1 queue" --count 5 --json
-deepseek-websearch search "DeepSeek release notes" --content --output results.json
+deepseek-crawl search "Hyperf 3.1 queue" --count 5 --json
+deepseek-crawl search "DeepSeek release notes" --content --output results.json
 ```
 
 ### Fetch
 
 ```text
-deepseek-websearch fetch <url>
+deepseek-crawl fetch <url>
   [--max-chars <0..1000000>]
   [--json]
   [--output <path>]
@@ -83,14 +83,14 @@ Human-readable output defaults to a 30000-character limit. `--output` writes
 complete Markdown by default; combine it with `--json` to write JSON.
 
 ```bash
-deepseek-websearch fetch "https://api-docs.deepseek.com/guides/search/" --output page.md
+deepseek-crawl fetch "https://api-docs.deepseek.com/guides/search/" --output page.md
 ```
 
 ### Doctor
 
 ```bash
-deepseek-websearch doctor
-deepseek-websearch doctor --live --json
+deepseek-crawl doctor
+deepseek-crawl doctor --live --json
 ```
 
 The default check does not make a billable DeepSeek request. `--live` performs
@@ -101,7 +101,7 @@ one Search request and prints a billing warning to stderr.
 Start MCP over stdio:
 
 ```bash
-deepseek-websearch mcp
+deepseek-crawl mcp
 ```
 
 Generic MCP configuration:
@@ -109,9 +109,9 @@ Generic MCP configuration:
 ```json
 {
   "mcpServers": {
-    "deepseek-websearch": {
+    "deepseek-crawl": {
       "command": "npx",
-      "args": ["-y", "deepseek-websearch@0.1.0", "mcp"],
+      "args": ["-y", "deepseek-crawl@0.1.0", "mcp"],
       "env": {
         "DEEPSEEK_API_KEY": "YOUR_DEEPSEEK_API_KEY"
       }
@@ -123,9 +123,9 @@ Generic MCP configuration:
 Codex:
 
 ```bash
-codex mcp add deepseek-websearch \
+codex mcp add deepseek-crawl \
   --env DEEPSEEK_API_KEY=YOUR_DEEPSEEK_API_KEY \
-  -- npx -y deepseek-websearch@0.1.0 mcp
+  -- npx -y deepseek-crawl@0.1.0 mcp
 ```
 
 Claude Desktop, Cursor, and other MCP clients can use the JSON configuration
@@ -138,9 +138,9 @@ entrypoint:
 ```json
 {
   "mcpServers": {
-    "deepseek-websearch": {
+    "deepseek-crawl": {
       "command": "node",
-      "args": ["/absolute/path/to/deepseek-websearch/dist/bin.js", "mcp"],
+      "args": ["/absolute/path/to/deepseek-crawl/dist/bin.js", "mcp"],
       "env": {
         "DEEPSEEK_API_KEY": "YOUR_DEEPSEEK_API_KEY"
       }

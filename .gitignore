@@ -4,7 +4,7 @@ coverage/
 .env
 .env.*
 !.env.example
-.websearch/
+.deepseek-crawl/
 *.log
 .DS_Store
 *.tgz

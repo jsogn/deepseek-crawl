@@ -1,4 +1,4 @@
-# DeepSeek Websearch Design
+# deepseek-crawl Design
 
 Date: 2026-11-13
 
@@ -6,11 +6,11 @@ Status: Decided
 
 ## Summary
 
-`deepseek-websearch` is a local Node.js package that exposes DeepSeek's official
+`deepseek-crawl` is a local Node.js package that exposes DeepSeek's official
 Search and Fetch APIs through a CLI and an MCP stdio server. It is read-only,
 cross-tool, and deliberately limited to one search provider.
 
-The package name and executable name are both `deepseek-websearch`.
+The package name and executable name are both `deepseek-crawl`.
 
 ## Goals
 
@@ -55,10 +55,10 @@ introduced.
 One executable dispatches four commands:
 
 ```text
-deepseek-websearch search <query> [options]
-deepseek-websearch fetch <url> [options]
-deepseek-websearch doctor [--live] [--json]
-deepseek-websearch mcp
+deepseek-crawl search <query> [options]
+deepseek-crawl fetch <url> [options]
+deepseek-crawl doctor [--live] [--json]
+deepseek-crawl mcp
 ```
 
 All commands support `--help`; the executable supports `--version`.
@@ -66,7 +66,7 @@ All commands support `--help`; the executable supports `--version`.
 ### Search
 
 ```text
-deepseek-websearch search <query>
+deepseek-crawl search <query>
   [--count <1..50>]
   [--content]
   [--max-content-chars <number>]
@@ -90,7 +90,7 @@ Human-readable stdout and all MCP Search output are bounded. `--max-content-char
 ### Fetch
 
 ```text
-deepseek-websearch fetch <url>
+deepseek-crawl fetch <url>
   [--max-chars <number>]
   [--json]
   [--output <path>]
@@ -368,12 +368,12 @@ request CI.
 
 ## Packaging and Distribution
 
-- Unscoped npm package: `deepseek-websearch`.
-- Published binary: `deepseek-websearch`.
+- Unscoped npm package: `deepseek-crawl`.
+- Published binary: `deepseek-crawl`.
 - `engines.node` is `>=22`.
 - npm package files are limited to the compiled `dist`, README, and license
   text once a license is selected.
-- Users can run with `npx -y deepseek-websearch@<version> ...`.
+- Users can run with `npx -y deepseek-crawl@<version> ...`.
 - Frequent MCP users can globally install the package and point their client at
   the installed binary.
 - Example MCP configuration uses a pinned version rather than `@latest`.
@@ -385,11 +385,11 @@ the owner selects a license.
 
 ## Acceptance Criteria
 
-- `npx deepseek-websearch search <query>` returns ranked results without a build
+- `npx deepseek-crawl search <query>` returns ranked results without a build
   step or native dependency.
-- `npx deepseek-websearch fetch <url>` returns Markdown and respects its inline
+- `npx deepseek-crawl fetch <url>` returns Markdown and respects its inline
   size limit.
-- `npx deepseek-websearch mcp` negotiates MCP over stdio and lists exactly
+- `npx deepseek-crawl mcp` negotiates MCP over stdio and lists exactly
   `deepseek_search` and `deepseek_fetch`.
 - Existing MCP clients can discover and call both tools.
 - A quota or balance error is reported clearly and is not retried.

@@ -6,7 +6,7 @@ import { writeFileAtomic } from "../../src/output/files.js";
 
 describe("writeFileAtomic", () => {
   it("creates parents and leaves no temporary file", async () => {
-    const root = await mkdtemp(join(tmpdir(), "deepseek-websearch-"));
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-"));
     const path = join(root, "nested", "result.md");
     await writeFileAtomic(path, "# Result\n");
     expect(await readFile(path, "utf8")).toBe("# Result\n");

@@ -65,7 +65,7 @@ describe("runCli", () => {
   });
 
   it("writes a complete Search file without applying display limits", async () => {
-    const root = await mkdtemp(join(tmpdir(), "deepseek-websearch-cli-"));
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-cli-"));
     const output = join(root, "nested", "search.json");
     const fetchImpl = vi.fn(async () => Response.json(searchResponse)) as unknown as typeof fetch;
     const { deps, stdout } = dependencies(fetchImpl);
@@ -81,7 +81,7 @@ describe("runCli", () => {
   });
 
   it("writes complete Fetch Markdown", async () => {
-    const root = await mkdtemp(join(tmpdir(), "deepseek-websearch-cli-"));
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-cli-"));
     const output = join(root, "page.md");
     const fetchImpl = vi.fn(async () =>
       Response.json({ title: "Page", content: "abcdef" }),

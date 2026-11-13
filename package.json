@@ -1,12 +1,12 @@
 {
-  "name": "deepseek-websearch",
+  "name": "deepseek-crawl",
   "version": "0.1.0",
   "description": "CLI and MCP tools for DeepSeek Search and Fetch",
   "type": "module",
   "private": true,
   "license": "UNLICENSED",
   "bin": {
-    "deepseek-websearch": "dist/bin.js"
+    "deepseek-crawl": "dist/bin.js"
   },
   "exports": {
     ".": "./dist/index.js"

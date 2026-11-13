@@ -1,4 +1,4 @@
-# DeepSeek Websearch Implementation Plan
+# deepseek-crawl Implementation Plan
 
 Status: Implemented on 2026-11-13
 
@@ -10,13 +10,13 @@ Status: Implemented on 2026-11-13
 
 **Tech Stack:** Node.js 22, strict TypeScript/ESM, official MCP TypeScript SDK, Zod, Vitest, Biome, npm.
 
-**Spec:** `docs/superpowers/specs/2026-11-13-deepseek-websearch-design.md`
+**Spec:** `docs/superpowers/specs/2026-11-13-deepseek-crawl-design.md`
 
 ## Global Constraints
 
 - Node.js engine floor is `>=22.12.0`.
 - Runtime dependencies are exactly `@modelcontextprotocol/sdk@1.32.2` and `zod@4.6.7`.
-- The package and executable are both named `deepseek-websearch`.
+- The package and executable are both named `deepseek-crawl`.
 - The package remains `private: true` and `UNLICENSED` until the owner chooses a license.
 - Normal tests never call DeepSeek and never require `DEEPSEEK_API_KEY`.
 - No provider abstraction, fallback policy, HTTP service, database, telemetry, or local MCP file writes.
@@ -57,14 +57,14 @@ Status: Implemented on 2026-11-13
 
 ```json
 {
-  "name": "deepseek-websearch",
+  "name": "deepseek-crawl",
   "version": "0.1.0",
   "description": "CLI and MCP tools for DeepSeek Search and Fetch",
   "type": "module",
   "private": true,
   "license": "UNLICENSED",
   "bin": {
-    "deepseek-websearch": "dist/bin.js"
+    "deepseek-crawl": "dist/bin.js"
   },
   "exports": {
     ".": "./dist/index.js"
@@ -159,7 +159,7 @@ Append to `.gitignore`:
 `src/index.ts` starts as:
 
 ```ts
-export const packageName = "deepseek-websearch";
+export const packageName = "deepseek-crawl";
 ```
 
 `src/version.ts` starts as:
@@ -177,7 +177,7 @@ import { packageVersion } from "../src/version.js";
 
 describe("package", () => {
   it("uses the public package name", () => {
-    expect(packageName).toBe("deepseek-websearch");
+    expect(packageName).toBe("deepseek-crawl");
     expect(packageVersion).toBe("0.1.0");
   });
 });
@@ -588,7 +588,7 @@ import { writeFileAtomic } from "../../src/output/files.js";
 
 describe("writeFileAtomic", () => {
   it("creates parents and leaves no temporary file", async () => {
-    const root = await mkdtemp(join(tmpdir(), "deepseek-websearch-"));
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-"));
     const path = join(root, "nested", "result.md");
     await writeFileAtomic(path, "# Result\n");
     expect(await readFile(path, "utf8")).toBe("# Result\n");
@@ -850,12 +850,12 @@ export async function runCli(
 CLI behavior must be:
 
 ```text
-deepseek-websearch search <query> [--count N] [--content]
+deepseek-crawl search <query> [--count N] [--content]
   [--max-content-chars N] [--ori-question TEXT]
   [--localization IP] [--json] [--output PATH]
 
-deepseek-websearch fetch <url> [--max-chars N] [--json] [--output PATH]
-deepseek-websearch doctor [--live] [--json]
+deepseek-crawl fetch <url> [--max-chars N] [--json] [--output PATH]
+deepseek-crawl doctor [--live] [--json]
 ```
 
 Task 8 adds the `mcp` command.
@@ -977,7 +977,7 @@ Tests cover:
 - Tool discovery lists exactly `deepseek_search` and `deepseek_fetch`.
 - Both tools expose output schemas and read-only annotations.
 - CLI help lists `mcp`.
-- `deepseek-websearch mcp` dispatches to the stdio server.
+- `deepseek-crawl mcp` dispatches to the stdio server.
 - `deepseek_search` forwards `need_content` but does not forward `max_content_chars`.
 - Search defaults `max_content_chars` to 4000.
 - Search response includes Markdown `content` and structured data.

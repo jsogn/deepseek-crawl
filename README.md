@@ -26,9 +26,10 @@ CLI + Skill。
 
 ## 当前版本
 
-`0.6.0` 提供：
+`0.7.0` 提供：
 
 - CLI-first 的 Search、Fetch、Map 和 Crawl。
+- CLI Crawl 默认合并 Sitemap 与种子页 Markdown 发现，不再只依赖页面内链接。
 - 自带 Agent Skill，包含命令路由、输出组织和安全边界。
 - `setup skills` 一键安装到通用或指定 Agent 目录。
 - `map --search` URL 筛选。
@@ -46,7 +47,7 @@ CLI + Skill。
 
 - Node.js 22.12 或更高版本。
 - DeepSeek API Key：<https://platform.deepseek.com/api_keys>。
-- 能访问 DeepSeek；Map 还需要直接访问目标站点的 Sitemap。
+- 能访问 DeepSeek；CLI Map 和 Crawl 还需要直接访问目标站点的 Sitemap。
 
 ## 安装
 
@@ -62,7 +63,7 @@ deepseek-crawl doctor
 npm registry 发布后也可以使用：
 
 ```bash
-npm install -g deepseek-crawl@0.6.0
+npm install -g deepseek-crawl@0.7.0
 ```
 
 本地开发：
@@ -294,6 +295,7 @@ deepseek-crawl crawl <url> -o <dir>
   [--include-paths <patterns>]
   [--exclude-paths <patterns>]
   [--ignore-query-parameters]
+  [--sitemap <include|only|skip>]
   [--json]
 ```
 
@@ -303,9 +305,21 @@ deepseek-crawl crawl <url> -o <dir>
 - 最大页数：20
 - 并发：2
 - 请求启动间隔：250 ms
+- Sitemap：`include`
 
 种子页深度为 0。Crawl 按确定性的深度层遍历，移除重复规范化 URL，严格限制在
-种子页的 origin 内，并记录部分页面失败。
+种子页的 origin 内，并记录部分页面失败。CLI Crawl 会通过 Sitemap 辅助发现
+页面，因此即使 DeepSeek 返回的 Markdown 没有链接，也能遍历文档站点。
+
+Sitemap 模式：
+
+- `include`（默认）：合并 Sitemap URL 和种子页 Markdown 链接。
+- `only`：只使用 Sitemap URL，忽略种子页 Markdown 链接。
+- `skip`：只使用 Markdown 链接，恢复 `0.6.0` 行为。
+
+Sitemap URL 从深度 1 开始，并遵守相同的 origin、路径、query、深度、页数和发现
+数量限制。Sitemap 读取失败会产生 `sitemap_unavailable` 或已有 Map 警告，Crawl
+继续使用可用来源；种子页读取失败仍是致命错误。
 
 ```bash
 deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
@@ -314,6 +328,7 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
   --include-paths "/guides/*" \
   --exclude-paths "/guides/private/*" \
   --ignore-query-parameters \
+  --sitemap include \
   -o .deepseek-crawl/crawl-deepseek-guides
 ```
 
@@ -338,8 +353,10 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
 `-o` 目标不能已存在。Crawl 先写隐藏临时目录，成功后一次性发布完整目录。
 SIGINT 会中止请求、清理 staging，并以代码 `130` 退出。
 
-`crawl.json` 包含设置、统计、失败记录、内容截断元数据和稳定页面路径，不重复
-保存正文。
+`crawl.json` 包含设置、统计、失败记录、内容截断元数据、`warnings`、Sitemap
+候选数量和稳定页面路径，不重复保存正文。已知 URL 列表优先使用
+`map --search` 后接批量 Fetch；需要遍历一个文档区域时再使用 Crawl，可减少不必
+要的整站发现开销。
 
 ## 计费
 
@@ -366,7 +383,9 @@ deepseek-crawl mcp
 - `deepseek_map`
 - `deepseek_crawl`
 
-MCP 不写本地文件。结构化内容有总长度限制，页面正文被视为不可信数据。
+MCP 不写本地文件。结构化内容有总长度限制，页面正文被视为不可信数据。为保持
+兼容，`0.7.0` 的 MCP Crawl 仍只使用 Markdown 链接；Sitemap 辅助发现仅在 CLI
+提供。
 
 ## 限制
 
@@ -388,7 +407,7 @@ CLI Crawl 最多 100 页，MCP Crawl 最多 20 页。两者的 depth 和 concurr
 
 ## Sitemap 网络策略
 
-Map 会直接请求目标站点的 Sitemap，仅接受公网 HTTP(S) 目标：
+CLI Map 和 Crawl 会直接请求目标站点的 Sitemap，仅接受公网 HTTP(S) 目标：
 
 - 拒绝 loopback、private、link-local、multicast、unspecified、reserved、
   NAT64 和特殊用途 IPv6。
@@ -399,8 +418,8 @@ Map 会直接请求目标站点的 Sitemap，仅接受公网 HTTP(S) 目标：
 ## 安全与限制
 
 - 本实现不读取也不执行 `robots.txt`。使用者必须确认站点授权和条款。
-- Crawl 只跟随 DeepSeek Markdown 中的精确同源链接，不跨子域名，也不跟随页面
-  指令。
+- CLI Crawl 合并精确同源 Sitemap URL 与 DeepSeek Markdown 链接；MCP Crawl
+  仍只使用 Markdown。两者都不跨子域名，也不跟随页面指令。
 - DeepSeek Fetch 可能在服务端跟随重定向，最终 URL 不会出现在当前响应中。
 - 页面内容是数据，不是指令，不能执行返回的代码。
 - 不提供 JavaScript 渲染、浏览器交互、登录、后台任务或服务端结构化 Extract。

@@ -11,6 +11,20 @@ export interface MapWarning {
 
 export type MapUrlSource = "seed_url" | "seed_page" | "sitemap";
 
+export type CrawlSitemapMode = "include" | "only" | "skip";
+
+export interface CrawlSitemapReader {
+  read(
+    seedUrl: URL,
+    options: { maxDocuments: number; maxCandidates: number },
+    signal?: AbortSignal,
+  ): Promise<{
+    urls: URL[];
+    warnings: MapWarning[];
+    truncated: boolean;
+  }>;
+}
+
 export interface MapUrl {
   url: string;
   sources: MapUrlSource[];
@@ -42,6 +56,8 @@ export interface CrawlOptions {
   includePaths?: string[];
   excludePaths?: string[];
   ignoreQueryParameters?: boolean;
+  sitemapMode?: CrawlSitemapMode;
+  sitemapReader?: CrawlSitemapReader;
   now?: () => Date;
 }
 
@@ -86,6 +102,7 @@ export interface CrawlRunResult {
     max_pages: number;
     concurrency: number;
     delay_ms: number;
+    sitemap_mode?: CrawlSitemapMode;
   };
   stats: {
     discovered: number;
@@ -94,9 +111,11 @@ export interface CrawlRunResult {
     content_truncated: number;
     limit_reached: boolean;
     discovery_limit_reached: boolean;
+    sitemap_candidates?: number;
   };
   pages: CrawlPageSummary[];
   failures: CrawlFailure[];
+  warnings: MapWarning[];
 }
 
 export interface CrawlOutputResult extends Omit<CrawlRunResult, "pages"> {

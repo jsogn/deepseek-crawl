@@ -7,6 +7,7 @@ import type {
   CrawlPage,
   CrawlPageSummary,
   CrawlRunResult,
+  MapWarning,
 } from "../crawl/types.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
@@ -28,6 +29,10 @@ function clampInteger(value: number, name: string, minimum: number, maximum: num
 }
 
 export function normalizeCrawlOptions(options: CrawlOptions): CrawlOptions {
+  const sitemapMode = options.sitemapMode ?? "skip";
+  if (!["include", "only", "skip"].includes(sitemapMode)) {
+    throw new Error("sitemapMode must be include, only, or skip.");
+  }
   const normalized: CrawlOptions = {
     maxDepth: clampInteger(options.maxDepth, "maxDepth", 0, CRAWL_MAX_DEPTH),
     maxPages: clampInteger(options.maxPages, "maxPages", 1, CRAWL_MAX_PAGES),
@@ -48,7 +53,11 @@ export function normalizeCrawlOptions(options: CrawlOptions): CrawlOptions {
     includePaths: options.includePaths ?? [],
     excludePaths: options.excludePaths ?? [],
     ignoreQueryParameters: options.ignoreQueryParameters ?? false,
+    sitemapMode,
   };
+  if (options.sitemapReader !== undefined) {
+    normalized.sitemapReader = options.sitemapReader;
+  }
   if (options.now !== undefined) {
     normalized.now = options.now;
   }
@@ -140,6 +149,10 @@ export async function executeCrawl(
   signal?: AbortSignal,
 ): Promise<CrawlRunResult> {
   const limits = normalizeCrawlOptions(options);
+  const sitemapMode = limits.sitemapMode ?? "skip";
+  if (sitemapMode !== "skip" && !limits.sitemapReader) {
+    throw new Error("Sitemap reader is required when sitemap mode is include or only.");
+  }
   const parsed = fetchInputSchema.parse(input);
   const seed = canonicalizeCrawlUrl(parsed.url, undefined, limits.ignoreQueryParameters);
   if (!seed) {
@@ -157,6 +170,7 @@ export async function executeCrawl(
   const seen = new Set<string>([seed.href]);
   const pages: CrawlPageSummary[] = [];
   const failures: CrawlFailure[] = [];
+  const warnings: MapWarning[] = [];
   let frontier: string[] = [];
   let nextIndex = 1;
   let attemptedPages = 1;
@@ -164,6 +178,7 @@ export async function executeCrawl(
   let contentTruncated = 0;
   let limitReached = false;
   let discoveryLimitReached = false;
+  let sitemapCandidates = 0;
 
   const fetchPage = async (url: string, depth: number, index: number): Promise<PageOutcome> => {
     let page: CrawlPage;
@@ -223,8 +238,40 @@ export async function executeCrawl(
     Math.max(0, limits.discoveryLimit - seen.size),
     seen,
   );
-  for (const link of seedOutcome.links) {
-    seedLinks.add(link);
+  if (sitemapMode !== "only") {
+    for (const link of seedOutcome.links) {
+      seedLinks.add(link);
+    }
+  }
+  if (sitemapMode !== "skip" && limits.maxDepth > 0) {
+    try {
+      const discovery = await limits.sitemapReader?.read(
+        seed,
+        { maxDocuments: 10, maxCandidates: limits.discoveryLimit },
+        crawlSignal,
+      );
+      if (discovery) {
+        warnings.push(...discovery.warnings);
+        discoveryLimitReached = discoveryLimitReached || discovery.truncated;
+        const candidates = discovery.urls
+          .map((url) => canonicalizeCrawlUrl(url, undefined, limits.ignoreQueryParameters))
+          .filter(
+            (url): url is URL => url !== undefined && sameOrigin(url, seed) && pathFilter(url),
+          );
+        sitemapCandidates = new Set(candidates.map((url) => url.href)).size;
+        for (const url of candidates) {
+          seedLinks.add(url.href);
+        }
+      }
+    } catch (error) {
+      if (crawlSignal.aborted) {
+        throw error;
+      }
+      warnings.push({
+        code: "sitemap_unavailable",
+        message: `Could not read Sitemap: ${errorMessage(error)}`,
+      });
+    }
   }
   seedOutcome.links = [];
   const seedCollection = seedLinks.finish();
@@ -300,6 +347,7 @@ export async function executeCrawl(
       max_pages: limits.maxPages,
       concurrency: limits.concurrency,
       delay_ms: limits.delayMs,
+      ...(options.sitemapMode === undefined ? {} : { sitemap_mode: sitemapMode }),
     },
     stats: {
       discovered: seen.size,
@@ -308,8 +356,10 @@ export async function executeCrawl(
       content_truncated: contentTruncated,
       limit_reached: limitReached,
       discovery_limit_reached: discoveryLimitReached,
+      ...(options.sitemapMode === undefined ? {} : { sitemap_candidates: sitemapCandidates }),
     },
     pages,
     failures,
+    warnings,
   };
 }

@@ -59,6 +59,30 @@ describe("executeCrawl", () => {
     expect(gateway.fetch).not.toHaveBeenCalled();
   });
 
+  it("validates Sitemap modes and requires a reader outside skip mode", async () => {
+    const gateway = client();
+
+    await expect(
+      executeCrawl(
+        gateway,
+        { url: "https://example.com/" },
+        {
+          ...options,
+          sitemapMode: "invalid" as "include",
+          sitemapReader: { read: vi.fn() },
+        },
+      ),
+    ).rejects.toThrow(/sitemapMode/i);
+    await expect(
+      executeCrawl(
+        gateway,
+        { url: "https://example.com/" },
+        { ...options, sitemapMode: "include" },
+      ),
+    ).rejects.toThrow(/sitemap reader/i);
+    expect(gateway.fetch).not.toHaveBeenCalled();
+  });
+
   it("traverses deterministically, deduplicates, and records failures", async () => {
     const pages = new Map<number, string>();
     const result = await executeCrawl(
@@ -85,6 +109,7 @@ describe("executeCrawl", () => {
       "https://example.com/c",
     ]);
     expect(result.stats.failed).toBe(1);
+    expect(result.warnings).toEqual([]);
     expect(result.failures).toEqual([
       expect.objectContaining({
         url: "https://example.com/broken",
@@ -192,6 +217,172 @@ describe("executeCrawl", () => {
       "https://example.com/api/v",
       "https://example.com/docs/a",
     ]);
+  });
+
+  it("includes Sitemap candidates when Markdown has no links", async () => {
+    const reader = {
+      read: vi.fn(async () => ({
+        urls: [
+          new URL("https://example.com/docs/a"),
+          new URL("https://example.com/docs/b"),
+          new URL("https://example.com/blog/post"),
+          new URL("https://other.example/docs/a"),
+          new URL("https://example.com/docs/private/x"),
+          new URL("https://example.com/docs/a?utm_source=sitemap"),
+        ],
+        warnings: [{ code: "sitemap_invalid" as const, message: "child Sitemap was invalid" }],
+        truncated: false,
+      })),
+    };
+    const result = await executeCrawl(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async ({ url }: { url: string }) => ({ title: url, content: "No links" })),
+      },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 1,
+        discoveryLimit: 2,
+        includePaths: ["/docs/*"],
+        excludePaths: ["/docs/private/*"],
+        ignoreQueryParameters: true,
+        sitemapMode: "include",
+        sitemapReader: reader,
+      },
+    );
+
+    expect(result.pages.map((page) => page.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/docs/a",
+    ]);
+    expect(result.settings.sitemap_mode).toBe("include");
+    expect(result.stats.sitemap_candidates).toBe(2);
+    expect(result.stats.discovery_limit_reached).toBe(true);
+    expect(result.warnings).toEqual([
+      { code: "sitemap_invalid", message: "child Sitemap was invalid" },
+    ]);
+    expect(reader.read.mock.calls[0]?.slice(0, 2)).toEqual([
+      new URL("https://example.com/"),
+      { maxDocuments: 10, maxCandidates: 2 },
+    ]);
+    expect(reader.read.mock.calls[0]?.[2]).toBeInstanceOf(AbortSignal);
+  });
+
+  it("uses only Sitemap URLs in only mode", async () => {
+    const result = await executeCrawl(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async ({ url }: { url: string }) => ({
+          title: url,
+          content: "[Markdown](/markdown)",
+        })),
+      },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 1,
+        sitemapMode: "only",
+        sitemapReader: {
+          read: vi.fn(async () => ({
+            urls: [new URL("https://example.com/sitemap-page")],
+            warnings: [],
+            truncated: false,
+          })),
+        },
+      },
+    );
+
+    expect(result.pages.map((page) => page.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/sitemap-page",
+    ]);
+  });
+
+  it("warns on Sitemap failure and continues Markdown discovery", async () => {
+    const result = await executeCrawl(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async () => ({ title: "Seed", content: "[Markdown](/markdown)" })),
+      },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 1,
+        sitemapMode: "include",
+        sitemapReader: {
+          read: vi.fn(async () => Promise.reject(new Error("sitemap down"))),
+        },
+      },
+    );
+
+    expect(result.pages.map((page) => page.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/markdown",
+    ]);
+    expect(result.warnings).toEqual([
+      { code: "sitemap_unavailable", message: expect.stringContaining("sitemap down") },
+    ]);
+  });
+
+  it("does not read Sitemap when maxDepth is zero", async () => {
+    const reader = { read: vi.fn() };
+    const result = await executeCrawl(
+      client(),
+      { url: "https://example.com/" },
+      { ...options, maxDepth: 0, sitemapMode: "include", sitemapReader: reader },
+    );
+
+    expect(reader.read).not.toHaveBeenCalled();
+    expect(result.pages).toHaveLength(1);
+  });
+
+  it("propagates Sitemap cancellation", async () => {
+    const controller = new AbortController();
+    const reason = new Error("cancelled");
+    const read = vi.fn(
+      async (_seed: URL, _options: unknown, signal?: AbortSignal) =>
+        new Promise<never>((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => {
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+        }),
+    );
+    const crawl = executeCrawl(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async () => ({ title: "Seed", content: "No links" })),
+      },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        sitemapMode: "include",
+        sitemapReader: { read },
+      },
+      undefined,
+      controller.signal,
+    );
+
+    await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+    controller.abort(reason);
+    await expect(crawl).rejects.toBe(reason);
+  });
+
+  it("does not call the Sitemap reader in skip mode", async () => {
+    const reader = { read: vi.fn() };
+    const result = await executeCrawl(
+      client(),
+      { url: "https://example.com/" },
+      { ...options, sitemapMode: "skip", sitemapReader: reader },
+    );
+
+    expect(reader.read).not.toHaveBeenCalled();
+    expect(result.settings.sitemap_mode).toBe("skip");
+    expect(result.warnings).toEqual([]);
   });
 
   it("records content truncation metadata", async () => {

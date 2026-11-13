@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import type { CrawlSitemapMode } from "../crawl/types.js";
 import { parseSkillAgents, type SkillAgent } from "../setup/skills.js";
 
 export class CliUsageError extends Error {
@@ -49,6 +50,7 @@ export type ParsedCommand =
       includePaths?: string[];
       excludePaths?: string[];
       ignoreQueryParameters?: boolean;
+      sitemapMode: CrawlSitemapMode;
       output: string;
       json: boolean;
     }
@@ -88,6 +90,13 @@ function parseContentLimit(value: string): number {
     throw new CliUsageError("Content limit must be an integer from 0 to 1000000.");
   }
   return parsed;
+}
+
+function parseSitemapMode(value: string): CrawlSitemapMode {
+  if (!["include", "only", "skip"].includes(value)) {
+    throw new CliUsageError("sitemap must be include, only, or skip.");
+  }
+  return value as CrawlSitemapMode;
 }
 
 function parsePatterns(value: string, name: string): string[] {
@@ -282,6 +291,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             "include-paths": { type: "string" },
             "exclude-paths": { type: "string" },
             "ignore-query-parameters": { type: "boolean" },
+            sitemap: { type: "string" },
             output: { type: "string", short: "o" },
             json: { type: "boolean" },
             help: { type: "boolean", short: "h" },
@@ -320,6 +330,10 @@ export function parseCli(argv: string[]): ParsedCommand {
             ? {}
             : { excludePaths: parsePatterns(parsed.values["exclude-paths"], "exclude-paths") }),
           ...(parsed.values["ignore-query-parameters"] ? { ignoreQueryParameters: true } : {}),
+          sitemapMode:
+            parsed.values.sitemap === undefined
+              ? "include"
+              : parseSitemapMode(parsed.values.sitemap),
           output,
           json: parsed.values.json ?? false,
         };

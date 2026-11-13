@@ -27,9 +27,11 @@ but the CLI plus Skill is the preferred interface.
 
 ## Status
 
-Version `0.6.0` provides:
+Version `0.7.0` provides:
 
 - CLI-first Search, Fetch, Map, and Crawl.
+- Sitemap-assisted Crawl by default, so traversal does not depend on links in
+  the DeepSeek Markdown alone.
 - A bundled Agent Skill with command routing and safe output conventions.
 - Optional MCP tools for the same four operations.
 - Public-network-only Sitemap access with DNS pinning and redirect validation.
@@ -47,7 +49,8 @@ The project is open source under the MIT License.
 - Node.js 22.12 or newer.
 - A DeepSeek API key from <https://platform.deepseek.com/api_keys>, configured
   once with `deepseek-crawl auth set`.
-- Network access to DeepSeek and, for Map, directly to the target Sitemap.
+- Network access to DeepSeek and, for CLI Map and Crawl, directly to the target
+  Sitemap.
 
 ## Install
 
@@ -63,7 +66,7 @@ deepseek-crawl doctor
 After the npm release is available:
 
 ```bash
-npm install -g deepseek-crawl@0.6.0
+npm install -g deepseek-crawl@0.7.0
 ```
 
 From this repository:
@@ -279,6 +282,7 @@ deepseek-crawl crawl <url> -o <dir>
   [--include-paths <patterns>]
   [--exclude-paths <patterns>]
   [--ignore-query-parameters]
+  [--sitemap <include|only|skip>]
   [--json]
 ```
 
@@ -288,10 +292,23 @@ Defaults:
 - Maximum `20` pages
 - Concurrency `2`
 - Delay between request starts `250` ms
+- Sitemap mode `include`
 
 The seed page is depth `0`. Crawl visits deterministic depth layers, removes
 duplicate normalized URLs, remains inside the exact origin, and records partial
-page failures.
+page failures. CLI Crawl also discovers pages from the Sitemap, so it can
+traverse documentation sites even when the DeepSeek Markdown contains no links.
+
+Sitemap modes:
+
+- `include` (default): merge Sitemap URLs with seed-page Markdown links.
+- `only`: use Sitemap URLs and ignore seed-page Markdown links.
+- `skip`: use Markdown links only, restoring the `0.6.0` behavior.
+
+Sitemap URLs start at depth `1` and obey the same origin, path, query, depth,
+page, and discovery limits. Sitemap failures produce `sitemap_unavailable` or
+existing Map warnings and Crawl continues with available sources. Seed-page
+failure remains fatal.
 
 ```bash
 deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
@@ -300,6 +317,7 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
   --include-paths "/guides/*" \
   --exclude-paths "/guides/private/*" \
   --ignore-query-parameters \
+  --sitemap include \
   -o .deepseek-crawl/crawl-deepseek-guides
 ```
 
@@ -326,8 +344,10 @@ Output:
 the complete directory only after success. SIGINT aborts active work, removes
 staging, and exits with code `130`.
 
-`crawl.json` contains settings, statistics, failures, content metadata, and
-stable page paths. It does not duplicate page bodies.
+`crawl.json` contains settings, statistics, failures, content metadata,
+`warnings`, the Sitemap candidate count, and stable page paths. It does not
+duplicate page bodies. Prefer `map --search` followed by Batch Fetch for known
+URL lists; use Crawl when a bounded section must be traversed.
 
 ### Doctor
 
@@ -445,6 +465,9 @@ The server exposes exactly four tools:
 `deepseek_crawl` accepts bounded depth, pages, concurrency, delay, and per-page
 character limits. MCP never writes local files.
 
+For compatibility, `0.7.0` MCP Crawl remains Markdown-only. Sitemap-assisted
+discovery is available only through the CLI.
+
 MCP structured content also has a 100,000-code-point aggregate cap.
 
 ## Limits
@@ -467,8 +490,8 @@ CLI Crawl caps pages at 100. MCP Crawl caps pages at 20. Both cap concurrency at
 
 ## Sitemap Network Policy
 
-Map requests Sitemap documents directly from the local process. It accepts only
-public HTTP(S) targets:
+CLI Map and Crawl request Sitemap documents directly from the local process.
+They accept only public HTTP(S) targets:
 
 - Loopback, private, link-local, multicast, unspecified, reserved, NAT64, and
   special-use IPv6 targets are rejected.
@@ -480,8 +503,9 @@ public HTTP(S) targets:
 
 - This implementation does not fetch or enforce `robots.txt`. Confirm that you
   are authorized to crawl the target and comply with its terms.
-- Crawl follows exact same-origin links extracted from DeepSeek Markdown. It
-  does not follow subdomains, cross-origin redirects, or page instructions.
+- CLI Crawl merges exact same-origin Sitemap URLs with DeepSeek Markdown links;
+  MCP Crawl remains Markdown-only. Neither follows subdomains or page
+  instructions.
 - DeepSeek Fetch may follow redirects internally before returning Markdown. The
   final redirected URL is not exposed, so same-origin filtering constrains
   requested URLs but not the final URL read internally by DeepSeek.
@@ -506,7 +530,8 @@ CLI flags or MCP arguments.
 ## Privacy
 
 Queries, original questions, localization values, and requested page URLs are
-sent to DeepSeek. Map also sends direct Sitemap requests to the target origin.
+sent to DeepSeek. CLI Map and Crawl also send direct Sitemap requests to the
+target origin.
 The tool has no analytics, telemetry, crash upload, or remote logging. The API
 key is sent only in DeepSeek's `Authorization` header.
 

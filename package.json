@@ -1,10 +1,25 @@
 {
   "name": "deepseek-crawl",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "CLI-first AI web search, page reading, mapping, and crawling with optional MCP",
   "type": "module",
-  "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "homepage": "https://github.com/jsogn/deepseek-crawl#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jsogn/deepseek-crawl.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jsogn/deepseek-crawl/issues"
+  },
+  "keywords": [
+    "deepseek",
+    "crawl",
+    "web-search",
+    "mcp",
+    "agent-skill",
+    "cli"
+  ],
   "bin": {
     "deepseek-crawl": "dist/bin.js"
   },
@@ -13,7 +28,9 @@
   },
   "files": [
     "dist",
+    "LICENSE",
     "README.md",
+    "README.en.md",
     "skills"
   ],
   "engines": {
@@ -28,6 +45,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "format:check": "biome format .",
+    "prepare": "npm run build",
     "prepack": "npm run build",
     "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm pack --dry-run",
     "test:live": "npm run build && node scripts/live-smoke.mjs"

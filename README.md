@@ -1,102 +1,136 @@
 # DeepSeek Crawl
 
-**CLI-first** web search, page reading, URL mapping, and bounded crawling for AI
-agents, backed by DeepSeek's official Search and Fetch APIs.
+**简体中文** | [English](README.en.md)
 
-The primary workflow is:
+面向 AI Agent 的 **CLI-first** 网页搜索、页面读取、URL Map 和受限 Crawl 工具，
+底层使用 DeepSeek 官方 Search 与 Fetch API。
+
+默认工作流：
 
 ```text
-Agent → deepseek-crawl CLI → DeepSeek APIs → files/JSON → Agent
+Agent → deepseek-crawl CLI → DeepSeek API → 文件/JSON → Agent
 ```
 
-The repository bundles a `deepseek-crawl` Agent Skill that teaches this
-escalation:
+仓库内置 `deepseek-crawl` Agent Skill，指导 AI 按以下顺序选择最小能力：
 
-1. `search` when no URL is known.
-2. `fetch` when the URL is known.
-3. `map --search` when the site is known but the page is not.
-4. `crawl` only for bounded docs or section-wide reading.
+1. 不知道 URL：使用 `search`。
+2. 已知 URL：使用 `fetch`。
+3. 已知站点但不知道具体页面：使用 `map --search`。
+4. 确实需要批量读取文档或站点区域：使用受限 `crawl`。
 
-This project replaces the common Firecrawl Search, Scrape, Map, and Crawl
-capabilities. It is **not** a Firecrawl API or SDK compatibility layer.
+本项目用于替代 Firecrawl 的常见 Search、Scrape、Map 和 Crawl 能力，**不是**
+Firecrawl API 或 SDK 兼容层。
 
-MCP is optional. It remains available for clients that cannot execute the CLI,
-but the CLI plus Skill is the preferred interface.
+MCP 为可选项，主要保留给无法执行 CLI 的客户端。日常 Agent 使用应优先选择
+CLI + Skill。
 
-## Status
+## 当前版本
 
-Version `0.5.0` provides:
+`0.5.1` 提供：
 
-- CLI-first Search, Fetch, Map, and Crawl.
-- A bundled Agent Skill with command routing and safe output conventions.
-- Optional MCP tools for the same four operations.
-- Public-network-only Sitemap access with DNS pinning and redirect validation.
-- Deterministic Crawl limits, partial failure records, and atomic output.
-- Built-in one-command Skill setup for the common `.agents/skills` directory or
-  selected Agent-specific directories.
-- CLI-managed API credentials with macOS Keychain and private file fallback.
+- CLI-first 的 Search、Fetch、Map 和 Crawl。
+- 自带 Agent Skill，包含命令路由、输出组织和安全边界。
+- `setup skills` 一键安装到通用或指定 Agent 目录。
+- `map --search` URL 筛选。
+- macOS Keychain 或其他平台私有文件凭据存储。
+- `auth set`、`auth status`、`auth remove`。
+- 可选的四个 MCP 工具。
+- 公网 Sitemap 访问、DNS 固定、NAT64/Teredo 防护和同源重定向验证。
+- 确定性 Crawl、失败记录和原子输出。
 
-The npm package remains `private` and `UNLICENSED`; it is not published to the
-npm registry.
+项目使用 MIT License。
 
-## Requirements
+## 环境要求
 
-- Node.js 22.12 or newer.
-- A DeepSeek API key from <https://platform.deepseek.com/api_keys>, configured
-  once with `deepseek-crawl auth set`.
-- Network access to DeepSeek and, for Map, directly to the target Sitemap.
+- Node.js 22.12 或更高版本。
+- DeepSeek API Key：<https://platform.deepseek.com/api_keys>。
+- 能访问 DeepSeek；Map 还需要直接访问目标站点的 Sitemap。
 
-## Install
+## 安装
 
-Once the private package is available from your configured registry:
+从 GitHub 安装：
 
 ```bash
-npm install -g deepseek-crawl@0.5.0
+npm install -g github:jsogn/deepseek-crawl
 deepseek-crawl setup skills
 deepseek-crawl auth set
 deepseek-crawl doctor
 ```
 
-From this repository:
+npm registry 发布后也可以使用：
+
+```bash
+npm install -g deepseek-crawl@0.5.1
+```
+
+本地开发：
 
 ```bash
 npm install
 npm run build
 npm link
 deepseek-crawl setup skills
-deepseek-crawl --version
 ```
 
-`npm link` puts the local `deepseek-crawl` executable on your PATH. If you do
-not want a global link, use `node /absolute/path/to/deepseek-crawl/dist/bin.js`.
+## API 凭据
+
+只需要配置一次：
+
+```bash
+deepseek-crawl auth set
+```
+
+CLI 使用隐藏终端输入，或从 stdin 读取 Key，不接受 Key 作为命令行参数。
+
+存储位置：
+
+- macOS：Keychain，service 为 `deepseek-crawl`。
+- Linux 和其他平台：
+  `$XDG_CONFIG_HOME/deepseek-crawl/credentials.json` 或
+  `~/.config/deepseek-crawl/credentials.json`，权限为 `0600`。
+
+查看或删除：
+
+```bash
+deepseek-crawl auth status --json
+deepseek-crawl auth remove
+```
+
+凭据优先级：
+
+1. `DEEPSEEK_API_KEY` 环境变量。
+2. CLI 保存的凭据。
+3. 未配置错误。
+
+`auth status` 只报告来源和存储后端，不输出 Key。
 
 ## Agent Skill
 
-The Skill is bundled in:
+Skill 位于：
 
 ```text
 skills/deepseek-crawl/
 ```
 
-The default install uses the common Agent Skills directory:
+默认安装到通用 Agent Skills 目录：
 
 ```bash
 deepseek-crawl setup skills
 ```
 
-This creates:
+创建：
 
 ```text
 ~/.agents/skills/deepseek-crawl
 ```
 
-Install into the current project instead:
+安装到当前项目：
 
 ```bash
 deepseek-crawl setup skills --project
 ```
 
-Install only for selected Agents:
+只安装到指定 Agent：
 
 ```bash
 deepseek-crawl setup skills --agent codex
@@ -104,40 +138,33 @@ deepseek-crawl setup skills --agent claude-code,cursor
 deepseek-crawl setup skills --agent all
 ```
 
-Use `--copy` instead of the default absolute symlink, and `--force` only when
-intentionally replacing an existing `deepseek-crawl` Skill directory. Setup
-does not require a DeepSeek API key.
+默认使用绝对软链接。可以改用复制，并且只应在确认替换现有 Skill 时使用
+`--force`：
 
-The universal ecosystem installer also works:
+```bash
+deepseek-crawl setup skills --copy
+deepseek-crawl setup skills --force
+```
+
+安装 Skill 不需要 DeepSeek API Key。
+
+也可以使用通用生态安装器：
 
 ```bash
 npx skills add jsogn/deepseek-crawl --skill deepseek-crawl
 ```
 
-Start a new Agent session after installation so the Skill is discovered.
+安装后请开启新的 Agent 会话，使 Skill 被重新发现。
 
-The Skill prefers the CLI and uses MCP only when the client requires it or the
-user explicitly asks. It directs reusable output to `.deepseek-crawl/`, which is
-already ignored by Git.
+## 前置检查
 
-Recommended output convention:
-
-```text
-.deepseek-crawl/
-  search-topic.json
-  page-site-section.md
-  map-site.json
-  crawl-site-section/
-```
-
-## Prerequisite Check
+以下命令不会产生 DeepSeek 计费请求：
 
 ```bash
 deepseek-crawl doctor --json
 ```
 
-This check does not make a billable DeepSeek request. Never print or pass the API
-key as a command-line value.
+`doctor --live` 会执行一次计费 Search。
 
 ## CLI
 
@@ -154,9 +181,9 @@ deepseek-crawl auth remove [--json]
 deepseek-crawl mcp
 ```
 
-All commands support `--help`; the executable supports `--version`.
+所有命令支持 `--help`，可执行文件支持 `--version`。
 
-### Search
+## Search
 
 ```text
 deepseek-crawl search <query>
@@ -169,9 +196,8 @@ deepseek-crawl search <query>
   [--output, -o <path>]
 ```
 
-Human output defaults to a 4,000-character content limit per result. `--json`
-preserves complete API content unless `--max-content-chars` is supplied.
-`--output` writes complete JSON.
+人类可读输出默认每条内容的截断上限为 4,000 字符。`--json` 默认保留完整
+API 内容；显式提供 `--max-content-chars` 时按其限制。
 
 ```bash
 deepseek-crawl search "DeepSeek API changes" \
@@ -180,7 +206,7 @@ deepseek-crawl search "DeepSeek API changes" \
   -o .deepseek-crawl/search-deepseek-changes.json
 ```
 
-### Fetch
+## Fetch
 
 ```text
 deepseek-crawl fetch <url>
@@ -189,15 +215,15 @@ deepseek-crawl fetch <url>
   [--output, -o <path>]
 ```
 
-Human output defaults to a 30,000-character limit. `-o` writes Markdown by
-default or structured JSON with `--json`.
+人类可读输出默认截断到 30,000 字符。`-o` 默认写入 Markdown；与 `--json`
+一起使用时写入结构化 JSON。
 
 ```bash
 deepseek-crawl fetch "https://api-docs.deepseek.com/" \
   -o .deepseek-crawl/deepseek-api-home.md
 ```
 
-### Map
+## Map
 
 ```text
 deepseek-crawl map <url> [--search <text>]
@@ -206,17 +232,16 @@ deepseek-crawl map <url> [--search <text>]
   [--output, -o <path>]
 ```
 
-Map combines:
+Map 合并：
 
-1. Same-origin URLs from `/sitemap.xml` and nested Sitemap indexes.
-2. Same-origin links extracted from the seed page's DeepSeek Markdown.
+1. `/sitemap.xml` 及嵌套 Sitemap 中的同源 URL。
+2. DeepSeek Fetch 返回的种子页 Markdown 中的同源链接。
 
-`--search` is a case-insensitive substring filter over normalized URLs. It is
-applied before the result limit. With `--search`, every returned URL must match
-and the seed is not forced into the result. No matches are a successful empty
-result.
+`--search` 对规范化后的 URL 做大小写不敏感的包含匹配，并在应用 `limit`
+之前过滤。使用 `--search` 时，所有返回 URL 都必须匹配，种子 URL 不会强制保留；
+没有匹配属于成功空结果。
 
-Without `--search`, the seed URL is always retained. The default limit is 500.
+不提供 `--search` 时，种子 URL 始终保留。默认 limit 为 500。
 
 ```bash
 deepseek-crawl map "https://api-docs.deepseek.com/" \
@@ -225,11 +250,10 @@ deepseek-crawl map "https://api-docs.deepseek.com/" \
   -o .deepseek-crawl/map-deepseek-docs.json
 ```
 
-Warnings are printed to stderr in both human and JSON modes and retained in the
-JSON result. A Sitemap failure can still produce a successful seed-page result,
-and vice versa.
+警告会写入 stderr，并保留在 JSON 中。Sitemap 和种子页任一来源可用时，Map 仍可
+返回部分结果。
 
-### Crawl
+## Crawl
 
 ```text
 deepseek-crawl crawl <url> -o <dir>
@@ -240,16 +264,15 @@ deepseek-crawl crawl <url> -o <dir>
   [--json]
 ```
 
-Defaults:
+默认参数：
 
-- Depth `2`
-- Maximum `20` pages
-- Concurrency `2`
-- Delay between request starts `250` ms
+- 深度：2
+- 最大页数：20
+- 并发：2
+- 请求启动间隔：250 ms
 
-The seed page is depth `0`. Crawl visits deterministic depth layers, removes
-duplicate normalized URLs, remains inside the exact origin, and records partial
-page failures.
+种子页深度为 0。Crawl 按确定性的深度层遍历，移除重复规范化 URL，严格限制在
+种子页的 origin 内，并记录部分页面失败。
 
 ```bash
 deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
@@ -258,7 +281,7 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
   -o .deepseek-crawl/crawl-deepseek-guides
 ```
 
-Output:
+输出：
 
 ```text
 .deepseek-crawl/crawl-deepseek-guides/
@@ -268,195 +291,96 @@ Output:
     0002-example-docs.md
 ```
 
-`-o` must not already exist. Crawl stages into a hidden sibling and publishes
-the complete directory only after success. SIGINT aborts active work, removes
-staging, and exits with code `130`.
+`-o` 目标不能已存在。Crawl 先写隐藏临时目录，成功后一次性发布完整目录。
+SIGINT 会中止请求、清理 staging，并以代码 `130` 退出。
 
-`crawl.json` contains settings, statistics, failures, content metadata, and
-stable page paths. It does not duplicate page bodies.
+`crawl.json` 包含设置、统计、失败记录、内容截断元数据和稳定页面路径，不重复
+保存正文。
 
-### Doctor
+## 计费
 
-```bash
-deepseek-crawl doctor
-deepseek-crawl doctor --live --json
-```
+- Search 按成功请求计费。
+- Fetch 按成功页面请求计费。
+- Map 的种子页通过 DeepSeek Fetch 读取，因此计费。
+- Crawl 对每个成功读取的页面调用 DeepSeek Fetch。
 
-The default check is non-billable. `--live` performs one Search request and
-prints a billing warning.
+重复执行前应减少 `--limit`、`--max-pages` 或深度。价格和限制请查看
+<https://api-docs.deepseek.com/guides/search/>。
 
-### Authentication
+## MCP（可选）
 
-Store the DeepSeek API Key once:
-
-```bash
-deepseek-crawl auth set
-```
-
-The CLI reads the key from a hidden terminal prompt or piped stdin. It is never
-accepted as a positional argument.
-
-Storage:
-
-- macOS: Keychain using service `deepseek-crawl`.
-- Linux and other platforms: private
-  `$XDG_CONFIG_HOME/deepseek-crawl/credentials.json` or
-  `~/.config/deepseek-crawl/credentials.json` with mode `0600`.
-
-Check or remove the stored credential:
-
-```bash
-deepseek-crawl auth status --json
-deepseek-crawl auth remove
-```
-
-`auth status` reports only `configured`, `source`, and `backend`; it never prints
-the key.
-
-Credential precedence is:
-
-1. `DEEPSEEK_API_KEY` environment variable.
-2. CLI credential store.
-3. Configuration error.
-
-### Setup Skills
-
-```text
-deepseek-crawl setup skills
-  [--global | --project]
-  [--agent <agents,codex,claude-code,cursor,all>]
-  [--copy]
-  [--force]
-  [--json]
-```
-
-Defaults:
-
-- Scope: global.
-- Agent target: `agents`, the common `.agents/skills` directory.
-- Mode: absolute symlink.
-
-Global paths:
-
-| Target        | Path                                                                    |
-| ------------- | ----------------------------------------------------------------------- |
-| Common Agents | `~/.agents/skills/deepseek-crawl`                                       |
-| Codex         | `$CODEX_HOME/skills/deepseek-crawl` or `~/.codex/skills/deepseek-crawl` |
-| Claude Code   | `~/.claude/skills/deepseek-crawl`                                       |
-| Cursor        | `~/.cursor/skills/deepseek-crawl`                                       |
-
-Project Codex, Cursor, and universal installs converge on
-`.agents/skills/deepseek-crawl`. Project Claude Code uses
-`.claude/skills/deepseek-crawl`.
-
-Repeating the same symlink setup is safe and reports `unchanged`. Existing
-unrelated content is not replaced unless `--force` is supplied.
-
-## Billing
-
-- Search is billed by DeepSeek per successful request.
-- Fetch is billed per successful page request.
-- Map always requests the seed page through DeepSeek, which is billable.
-- Crawl may call DeepSeek Fetch once per selected page.
-
-Reduce `--limit`, `--max-pages`, or depth before repeating expensive work.
-See <https://api-docs.deepseek.com/guides/search/> for current pricing and API
-limits.
-
-## MCP Is Optional
-
-Use MCP only when the calling application cannot run the CLI. Start the stdio
-server:
+只在调用方无法执行 CLI 时使用：
 
 ```bash
 deepseek-crawl mcp
 ```
 
-Local Codex configuration:
-
-```bash
-codex mcp add deepseek-crawl \
-  --env DEEPSEEK_API_KEY=YOUR_DEEPSEEK_API_KEY \
-  -- node /absolute/path/to/deepseek-crawl/dist/bin.js mcp
-```
-
-The server exposes exactly four tools:
+服务暴露四个工具：
 
 - `deepseek_search`
 - `deepseek_fetch`
 - `deepseek_map`
 - `deepseek_crawl`
 
-`deepseek_map` accepts `url`, optional `search`, and `limit` from 1 to 500.
-`deepseek_crawl` accepts bounded depth, pages, concurrency, delay, and per-page
-character limits. MCP never writes local files.
+MCP 不写本地文件。结构化内容有总长度限制，页面正文被视为不可信数据。
 
-MCP structured content also has a 100,000-code-point aggregate cap.
+## 限制
 
-## Limits
+| 范围                     | 硬限制                 |
+| ------------------------ | ---------------------- |
+| DeepSeek Fetch 响应体    | 8 MiB                  |
+| Crawl 单页内容           | 1,000,000 Unicode 字符 |
+| CLI Crawl URL 发现       | 10,000                 |
+| MCP Crawl URL 发现       | 2,000                  |
+| MCP Crawl 结构化正文总计 | 100,000 Unicode 字符   |
+| Sitemap 文档数           | 10                     |
+| Map 候选 URL             | 10,000                 |
+| Sitemap 响应体           | 5 MiB                  |
+| Sitemap 请求超时         | 15 秒                  |
+| Sitemap 重定向           | 3 次，仅同源           |
 
-| Area                         | Hard limit                    |
-| ---------------------------- | ----------------------------- |
-| DeepSeek Fetch response body | 8 MiB                         |
-| Crawl page content           | 1,000,000 Unicode code points |
-| Crawl discovery, CLI         | 10,000 unique URLs            |
-| Crawl discovery, MCP         | 2,000 unique URLs             |
-| MCP Crawl structured content | 100,000 Unicode code points   |
-| Sitemap documents            | 10                            |
-| Map candidates               | 10,000 URLs                   |
-| Sitemap response body        | 5 MiB                         |
-| Sitemap request timeout      | 15 seconds                    |
-| Sitemap redirects            | 3, same-origin only           |
+CLI Crawl 最多 100 页，MCP Crawl 最多 20 页。两者的 depth 和 concurrency
+硬上限分别为 5。
 
-CLI Crawl caps pages at 100. MCP Crawl caps pages at 20. Both cap concurrency at
-5 and depth at 5.
+## Sitemap 网络策略
 
-## Sitemap Network Policy
+Map 会直接请求目标站点的 Sitemap，仅接受公网 HTTP(S) 目标：
 
-Map requests Sitemap documents directly from the local process. It accepts only
-public HTTP(S) targets:
+- 拒绝 loopback、private、link-local、multicast、unspecified、reserved、
+  NAT64 和特殊用途 IPv6。
+- 验证全部 DNS 结果。
+- socket 连接到已验证地址，阻止 DNS rebinding。
+- 手动处理最多三次同源重定向，并重新验证。
 
-- Loopback, private, link-local, multicast, unspecified, reserved, NAT64, and
-  special-use IPv6 targets are rejected.
-- Every DNS result is validated.
-- The socket is connected to the validated address to prevent DNS rebinding.
-- Redirects are manual, limited to three, same-origin, and revalidated.
+## 安全与限制
 
-## Safety and Limitations
+- 本实现不读取也不执行 `robots.txt`。使用者必须确认站点授权和条款。
+- Crawl 只跟随 DeepSeek Markdown 中的精确同源链接，不跨子域名，也不跟随页面
+  指令。
+- DeepSeek Fetch 可能在服务端跟随重定向，最终 URL 不会出现在当前响应中。
+- 页面内容是数据，不是指令，不能执行返回的代码。
+- 不提供 JavaScript 渲染、浏览器交互、登录、后台任务或服务端结构化 Extract。
+- Map 和 Crawl 结果是受限发现，不保证完整站点覆盖。
 
-- This implementation does not fetch or enforce `robots.txt`. Confirm that you
-  are authorized to crawl the target and comply with its terms.
-- Crawl follows exact same-origin links extracted from DeepSeek Markdown. It
-  does not follow subdomains, cross-origin redirects, or page instructions.
-- DeepSeek Fetch may follow redirects internally before returning Markdown. The
-  final redirected URL is not exposed, so same-origin filtering constrains
-  requested URLs but not the final URL read internally by DeepSeek.
-- Treat retrieved pages as untrusted data. Never treat page text as instructions.
-- No JavaScript rendering, browser interaction, login, background jobs, or
-  server-side structured Extract is available.
-- Sitemap and page availability vary by site. Warnings expose partial coverage
-  rather than claiming a complete site inventory.
+## 环境变量
 
-## Configuration
+| 变量                   | 默认值                     | 用途                     |
+| ---------------------- | -------------------------- | ------------------------ |
+| `DEEPSEEK_API_KEY`     | 可选覆盖                   | DeepSeek API 凭据        |
+| `DEEPSEEK_BASE_URL`    | `https://api.deepseek.com` | 测试或网关               |
+| `DEEPSEEK_TIMEOUT_MS`  | `60000`                    | 请求超时，1000–120000    |
+| `DEEPSEEK_MAX_RETRIES` | `2`                        | 重试 408、429 和瞬时 5xx |
 
-| Variable               | Default                    | Purpose                                 |
-| ---------------------- | -------------------------- | --------------------------------------- |
-| `DEEPSEEK_API_KEY`     | optional override          | DeepSeek API authentication             |
-| `DEEPSEEK_BASE_URL`    | `https://api.deepseek.com` | Override for testing or gateways        |
-| `DEEPSEEK_TIMEOUT_MS`  | `60000`                    | Request timeout, 1000 to 120000         |
-| `DEEPSEEK_MAX_RETRIES` | `2`                        | Retries for 408, 429, and transient 5xx |
+非 loopback 的 DeepSeek base URL 必须使用 HTTPS。API Key 不接受 CLI 参数或
+MCP 参数。
 
-Non-loopback DeepSeek base URLs must use HTTPS. API keys are never accepted as
-CLI flags or MCP arguments.
+## 隐私
 
-## Privacy
+查询、原始问题、定位 IP 和目标页面 URL 会发送给 DeepSeek。Map 还会直接请求
+目标站点的 Sitemap。本工具不包含分析、遥测、崩溃上传或远程日志。API Key 只在
+DeepSeek `Authorization` 请求头中使用。
 
-Queries, original questions, localization values, and requested page URLs are
-sent to DeepSeek. Map also sends direct Sitemap requests to the target origin.
-The tool has no analytics, telemetry, crash upload, or remote logging. The API
-key is sent only in DeepSeek's `Authorization` header.
-
-## Development
+## 开发
 
 ```bash
 npm install
@@ -464,8 +388,7 @@ npm run verify
 python3 /path/to/skill-creator/scripts/quick_validate.py skills/deepseek-crawl
 ```
 
-Normal tests are offline and do not require a DeepSeek key. The explicit live
-check is billable:
+普通测试完全离线，不需要 DeepSeek Key。显式 live 测试会计费：
 
 ```bash
 DEEPSEEK_API_KEY=sk-... npm run test:live

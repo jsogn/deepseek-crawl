@@ -8,23 +8,32 @@ describe("package executable", () => {
       encoding: "utf8",
     });
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("0.5.0");
+    expect(result.stdout.trim()).toBe("0.5.1");
     expect(result.stderr).toBe("");
   });
 
   it("publishes the bundled Agent Skill", async () => {
     const packageJson = JSON.parse(
       await readFile(new URL("../../package.json", import.meta.url), "utf8"),
-    ) as { files?: string[]; description?: string };
+    ) as { files?: string[]; description?: string; private?: boolean; license?: string };
     expect(packageJson.files).toContain("skills");
+    expect(packageJson.files).toContain("README.en.md");
+    expect(packageJson.files).toContain("LICENSE");
     expect(packageJson.description).toMatch(/CLI-first/i);
     expect(packageJson.description).toMatch(/optional MCP/i);
+    expect(packageJson.private).not.toBe(true);
+    expect(packageJson.license).toBe("MIT");
   });
 });
 
 describe("package documentation", () => {
   it("documents every public CLI and MCP capability", async () => {
     const readme = await readFile(new URL("../../README.md", import.meta.url), "utf8");
+    const readmeEnglish = await readFile(new URL("../../README.en.md", import.meta.url), "utf8");
+    const allDocumentation = `${readme}\n${readmeEnglish}`;
+
+    expect(readme).toContain("[English](README.en.md)");
+    expect(readmeEnglish).toContain("[简体中文](README.md)");
 
     for (const text of [
       "deepseek-crawl map",
@@ -48,7 +57,7 @@ describe("package documentation", () => {
       "macOS Keychain",
       "DEEPSEEK_API_KEY",
     ]) {
-      expect(readme).toContain(text);
+      expect(allDocumentation).toContain(text);
     }
   });
 });

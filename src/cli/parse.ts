@@ -69,6 +69,7 @@ export type ParsedCommand =
       fresh?: boolean;
       baseline?: string;
       changedOnly?: boolean;
+      jobDir?: string;
       output: string;
       json: boolean;
     }
@@ -80,6 +81,15 @@ export type ParsedCommand =
       fresh?: boolean;
       json: boolean;
     }
+  | {
+      kind: "crawl-resume";
+      jobDir: string;
+      output: string;
+      cacheTtl?: number;
+      fresh?: boolean;
+      json: boolean;
+    }
+  | { kind: "crawl-status"; jobDir: string; json: boolean }
   | { kind: "cache-clear"; json: boolean }
   | { kind: "doctor"; live: boolean; json: boolean }
   | {
@@ -361,6 +371,53 @@ export function parseCli(argv: string[]): ParsedCommand {
         return result;
       }
       case "crawl": {
+        if (args[0] === "resume") {
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: true,
+            strict: true,
+            options: {
+              "cache-ttl": { type: "string" },
+              fresh: { type: "boolean" },
+              output: { type: "string", short: "o" },
+              json: { type: "boolean" },
+              help: { type: "boolean", short: "h" },
+            },
+          });
+          if (parsed.values.help) {
+            return { kind: "help", command: "crawl" };
+          }
+          const output = parsed.values.output?.trim();
+          if (!output) {
+            throw new CliUsageError("output is required.");
+          }
+          return {
+            kind: "crawl-resume",
+            jobDir: exactPositional(parsed.positionals, "job-dir"),
+            output,
+            ...parseCacheOptions(parsed.values["cache-ttl"], parsed.values.fresh),
+            json: parsed.values.json ?? false,
+          };
+        }
+        if (args[0] === "status") {
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: true,
+            strict: true,
+            options: {
+              json: { type: "boolean" },
+              help: { type: "boolean", short: "h" },
+            },
+          });
+          if (parsed.values.help) {
+            return { kind: "help", command: "crawl" };
+          }
+          return {
+            kind: "crawl-status",
+            jobDir: exactPositional(parsed.positionals, "job-dir"),
+            json: parsed.values.json ?? false,
+          };
+        }
         const parsed = parseArgs({
           args,
           allowPositionals: true,
@@ -370,6 +427,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             "max-pages": { type: "string" },
             baseline: { type: "string" },
             "changed-only": { type: "boolean" },
+            "job-dir": { type: "string" },
             "cache-ttl": { type: "string" },
             fresh: { type: "boolean" },
             concurrency: { type: "string" },
@@ -413,6 +471,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             parsed.values["ignore-query-parameters"] ||
             parsed.values.baseline !== undefined ||
             parsed.values["changed-only"] ||
+            parsed.values["job-dir"] !== undefined ||
             parsed.values.sitemap !== undefined;
           if (incompatible) {
             throw new CliUsageError("Crawl retry uses settings from the existing report.");
@@ -427,6 +486,7 @@ export function parseCli(argv: string[]): ParsedCommand {
         }
         const baseline = parsed.values.baseline?.trim();
         const changedOnly = parsed.values["changed-only"] ?? false;
+        const jobDir = parsed.values["job-dir"]?.trim();
         if (parsed.values.baseline !== undefined && !baseline) {
           throw new CliUsageError("baseline requires a report path.");
         }
@@ -435,6 +495,15 @@ export function parseCli(argv: string[]): ParsedCommand {
         }
         if (parsed.values["plan-only"] && baseline) {
           throw new CliUsageError("--baseline cannot be used with --plan-only.");
+        }
+        if (parsed.values["job-dir"] !== undefined && !jobDir) {
+          throw new CliUsageError("job-dir requires a directory path.");
+        }
+        if (jobDir && parsed.values["plan-only"]) {
+          throw new CliUsageError("--job-dir cannot be used with --plan-only.");
+        }
+        if (jobDir && baseline) {
+          throw new CliUsageError("--job-dir cannot be used with --baseline.");
         }
         return {
           kind: "crawl",
@@ -469,6 +538,7 @@ export function parseCli(argv: string[]): ParsedCommand {
           planOnly: parsed.values["plan-only"] ?? false,
           ...parseCacheOptions(parsed.values["cache-ttl"], parsed.values.fresh),
           ...(baseline ? { baseline, changedOnly } : {}),
+          ...(jobDir ? { jobDir } : {}),
           output,
           json: parsed.values.json ?? false,
         };

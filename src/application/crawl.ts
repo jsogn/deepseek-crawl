@@ -9,6 +9,8 @@ import { canonicalizeCrawlUrl, createCrawlPathFilter } from "../crawl/filters.js
 import { extractMarkdownLinks, sameOrigin } from "../crawl/links.js";
 import { runLayeredTasks } from "../crawl/queue.js";
 import type {
+  CrawlCheckpointActiveLayer,
+  CrawlCheckpointState,
   CrawlFailure,
   CrawlOptions,
   CrawlPage,
@@ -69,6 +71,12 @@ export function normalizeCrawlOptions(options: CrawlOptions): CrawlOptions {
     normalized.baseline = options.baseline;
   }
   normalized.changedOnly = options.changedOnly ?? false;
+  if (options.resume !== undefined) {
+    normalized.resume = options.resume;
+  }
+  if (options.onCheckpoint !== undefined) {
+    normalized.onCheckpoint = options.onCheckpoint;
+  }
   if (options.sitemapReader !== undefined) {
     normalized.sitemapReader = options.sitemapReader;
   }
@@ -85,8 +93,17 @@ interface PageOutcome {
   error: unknown | null;
 }
 
+interface MutableActiveLayer {
+  depth: number;
+  urls: string[];
+  indexes: number[];
+  completed: Set<string>;
+  discovered: string[];
+}
+
 interface BoundedLinkCollector {
   add(link: string): void;
+  values(): string[];
   finish(): { links: string[]; truncated: boolean };
 }
 
@@ -145,6 +162,9 @@ function createBoundedLinkCollector(capacity: number, seen: Set<string>): Bounde
         trim();
       }
     },
+    values(): string[] {
+      return [...candidates].sort();
+    },
     finish(): { links: string[]; truncated: boolean } {
       trim();
       const links = [...candidates].sort();
@@ -184,22 +204,105 @@ export async function executeCrawl(
     ? AbortSignal.any([signal, crawlController.signal])
     : crawlController.signal;
   crawlSignal.throwIfAborted();
-  const startedAt = now().toISOString();
-  const seen = new Set<string>([seed.href]);
-  const sourcesByUrl = new Map<string, Set<CrawlPageSource>>([
-    [seed.href, new Set<CrawlPageSource>(["seed_url"])],
-  ]);
-  const pages: CrawlPageSummary[] = [];
-  const failures: CrawlFailure[] = [];
-  const warnings: MapWarning[] = [];
-  let frontier: string[] = [];
-  let nextIndex = 1;
-  let attemptedPages = 1;
-  let fetched = 0;
-  let contentTruncated = 0;
-  let limitReached = false;
-  let discoveryLimitReached = false;
-  let sitemapCandidates = 0;
+  const resume = limits.resume;
+  if (resume) {
+    const resumeSeed = canonicalizeCrawlUrl(
+      resume.seed_url,
+      undefined,
+      limits.ignoreQueryParameters,
+    );
+    if (!resumeSeed || resumeSeed.href !== seed.href) {
+      throw new Error("Crawl job seed URL does not match the requested Crawl URL.");
+    }
+  }
+  const startedAt = resume?.started_at ?? now().toISOString();
+  const seen = new Set<string>(resume?.seen ?? [seed.href]);
+  const sourcesByUrl = new Map<string, Set<CrawlPageSource>>(
+    resume?.sources.map((source) => [source.url, new Set(source.sources)]) ?? [
+      [seed.href, new Set<CrawlPageSource>(["seed_url"])],
+    ],
+  );
+  const pages: CrawlPageSummary[] = [...(resume?.pages ?? [])];
+  const failures: CrawlFailure[] = [...(resume?.failures ?? [])];
+  const warnings: MapWarning[] = [...(resume?.warnings ?? [])];
+  let frontier: string[] = [...(resume?.frontier ?? [])];
+  let nextIndex = resume?.counters.nextIndex ?? 1;
+  let attemptedPages = resume?.counters.attemptedPages ?? 1;
+  let fetched = resume?.counters.fetched ?? 0;
+  let contentTruncated = resume?.counters.contentTruncated ?? 0;
+  let limitReached = resume?.counters.limitReached ?? false;
+  let discoveryLimitReached = resume?.counters.discoveryLimitReached ?? false;
+  let sitemapCandidates = resume?.counters.sitemapCandidates ?? 0;
+  let depth = resume?.depth ?? 1;
+  let activeLayer: MutableActiveLayer | undefined = resume?.active_layer
+    ? {
+        depth: resume.active_layer.depth,
+        urls: [...resume.active_layer.urls],
+        indexes: [...resume.active_layer.indexes],
+        completed: new Set(resume.active_layer.completed),
+        discovered: [...resume.active_layer.discovered],
+      }
+    : undefined;
+  let checkpointChain = Promise.resolve();
+
+  const checkpoint = (
+    status: CrawlCheckpointState["status"],
+    lastError?: string,
+  ): Promise<void> => {
+    if (!limits.onCheckpoint) {
+      return Promise.resolve();
+    }
+    const snapshot: CrawlCheckpointState = {
+      version: 1,
+      status,
+      seed_url: seed.href,
+      started_at: startedAt,
+      updated_at: now().toISOString(),
+      options: {
+        maxDepth: limits.maxDepth,
+        maxPages: limits.maxPages,
+        concurrency: limits.concurrency,
+        delayMs: limits.delayMs,
+        includePaths: [...(limits.includePaths ?? [])],
+        excludePaths: [...(limits.excludePaths ?? [])],
+        ignoreQueryParameters: limits.ignoreQueryParameters ?? false,
+        sitemapMode,
+      },
+      counters: {
+        nextIndex,
+        attemptedPages,
+        fetched,
+        contentTruncated,
+        limitReached,
+        discoveryLimitReached,
+        sitemapCandidates,
+      },
+      seen: [...seen],
+      sources: [...sourcesByUrl.entries()]
+        .map(([url, sources]) => ({ url, sources: pageSourcesInOrder(sources) }))
+        .sort((left, right) => left.url.localeCompare(right.url)),
+      pages: [...pages],
+      failures: [...failures],
+      warnings: [...warnings],
+      frontier: [...frontier],
+      depth,
+      ...(activeLayer
+        ? {
+            active_layer: {
+              depth: activeLayer.depth,
+              urls: [...activeLayer.urls],
+              indexes: [...activeLayer.indexes],
+              completed: [...activeLayer.completed].sort(),
+              discovered: [...activeLayer.discovered].sort(),
+            } satisfies CrawlCheckpointActiveLayer,
+          }
+        : {}),
+      ...(lastError ? { last_error: lastError } : {}),
+    };
+    const write = checkpointChain.then(() => limits.onCheckpoint?.(snapshot));
+    checkpointChain = write.catch(() => undefined);
+    return write;
+  };
 
   const recordSource = (url: string, source: CrawlPageSource): void => {
     let sources = sourcesByUrl.get(url);
@@ -270,115 +373,165 @@ export async function executeCrawl(
     return { url, summary, links, error: null };
   };
 
-  const seedOutcome = await fetchPage(seed.href, 0, nextIndex);
-  nextIndex += 1;
-  if (!seedOutcome.summary) {
-    throw seedOutcome.error;
-  }
-  fetched += 1;
-  contentTruncated += seedOutcome.summary.content_truncated ? 1 : 0;
-  pages.push(seedOutcome.summary);
-
-  const seedLinks = createBoundedLinkCollector(
-    Math.max(0, limits.discoveryLimit - seen.size),
-    seen,
-  );
-  if (sitemapMode !== "only") {
-    for (const link of seedOutcome.links) {
-      recordSource(link, "markdown");
-      seedLinks.add(link);
-    }
-  }
-  if (sitemapMode !== "skip" && limits.maxDepth > 0) {
+  await checkpoint("running");
+  const needsSeed = !resume || !pages.some((page) => page.url === seed.href && page.depth === 0);
+  if (needsSeed) {
     try {
-      const discovery = await limits.sitemapReader?.read(
-        seed,
-        { maxDocuments: 10, maxCandidates: limits.discoveryLimit },
-        crawlSignal,
+      const seedOutcome = await fetchPage(seed.href, 0, nextIndex);
+      nextIndex += 1;
+      if (!seedOutcome.summary) {
+        throw seedOutcome.error;
+      }
+      fetched += 1;
+      contentTruncated += seedOutcome.summary.content_truncated ? 1 : 0;
+      pages.push(seedOutcome.summary);
+
+      const seedLinks = createBoundedLinkCollector(
+        Math.max(0, limits.discoveryLimit - seen.size),
+        seen,
       );
-      if (discovery) {
-        warnings.push(...discovery.warnings);
-        discoveryLimitReached = discoveryLimitReached || discovery.truncated;
-        const candidates = discovery.urls
-          .map((url) => canonicalizeCrawlUrl(url, undefined, limits.ignoreQueryParameters))
-          .filter(
-            (url): url is URL => url !== undefined && sameOrigin(url, seed) && pathFilter(url),
-          );
-        sitemapCandidates = new Set(candidates.map((url) => url.href)).size;
-        for (const url of candidates) {
-          recordSource(url.href, "sitemap");
-          seedLinks.add(url.href);
+      if (sitemapMode !== "only") {
+        for (const link of seedOutcome.links) {
+          recordSource(link, "markdown");
+          seedLinks.add(link);
         }
       }
-    } catch (error) {
-      if (crawlSignal.aborted) {
-        throw error;
+      if (sitemapMode !== "skip" && limits.maxDepth > 0) {
+        try {
+          const discovery = await limits.sitemapReader?.read(
+            seed,
+            { maxDocuments: 10, maxCandidates: limits.discoveryLimit },
+            crawlSignal,
+          );
+          if (discovery) {
+            warnings.push(...discovery.warnings);
+            discoveryLimitReached = discoveryLimitReached || discovery.truncated;
+            const candidates = discovery.urls
+              .map((url) => canonicalizeCrawlUrl(url, undefined, limits.ignoreQueryParameters))
+              .filter(
+                (url): url is URL => url !== undefined && sameOrigin(url, seed) && pathFilter(url),
+              );
+            sitemapCandidates = new Set(candidates.map((url) => url.href)).size;
+            for (const url of candidates) {
+              recordSource(url.href, "sitemap");
+              seedLinks.add(url.href);
+            }
+          }
+        } catch (error) {
+          if (crawlSignal.aborted) {
+            throw error;
+          }
+          warnings.push({
+            code: "sitemap_unavailable",
+            message: `Could not read Sitemap: ${errorMessage(error)}`,
+          });
+        }
       }
-      warnings.push({
-        code: "sitemap_unavailable",
-        message: `Could not read Sitemap: ${errorMessage(error)}`,
-      });
+      seedOutcome.links = [];
+      const seedCollection = seedLinks.finish();
+      discoveryLimitReached = discoveryLimitReached || seedCollection.truncated;
+      frontier = seedCollection.links;
+      await checkpoint("running");
+    } catch (error) {
+      await checkpoint("interrupted", errorMessage(error)).catch(() => undefined);
+      throw error;
     }
   }
-  seedOutcome.links = [];
-  const seedCollection = seedLinks.finish();
-  discoveryLimitReached = discoveryLimitReached || seedCollection.truncated;
-  frontier = seedCollection.links;
+  while (
+    activeLayer !== undefined ||
+    (frontier.length > 0 && depth <= limits.maxDepth && attemptedPages < limits.maxPages)
+  ) {
+    let layerDepth: number;
+    let selected: string[];
+    let selectedIndexes: number[];
+    let layerLinks: BoundedLinkCollector;
 
-  let depth = 1;
-  while (frontier.length > 0 && depth <= limits.maxDepth && attemptedPages < limits.maxPages) {
-    const sorted = [...frontier].sort();
-    const remaining = limits.maxPages - attemptedPages;
-    const selected = sorted.slice(0, remaining);
-    if (selected.length < sorted.length) {
-      limitReached = true;
+    if (activeLayer) {
+      layerDepth = activeLayer.depth;
+      const remaining = activeLayer.urls
+        .map((url, index) => ({ url, index: activeLayer?.indexes[index] ?? 0 }))
+        .filter((request) => !activeLayer?.completed.has(request.url));
+      selected = remaining.map((request) => request.url);
+      selectedIndexes = remaining.map((request) => request.index);
+      depth = layerDepth;
+      layerLinks = createBoundedLinkCollector(Math.max(0, limits.discoveryLimit - seen.size), seen);
+      for (const link of activeLayer.discovered) {
+        layerLinks.add(link);
+      }
+    } else {
+      layerDepth = depth;
+      const sorted = [...frontier].sort();
+      const remaining = limits.maxPages - attemptedPages;
+      selected = sorted.slice(0, remaining);
+      if (selected.length < sorted.length) {
+        limitReached = true;
+      }
+      attemptedPages += selected.length;
+      selectedIndexes = selected.map(() => {
+        const index = nextIndex;
+        nextIndex += 1;
+        return index;
+      });
+      layerLinks = createBoundedLinkCollector(Math.max(0, limits.discoveryLimit - seen.size), seen);
+      activeLayer = {
+        depth: layerDepth,
+        urls: [...selected],
+        indexes: [...selectedIndexes],
+        completed: new Set<string>(),
+        discovered: [],
+      };
+      await checkpoint("running");
     }
-    attemptedPages += selected.length;
-    const selectedIndexes = selected.map(() => {
-      const index = nextIndex;
-      nextIndex += 1;
-      return index;
-    });
-    const layerLinks = createBoundedLinkCollector(
-      Math.max(0, limits.discoveryLimit - seen.size),
-      seen,
-    );
-    const outcomes = await runLayeredTasks<string, PageOutcome>(selected, {
-      concurrency: limits.concurrency,
-      delayMs: limits.delayMs,
-      signal: crawlSignal,
-      immediate: async (url) => prepareCachedFetch(client, { url }),
-      run: async (url, index) => {
-        const outcome = await fetchPage(url, depth, selectedIndexes[index] ?? 0);
-        for (const link of outcome.links) {
-          recordSource(link, "markdown");
-          layerLinks.add(link);
-        }
-        return { ...outcome, links: [] };
-      },
-    });
 
-    for (const [offset, outcome] of outcomes.entries()) {
-      if (outcome.summary) {
-        fetched += 1;
-        contentTruncated += outcome.summary.content_truncated ? 1 : 0;
-        pages.push(outcome.summary);
-      } else {
-        failures.push({
-          url: outcome.url,
-          index: selectedIndexes[offset] ?? 0,
-          depth,
-          sources: pageSourcesInOrder(sourcesByUrl.get(outcome.url) ?? new Set<CrawlPageSource>()),
-          kind: errorKind(outcome.error),
-          message: errorMessage(outcome.error),
+    if (selected.length > 0) {
+      try {
+        await runLayeredTasks<string, PageOutcome>(selected, {
+          concurrency: limits.concurrency,
+          delayMs: limits.delayMs,
+          signal: crawlSignal,
+          immediate: async (url) => prepareCachedFetch(client, { url }),
+          run: async (url, index) => {
+            const outcome = await fetchPage(url, layerDepth, selectedIndexes[index] ?? 0);
+            if (outcome.summary) {
+              fetched += 1;
+              contentTruncated += outcome.summary.content_truncated ? 1 : 0;
+              pages.push(outcome.summary);
+            } else {
+              failures.push({
+                url: outcome.url,
+                index: selectedIndexes[index] ?? 0,
+                depth: layerDepth,
+                sources: pageSourcesInOrder(
+                  sourcesByUrl.get(outcome.url) ?? new Set<CrawlPageSource>(),
+                ),
+                kind: errorKind(outcome.error),
+                message: errorMessage(outcome.error),
+              });
+            }
+            for (const link of outcome.links) {
+              recordSource(link, "markdown");
+              layerLinks.add(link);
+            }
+            activeLayer?.completed.add(url);
+            if (activeLayer) {
+              activeLayer.discovered = layerLinks.values();
+            }
+            await checkpoint("running");
+            return { ...outcome, links: [] };
+          },
         });
+      } catch (error) {
+        await checkpoint("interrupted", errorMessage(error)).catch(() => undefined);
+        throw error;
       }
     }
 
     const collected = layerLinks.finish();
     discoveryLimitReached = discoveryLimitReached || collected.truncated;
     frontier = collected.links;
-    depth += 1;
+    depth = layerDepth + 1;
+    activeLayer = undefined;
+    await checkpoint("running");
   }
 
   if (attemptedPages >= limits.maxPages && frontier.length > 0) {
@@ -390,7 +543,7 @@ export async function executeCrawl(
 
   const cacheStats = cacheStatsFor(client);
   const changes = limits.baseline ? compareCrawlBaseline(pages, seen, limits.baseline) : undefined;
-  return {
+  const result: CrawlRunResult = {
     version: 1,
     seed_url: seed.href,
     started_at: startedAt,
@@ -432,4 +585,6 @@ export async function executeCrawl(
     ...(limits.baseline ? { baseline: { source: limits.baseline.source } } : {}),
     ...(changes ? { changes } : {}),
   };
+  await checkpoint("completed");
+  return result;
 }

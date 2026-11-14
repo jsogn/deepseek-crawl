@@ -264,12 +264,37 @@ describe("parseCli", () => {
       fresh: true,
       output: "out",
     });
+
+    expect(
+      parseCli(["crawl", "https://example.com", "--job-dir", "job", "--output", "out"]),
+    ).toMatchObject({
+      kind: "crawl",
+      jobDir: "job",
+      output: "out",
+    });
   });
 
   it("parses cache clear", () => {
     expect(parseCli(["cache", "clear"])).toEqual({ kind: "cache-clear", json: false });
     expect(parseCli(["cache", "clear", "--json"])).toEqual({
       kind: "cache-clear",
+      json: true,
+    });
+  });
+
+  it("parses Crawl resume and status commands", () => {
+    expect(
+      parseCli(["crawl", "resume", "job", "--output", "out", "--cache-ttl", "60", "--json"]),
+    ).toEqual({
+      kind: "crawl-resume",
+      jobDir: "job",
+      output: "out",
+      cacheTtl: 60,
+      json: true,
+    });
+    expect(parseCli(["crawl", "status", "job", "--json"])).toEqual({
+      kind: "crawl-status",
+      jobDir: "job",
       json: true,
     });
   });
@@ -377,6 +402,9 @@ describe("parseCli", () => {
       ],
       /baseline|plan/i,
     ],
+    [["crawl", "https://example.com", "-o", "out", "--job-dir", "job", "--plan-only"], /job|plan/i],
+    [["crawl", "resume", "job"], /output is required/i],
+    [["crawl", "status"], /job-dir|required/i],
     [["setup"], /skills|subcommand/i],
     [["setup", "unknown"], /unknown|skills/i],
     [["setup", "skills", "--global", "--project"], /global|project/i],

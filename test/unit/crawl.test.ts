@@ -3,6 +3,7 @@ import { executeCrawl, normalizeCrawlOptions } from "../../src/application/crawl
 import { executeCrawlPlan } from "../../src/application/crawl-plan.js";
 import { executeCrawlRetry } from "../../src/application/crawl-retry.js";
 import { contentHash } from "../../src/content/hash.js";
+import type { CrawlCheckpointState } from "../../src/crawl/types.js";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
 
 const options = {
@@ -113,6 +114,93 @@ describe("executeCrawl", () => {
         },
       ),
     ).rejects.toThrow(/baseline/i);
+  });
+
+  it("resumes an interrupted active layer without refetching the seed or Sitemap", async () => {
+    const reader = {
+      read: vi.fn(async () => ({
+        urls: [new URL("https://example.com/a"), new URL("https://example.com/b")],
+        warnings: [],
+        truncated: false,
+      })),
+    };
+    const firstClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async ({ url }: { url: string }) => ({
+        title: url,
+        content: url === "https://example.com/" ? "No Markdown links" : "body",
+      })),
+    };
+    const checkpoints: CrawlCheckpointState[] = [];
+    await expect(
+      executeCrawl(
+        firstClient,
+        { url: "https://example.com/" },
+        {
+          ...options,
+          maxDepth: 1,
+          maxPages: 3,
+          concurrency: 1,
+          sitemapMode: "include",
+          sitemapReader: reader,
+          onCheckpoint: async (checkpoint) => {
+            checkpoints.push(checkpoint);
+          },
+        },
+        async (page) => {
+          if (page.url === "https://example.com/a") {
+            throw new Error("interrupted");
+          }
+        },
+      ),
+    ).rejects.toThrow("interrupted");
+
+    const interrupted = checkpoints.at(-1);
+    expect(interrupted).toMatchObject({
+      status: "interrupted",
+      pages: [{ url: "https://example.com/" }],
+      active_layer: {
+        urls: ["https://example.com/a", "https://example.com/b"],
+        completed: [],
+      },
+    });
+    if (!interrupted) {
+      throw new Error("Expected an interrupted Crawl checkpoint.");
+    }
+    const resumedFetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content: "body",
+    }));
+    const resumedCheckpoints: CrawlCheckpointState[] = [];
+    const resumed = await executeCrawl(
+      { search: vi.fn(), fetch: resumedFetch },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 1,
+        maxPages: 3,
+        concurrency: 1,
+        sitemapMode: "include",
+        sitemapReader: reader,
+        resume: interrupted,
+        onCheckpoint: async (checkpoint) => {
+          resumedCheckpoints.push(checkpoint);
+        },
+      },
+      async () => undefined,
+    );
+
+    expect(resumedFetch.mock.calls.map(([input]) => input.url)).toEqual([
+      "https://example.com/a",
+      "https://example.com/b",
+    ]);
+    expect(reader.read).toHaveBeenCalledOnce();
+    expect(resumed.pages.map((page) => page.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/a",
+      "https://example.com/b",
+    ]);
+    expect(resumedCheckpoints.at(-1)?.status).toBe("completed");
   });
 
   it("clamps resource limits and rejects invalid options before fetching", async () => {

@@ -19,6 +19,7 @@ export type CrawlSitemapMode = "include" | "only" | "skip";
 export type CrawlUrlSource = "markdown" | "sitemap";
 export type CrawlPageSource = "seed_url" | CrawlUrlSource;
 export type CrawlChangeStatus = "added" | "modified" | "unchanged";
+export type CrawlJobStatus = "running" | "interrupted" | "completed";
 
 export interface CrawlSitemapReader {
   read(
@@ -67,12 +68,67 @@ export interface CrawlOptions {
   sitemapReader?: CrawlSitemapReader;
   baseline?: CrawlBaseline;
   changedOnly?: boolean;
+  resume?: CrawlCheckpointState;
+  onCheckpoint?: (state: CrawlCheckpointState) => Promise<void>;
   now?: () => Date;
 }
 
 export interface CrawlBaseline {
   source: string;
   hashes: ReadonlyMap<string, string>;
+}
+
+export interface CrawlCheckpointOptions {
+  maxDepth: number;
+  maxPages: number;
+  concurrency: number;
+  delayMs: number;
+  includePaths: string[];
+  excludePaths: string[];
+  ignoreQueryParameters: boolean;
+  sitemapMode: CrawlSitemapMode;
+}
+
+export interface CrawlCheckpointCounters {
+  nextIndex: number;
+  attemptedPages: number;
+  fetched: number;
+  contentTruncated: number;
+  limitReached: boolean;
+  discoveryLimitReached: boolean;
+  sitemapCandidates: number;
+}
+
+export interface CrawlCheckpointSource {
+  url: string;
+  sources: CrawlPageSource[];
+}
+
+export interface CrawlCheckpointActiveLayer {
+  depth: number;
+  urls: string[];
+  indexes: number[];
+  completed: string[];
+  discovered: string[];
+}
+
+export interface CrawlCheckpointState {
+  version: 1;
+  status: CrawlJobStatus;
+  seed_url: string;
+  started_at: string;
+  updated_at: string;
+  options: CrawlCheckpointOptions;
+  counters: CrawlCheckpointCounters;
+  seen: string[];
+  sources: CrawlCheckpointSource[];
+  pages: CrawlPageSummary[];
+  failures: CrawlFailure[];
+  warnings: MapWarning[];
+  frontier: string[];
+  depth: number;
+  active_layer?: CrawlCheckpointActiveLayer;
+  last_error?: string;
 }
 
 export interface CrawlPage {

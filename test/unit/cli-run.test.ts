@@ -846,6 +846,97 @@ describe("runCli", () => {
     });
   });
 
+  it("resumes an interrupted durable Crawl job and publishes the final output", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-job-cli-"));
+    const jobDir = join(root, "job");
+    const finalOutput = join(root, "final");
+    const controller = new AbortController();
+    const firstClient = {
+      search: vi.fn(),
+      fetch: vi.fn(async ({ url }: { url: string }) => {
+        if (url === "https://example.com/a") {
+          controller.abort(new Error("interrupted"));
+          throw new Error("interrupted");
+        }
+        return {
+          title: url,
+          content: url === "https://example.com/" ? "[A](/a) [B](/b)" : "body",
+        };
+      }),
+    };
+    const firstDependencies = dependencies(vi.fn() as unknown as typeof fetch);
+
+    expect(
+      await runCli(
+        [
+          "crawl",
+          "https://example.com/",
+          "--max-depth",
+          "1",
+          "--max-pages",
+          "3",
+          "--concurrency",
+          "1",
+          "--delay-ms",
+          "0",
+          "--sitemap",
+          "skip",
+          "--job-dir",
+          jobDir,
+          "--output",
+          finalOutput,
+        ],
+        {
+          ...firstDependencies.deps,
+          crawlClient: firstClient,
+          sitemapReader: sitemap(),
+          signal: controller.signal,
+        },
+      ),
+    ).toBe(130);
+    await expect(stat(finalOutput)).rejects.toMatchObject({ code: "ENOENT" });
+
+    const statusDependencies = dependencies(vi.fn() as unknown as typeof fetch, {});
+    expect(await runCli(["crawl", "status", jobDir, "--json"], statusDependencies.deps)).toBe(0);
+    expect(JSON.parse(statusDependencies.stdout.value())).toMatchObject({
+      status: "interrupted",
+      active_layer: {
+        urls: ["https://example.com/a", "https://example.com/b"],
+        completed: [],
+      },
+    });
+
+    const resumedFetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content: "body",
+    }));
+    const resumeDependencies = dependencies(vi.fn() as unknown as typeof fetch);
+    expect(
+      await runCli(["crawl", "resume", jobDir, "--output", finalOutput, "--json"], {
+        ...resumeDependencies.deps,
+        crawlClient: { search: vi.fn(), fetch: resumedFetch },
+        sitemapReader: sitemap(),
+      }),
+    ).toBe(0);
+
+    expect(resumedFetch.mock.calls.map(([input]) => input.url)).toEqual([
+      "https://example.com/a",
+      "https://example.com/b",
+    ]);
+    expect(JSON.parse(await readFile(join(finalOutput, "crawl.json"), "utf8"))).toMatchObject({
+      pages: [
+        { url: "https://example.com/", written: true },
+        { url: "https://example.com/a", written: true },
+        { url: "https://example.com/b", written: true },
+      ],
+    });
+    const completedStatus = dependencies(vi.fn() as unknown as typeof fetch, {});
+    expect(await runCli(["crawl", "status", jobDir, "--json"], completedStatus.deps)).toBe(0);
+    const completed = JSON.parse(completedStatus.stdout.value());
+    expect(completed.status).toBe("completed");
+    expect(completed.active_layer).toBeUndefined();
+  });
+
   it("records a Sitemap warning without failing Crawl", async () => {
     const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-sitemap-warning-"));
     const output = join(root, "crawl");

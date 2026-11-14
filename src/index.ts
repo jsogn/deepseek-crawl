@@ -31,12 +31,19 @@ export { FileFetchCache } from "./cache/file-cache.js";
 export { resolveCacheDirectory } from "./cache/paths.js";
 export type { FetchCache, FetchCacheEntry } from "./cache/types.js";
 export { compareCrawlBaseline, parseCrawlBaseline } from "./crawl/baseline.js";
+export { CrawlJobStore, readCrawlJobState } from "./crawl/job.js";
 export type {
   CrawlBaseline,
   CrawlChangeStatus,
   CrawlChanges,
+  CrawlCheckpointActiveLayer,
+  CrawlCheckpointCounters,
+  CrawlCheckpointOptions,
+  CrawlCheckpointSource,
+  CrawlCheckpointState,
   CrawlContentVersion,
   CrawlFailure,
+  CrawlJobStatus,
   CrawlModifiedContent,
   CrawlOptions,
   CrawlOutputResult,

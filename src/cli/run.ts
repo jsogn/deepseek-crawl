@@ -19,6 +19,7 @@ import { resolveCacheDirectory } from "../cache/paths.js";
 import type { FetchCache } from "../cache/types.js";
 import { loadConfig } from "../config.js";
 import { parseCrawlBaseline } from "../crawl/baseline.js";
+import { CrawlJobStore, readCrawlJobState } from "../crawl/job.js";
 import { readSecret } from "../credentials/input.js";
 import { type CredentialStore, createCredentialStore } from "../credentials/store.js";
 import { DeepSeekClient } from "../deepseek/client.js";
@@ -71,6 +72,9 @@ Usage:
   deepseek-crawl fetch --retry-failed <fetch.json> --output-dir <dir> [options]
   deepseek-crawl map <url> [options]
   deepseek-crawl crawl <url> [options]
+  deepseek-crawl crawl <url> --job-dir <dir> -o <dir> [options]
+  deepseek-crawl crawl resume <job-dir> -o <dir> [options]
+  deepseek-crawl crawl status <job-dir> [--json]
   deepseek-crawl crawl --retry-failed <crawl.json> -o <dir> [options]
   deepseek-crawl cache clear [--json]
   deepseek-crawl doctor [--live] [--json]
@@ -125,6 +129,10 @@ Options:
 
        deepseek-crawl crawl --retry-failed <crawl.json> -o <dir> [--json]
 
+       deepseek-crawl crawl resume <job-dir> -o <dir> [--json]
+
+       deepseek-crawl crawl status <job-dir> [--json]
+
 Options:
   --max-depth <0..5>
   --max-pages <1..100>
@@ -132,6 +140,7 @@ Options:
   --fresh
   --baseline <crawl.json|dir>
   --changed-only
+  --job-dir <dir>
   --concurrency <1..5>
   --delay-ms <0..5000>
   --include-paths <patterns>
@@ -151,6 +160,10 @@ only its failed pages into a new output directory.
 
 With --baseline and --changed-only, Crawl writes only added or modified pages
 while retaining the complete change classification in crawl.json.
+
+With --job-dir, Crawl keeps page files and per-page checkpoints in a durable
+job directory. Resume with "crawl resume <job-dir>" and inspect with
+"crawl status <job-dir>".
 `,
   doctor: `Usage: deepseek-crawl doctor [--live] [--json]
 
@@ -462,6 +475,36 @@ async function runCrawl(command: Extract<ParsedCommand, { kind: "crawl" }>, deps
     changedOnly: command.changedOnly ?? false,
   };
 
+  if (command.jobDir) {
+    await assertPathMissing(command.output);
+    const job = await CrawlJobStore.create(command.jobDir);
+    try {
+      const result = await executeCrawl(
+        client,
+        { url: command.url },
+        {
+          ...crawlOptions,
+          onCheckpoint: async (checkpoint) => {
+            await job.checkpoint(checkpoint);
+          },
+        },
+        async (page) => {
+          await job.writePage(page);
+        },
+        deps.signal,
+      );
+      const output = await job.finalize(command.output, result);
+      deps.stdout.write(
+        command.json
+          ? `${JSON.stringify(output, null, 2)}\n`
+          : `${formatCrawlHuman(output, command.output)}\n`,
+      );
+      return 0;
+    } finally {
+      await job.release().catch(() => undefined);
+    }
+  }
+
   if (command.planOnly) {
     await assertPathMissing(command.output);
     const plan = await executeCrawlPlan(client, { url: command.url }, crawlOptions, deps.signal);
@@ -532,6 +575,90 @@ async function runCrawlRetry(
     await writer.abort().catch(() => undefined);
     throw error;
   }
+}
+
+async function runCrawlResume(
+  command: Extract<ParsedCommand, { kind: "crawl-resume" }>,
+  deps: CliDependencies,
+) {
+  await assertPathMissing(command.output);
+  const config = loadConfig(deps.env, deps.credentialStore);
+  const client = withFetchCache(
+    deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl }),
+    command.cacheTtl,
+    command.fresh,
+    deps,
+  );
+  const reader = deps.sitemapReader ?? (await defaultSitemapReader());
+  const job = await CrawlJobStore.open(command.jobDir);
+  try {
+    const state = job.state;
+    const result = await executeCrawl(
+      client,
+      { url: state.seed_url },
+      {
+        maxDepth: state.options.maxDepth,
+        maxPages: state.options.maxPages,
+        concurrency: state.options.concurrency,
+        delayMs: state.options.delayMs,
+        discoveryLimit: 10_000,
+        pageContentLimit: 1_000_000,
+        includePaths: state.options.includePaths,
+        excludePaths: state.options.excludePaths,
+        ignoreQueryParameters: state.options.ignoreQueryParameters,
+        sitemapMode: state.options.sitemapMode,
+        sitemapReader: reader,
+        resume: state,
+        onCheckpoint: async (checkpoint) => {
+          await job.checkpoint(checkpoint);
+        },
+      },
+      async (page) => {
+        await job.writePage(page);
+      },
+      deps.signal,
+    );
+    const output = await job.finalize(command.output, result);
+    deps.stdout.write(
+      command.json
+        ? `${JSON.stringify(output, null, 2)}\n`
+        : `${formatCrawlHuman(output, command.output)}\n`,
+    );
+    return 0;
+  } finally {
+    await job.release().catch(() => undefined);
+  }
+}
+
+function formatCrawlJobStatus(
+  jobDir: string,
+  state: Awaited<ReturnType<typeof readCrawlJobState>>,
+) {
+  return [
+    `Job: ${jobDir}`,
+    `Status: ${state.status}`,
+    `Seed: ${state.seed_url}`,
+    `Fetched: ${state.counters.fetched}`,
+    `Failed: ${state.failures.length}`,
+    `Frontier: ${state.frontier.length}`,
+    `Depth: ${state.depth}`,
+    `Active layer: ${state.active_layer ? `${state.active_layer.completed.length}/${state.active_layer.urls.length}` : "none"}`,
+    `Updated: ${state.updated_at}`,
+    ...(state.last_error ? [`Last error: ${state.last_error}`] : []),
+  ].join("\n");
+}
+
+async function runCrawlStatus(
+  command: Extract<ParsedCommand, { kind: "crawl-status" }>,
+  deps: CliDependencies,
+) {
+  const state = await readCrawlJobState(command.jobDir);
+  deps.stdout.write(
+    command.json
+      ? `${JSON.stringify(state, null, 2)}\n`
+      : `${formatCrawlJobStatus(command.jobDir, state)}\n`,
+  );
+  return 0;
 }
 
 async function runCacheClear(
@@ -670,6 +797,10 @@ export async function runCli(
         return await runCrawl(command, deps);
       case "crawl-retry":
         return await runCrawlRetry(command, deps);
+      case "crawl-resume":
+        return await runCrawlResume(command, deps);
+      case "crawl-status":
+        return await runCrawlStatus(command, deps);
       case "cache-clear":
         return await runCacheClear(command, deps);
       case "setup-skills":

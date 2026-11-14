@@ -19,6 +19,7 @@ describe("loadGatewayConfig", () => {
       allowRemote: false,
       autoPort: true,
       providerMode: "firecrawl-first",
+      creditsCooldownMs: 60_000,
       upstreamUrl: new URL("https://api.firecrawl.dev/"),
       requestBodyLimit: 8 * 1024 * 1024,
       timeoutMs: 120_000,
@@ -116,6 +117,37 @@ describe("loadGatewayConfig", () => {
         credentialStores: {},
       }),
     ).toThrow(/provider mode/i);
+  });
+
+  it("configures the exhausted-credit cooldown from an option or environment", () => {
+    expect(
+      loadGatewayConfig({
+        creditsCooldownMs: 5_000,
+        env: { DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS: "120" },
+        credentialStores: {},
+      }).creditsCooldownMs,
+    ).toBe(5_000);
+    expect(
+      loadGatewayConfig({
+        env: { DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS: " 120 " },
+        credentialStores: {},
+      }).creditsCooldownMs,
+    ).toBe(120_000);
+    expect(
+      loadGatewayConfig({
+        env: { DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS: "0" },
+        credentialStores: {},
+      }).creditsCooldownMs,
+    ).toBe(0);
+  });
+
+  it.each(["3601", "-1", "1.5"])("rejects invalid cooldown %s", (value) => {
+    expect(() =>
+      loadGatewayConfig({
+        env: { DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS: value },
+        credentialStores: {},
+      }),
+    ).toThrow(/cooldown/i);
   });
 
   it("does not use FIRECRAWL_API_URL as the gateway upstream", () => {

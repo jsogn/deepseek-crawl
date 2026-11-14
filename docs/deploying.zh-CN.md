@@ -20,11 +20,15 @@ DEEPSEEK_API_KEY=sk-...
 FIRECRAWL_API_KEY=fc-...
 FIRECRAWL_UPSTREAM_URL=https://api.firecrawl.dev
 DEEPSEEK_GATEWAY_PROVIDER_MODE=firecrawl-first
+DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS=60
 ```
 
 Provider 模式默认为 `firecrawl-first`。设为 `deepseek-first` 可让常用路由直接
 使用 DeepSeek；设为 `no-fallback` 会让常用路由始终使用 Firecrawl，并原样返回
 额度错误。
+
+额度熔断默认 60 秒，只在 `firecrawl-first` 生效。设为 `0` 表示每次请求都重新
+尝试 Firecrawl。
 
 环境文件权限应为 `0600`。不要把 Token 写入镜像、Compose 文件、命令行或仓库。
 

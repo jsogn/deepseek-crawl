@@ -344,10 +344,14 @@ environment:
 ```bash
 deepseek-crawl gateway --provider-mode deepseek-first
 DEEPSEEK_GATEWAY_PROVIDER_MODE=no-fallback deepseek-crawl gateway
+deepseek-crawl gateway --credits-cooldown 120
+DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS=120 deepseek-crawl gateway
 ```
 
 `deepseek-first` sends common routes directly to DeepSeek. `no-fallback` keeps
 common routes on Firecrawl and passes Firecrawl `402` responses through.
+In `firecrawl-first` mode, a 402 starts a 60-second cooldown by default.
+`--credits-cooldown 0` retries Firecrawl on every request.
 
 Other terminals and scripts can discover the selected endpoint:
 

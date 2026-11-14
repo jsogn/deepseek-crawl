@@ -326,6 +326,8 @@ Options:
   --port <1..65535>   Fixed listener port (default locally: auto from 8787)
   --provider-mode <mode>
                       firecrawl-first (default), deepseek-first, or no-fallback
+  --credits-cooldown <seconds>
+                      Firecrawl 402 cooldown, 0–3600 (default: 60)
   --remote            Enable authenticated remote mode (fixed port 8787)
 
 Subcommands:
@@ -471,6 +473,9 @@ async function runGateway(
     ...(command.host === undefined ? {} : { host: command.host }),
     ...(command.port === undefined ? {} : { port: command.port }),
     ...(command.providerMode === undefined ? {} : { providerMode: command.providerMode }),
+    ...(command.creditsCooldownSeconds === undefined
+      ? {}
+      : { creditsCooldownMs: command.creditsCooldownSeconds * 1000 }),
     env: deps.env,
     ...(deps.credentialStores === undefined ? {} : { credentialStores: deps.credentialStores }),
   });
@@ -492,6 +497,9 @@ async function runGateway(
       : "Firecrawl provider: not configured; common routes use DeepSeek\n",
   );
   deps.stdout.write(`Provider mode: ${config.providerMode}\n`);
+  deps.stdout.write(
+    `Firecrawl credits cooldown: ${(config.creditsCooldownMs ?? 60_000) / 1000} seconds\n`,
+  );
   deps.stdout.write(
     command.remote
       ? `Firecrawl SDK: apiUrl="${server.url.href.replace(/\/$/, "")}", apiKey=GATEWAY_API_KEY\n`

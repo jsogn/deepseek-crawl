@@ -154,6 +154,7 @@ export type ParsedCommand =
       host?: string;
       port?: number;
       providerMode?: GatewayProviderMode;
+      creditsCooldownSeconds?: number;
     }
   | { kind: "gateway-status"; json: boolean }
   | { kind: "gateway-url"; port?: number }
@@ -1038,6 +1039,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             host: { type: "string" },
             port: { type: "string" },
             "provider-mode": { type: "string" },
+            "credits-cooldown": { type: "string" },
             remote: { type: "boolean" },
             "allow-remote": { type: "boolean" },
             help: { type: "boolean", short: "h" },
@@ -1055,12 +1057,17 @@ export function parseCli(argv: string[]): ParsedCommand {
             ? undefined
             : parseInteger(parsed.values.port, "port", 1, 65_535);
         const providerMode = parseProviderMode(parsed.values["provider-mode"]);
+        const creditsCooldownSeconds =
+          parsed.values["credits-cooldown"] === undefined
+            ? undefined
+            : parseInteger(parsed.values["credits-cooldown"], "credits cooldown", 0, 3_600);
         return {
           kind: "gateway",
           remote: parsed.values.remote ?? parsed.values["allow-remote"] ?? false,
           ...(host === undefined ? {} : { host }),
           ...(port === undefined ? {} : { port }),
           ...(providerMode === undefined ? {} : { providerMode }),
+          ...(creditsCooldownSeconds === undefined ? {} : { creditsCooldownSeconds }),
         };
       }
       default:

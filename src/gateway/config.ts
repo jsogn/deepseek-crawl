@@ -10,6 +10,8 @@ const DEFAULT_PORT = 8787;
 const DEFAULT_UPSTREAM_URL = "https://api.firecrawl.dev";
 const DEFAULT_REQUEST_BODY_LIMIT = 8 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_CREDITS_COOLDOWN_MS = 60_000;
+const MAX_CREDITS_COOLDOWN_MS = 3_600_000;
 export type GatewayProviderMode = "firecrawl-first" | "deepseek-first" | "no-fallback";
 const DEFAULT_PROVIDER_MODE: GatewayProviderMode = "firecrawl-first";
 const PROVIDER_MODES = new Set<GatewayProviderMode>([
@@ -24,6 +26,7 @@ export interface GatewayConfig {
   allowRemote: boolean;
   autoPort?: boolean;
   providerMode?: GatewayProviderMode;
+  creditsCooldownMs?: number;
   gatewayApiKey?: string;
   firecrawlApiKey?: string;
   authFailureLimit?: number;
@@ -44,6 +47,7 @@ export interface GatewayConfigInput {
   remote?: boolean;
   allowRemote?: boolean;
   providerMode?: GatewayProviderMode;
+  creditsCooldownMs?: number;
   env?: NodeJS.ProcessEnv;
   credentialStores?: Partial<Record<CredentialName, CredentialStore>>;
 }
@@ -131,6 +135,28 @@ function parseProviderMode(value: string | undefined): GatewayProviderMode {
   return mode as GatewayProviderMode;
 }
 
+function parseCreditsCooldown(value: string | undefined): number {
+  const normalized = value?.trim();
+  if (normalized === undefined || normalized === "") {
+    return DEFAULT_CREDITS_COOLDOWN_MS;
+  }
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error("Gateway credits cooldown must be an integer from 0 to 3600 seconds.");
+  }
+  const seconds = Number(normalized);
+  if (!Number.isSafeInteger(seconds) || seconds > 3_600) {
+    throw new Error("Gateway credits cooldown must be an integer from 0 to 3600 seconds.");
+  }
+  return seconds * 1000;
+}
+
+function validateCreditsCooldown(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 0 || value > MAX_CREDITS_COOLDOWN_MS) {
+    throw new Error("Gateway credits cooldown must be an integer from 0 to 3600 seconds.");
+  }
+  return value;
+}
+
 const CREDENTIAL_ENV: Record<CredentialName, string> = {
   deepseek: "DEEPSEEK_API_KEY",
   firecrawl: "FIRECRAWL_API_KEY",
@@ -157,6 +183,10 @@ export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConf
   const providerMode = parseProviderMode(
     options.providerMode ?? env.DEEPSEEK_GATEWAY_PROVIDER_MODE,
   );
+  const creditsCooldownMs = validateCreditsCooldown(
+    options.creditsCooldownMs ??
+      parseCreditsCooldown(env.DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS),
+  );
   const remote = options.remote ?? options.allowRemote ?? false;
   const host = validateHost(options.host?.trim() || (remote ? "0.0.0.0" : DEFAULT_HOST), remote);
   const gatewayApiKey = resolveCredential(env, "gateway", options.credentialStores);
@@ -171,6 +201,7 @@ export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConf
     allowRemote: remote || !isLoopbackHostname(host),
     autoPort: !remote && options.port === undefined,
     providerMode,
+    creditsCooldownMs,
     ...(gatewayApiKey === undefined ? {} : { gatewayApiKey }),
     ...(firecrawlApiKey === undefined ? {} : { firecrawlApiKey }),
     upstreamUrl: parseUpstreamUrl(env.FIRECRAWL_UPSTREAM_URL),

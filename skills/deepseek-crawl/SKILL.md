@@ -69,6 +69,8 @@ DeepSeek/Firecrawl/gateway-auth readiness.
 
 Provider mode defaults to `firecrawl-first`. Use `deepseek-first` or
 `no-fallback` when the deployment must not switch providers automatically.
+The Firecrawl 402 cooldown defaults to 60 seconds; set it to `0` only when every
+request should retry Firecrawl.
 
 Remote mode uses fixed port `8787`:
 

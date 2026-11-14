@@ -239,8 +239,13 @@ describe("Firecrawl-compatible gateway", () => {
   it("passes Firecrawl 402 through in no-fallback mode", async () => {
     const events: GatewayRequestLog[] = [];
     let deepSeekCalls = 0;
+    let firecrawlCalls = 0;
     const server = await startGatewayServer({
-      config: { ...testConfig(), providerMode: "no-fallback" },
+      config: {
+        ...testConfig(),
+        providerMode: "no-fallback",
+        creditsCooldownMs: 60_000,
+      },
       env: { FIRECRAWL_API_KEY: "fc-test" },
       deepseekClient: {
         async search() {
@@ -252,31 +257,31 @@ describe("Firecrawl-compatible gateway", () => {
           throw new Error("Unexpected Fetch call.");
         },
       },
-      fetchImpl: async () =>
-        Response.json({ success: false, error: "Payment required." }, { status: 402 }),
+      fetchImpl: async () => {
+        firecrawlCalls += 1;
+        return Response.json({ success: false, error: "Payment required." }, { status: 402 });
+      },
       logger: (event) => events.push(event),
     });
     servers.push(server);
 
-    const response = await fetch(new URL("/v2/scrape", server.url), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
-    });
-
-    expect(response.status).toBe(402);
-    expect(await response.json()).toEqual({
-      success: false,
-      error: "Payment required.",
-    });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(new URL("/v2/scrape", server.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+      });
+      expect(response.status).toBe(402);
+      expect(await response.json()).toEqual({
+        success: false,
+        error: "Payment required.",
+      });
+    }
     expect(deepSeekCalls).toBe(0);
-    expect(events).toMatchObject([
-      {
-        provider: "firecrawl",
-        fallback: false,
-        status: 402,
-      },
-    ]);
+    expect(firecrawlCalls).toBe(2);
+    expect(events).toHaveLength(2);
+    expect(events.every((event) => event.provider === "firecrawl")).toBe(true);
+    expect(events.every((event) => !event.fallback)).toBe(true);
   });
 
   it("requires a Firecrawl credential in no-fallback mode", async () => {
@@ -604,6 +609,81 @@ describe("Firecrawl-compatible gateway", () => {
     }
 
     expect(firecrawlCalls).toBe(1);
+    expect(deepSeekCalls).toBe(2);
+  });
+
+  it("retries Firecrawl on every request when the cooldown is disabled", async () => {
+    let firecrawlCalls = 0;
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: { ...testConfig(), creditsCooldownMs: 0 },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          return { title: "Example", content: "# Example" };
+        },
+      },
+      fetchImpl: async () => {
+        firecrawlCalls += 1;
+        return Response.json({ success: false, error: "Payment required." }, { status: 402 });
+      },
+    });
+    servers.push(server);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(new URL("/v2/scrape", server.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+      });
+      expect(response.status).toBe(200);
+    }
+
+    expect(firecrawlCalls).toBe(2);
+    expect(deepSeekCalls).toBe(2);
+  });
+
+  it("retries Firecrawl after a configured cooldown expires", async () => {
+    let firecrawlCalls = 0;
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: { ...testConfig(), creditsCooldownMs: 10 },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          return { title: "Example", content: "# Example" };
+        },
+      },
+      fetchImpl: async () => {
+        firecrawlCalls += 1;
+        return Response.json({ success: false, error: "Payment required." }, { status: 402 });
+      },
+    });
+    servers.push(server);
+
+    const first = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+    });
+    expect(first.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const second = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+    });
+    expect(second.status).toBe(200);
+
+    expect(firecrawlCalls).toBe(2);
     expect(deepSeekCalls).toBe(2);
   });
 

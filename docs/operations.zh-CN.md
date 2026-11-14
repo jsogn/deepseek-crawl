@@ -65,6 +65,11 @@ store，只显示掩码提示。
 - `deepseek-first`：常用路由直接使用 DeepSeek。
 - `no-fallback`：常用路由始终使用 Firecrawl，`402` 原样返回。
 
+`gateway --credits-cooldown` 或
+`DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` 控制 `firecrawl-first` 的额度熔断时间，
+范围为 0–3600 秒，默认 60 秒。设为 0 时每次请求都会重新尝试 Firecrawl；其他
+Provider 模式忽略该配置。
+
 远程模式要求已配置 `gateway` Token；客户端把它作为 Firecrawl SDK `apiKey`。
 网关认证后剥离这个 Authorization，并使用自己的 Firecrawl Provider 凭据调上游。
 不要把网关 Token 配置成 Firecrawl upstream Key。上游响应采用流式传输；网关关闭
@@ -180,18 +185,19 @@ CLI Map 和 Crawl 直接请求目标站点的 Sitemap，仅接受公网 HTTP(S) 
 
 ## 环境变量
 
-| 变量                             | 默认值                      | 用途                      |
-| -------------------------------- | --------------------------- | ------------------------- |
-| `DEEPSEEK_API_KEY`               | 可选覆盖                    | DeepSeek API 凭据         |
-| `DEEPSEEK_BASE_URL`              | `https://api.deepseek.com`  | 测试或网关                |
-| `DEEPSEEK_TIMEOUT_MS`            | `60000`                     | 请求超时，1000–120000     |
-| `DEEPSEEK_MAX_RETRIES`           | `2`                         | 重试 408、429 和瞬时 5xx  |
-| `DEEPSEEK_CACHE_DIR`             | 平台缓存目录                | Fetch 缓存目录            |
-| `DEEPSEEK_GATEWAY_RUNTIME_DIR`   | 平台 runtime/cache          | Gateway 实例状态目录      |
-| `FIRECRAWL_API_KEY`              | 无                          | Firecrawl upstream 凭据   |
-| `FIRECRAWL_UPSTREAM_URL`         | `https://api.firecrawl.dev` | Gateway 的 Firecrawl 上游 |
-| `DEEPSEEK_GATEWAY_PROVIDER_MODE` | `firecrawl-first`           | Provider 选择策略         |
-| `GATEWAY_API_KEY`                | 无                          | 远程网关 Bearer Token     |
+| 变量                                        | 默认值                      | 用途                      |
+| ------------------------------------------- | --------------------------- | ------------------------- |
+| `DEEPSEEK_API_KEY`                          | 可选覆盖                    | DeepSeek API 凭据         |
+| `DEEPSEEK_BASE_URL`                         | `https://api.deepseek.com`  | 测试或网关                |
+| `DEEPSEEK_TIMEOUT_MS`                       | `60000`                     | 请求超时，1000–120000     |
+| `DEEPSEEK_MAX_RETRIES`                      | `2`                         | 重试 408、429 和瞬时 5xx  |
+| `DEEPSEEK_CACHE_DIR`                        | 平台缓存目录                | Fetch 缓存目录            |
+| `DEEPSEEK_GATEWAY_RUNTIME_DIR`              | 平台 runtime/cache          | Gateway 实例状态目录      |
+| `FIRECRAWL_API_KEY`                         | 无                          | Firecrawl upstream 凭据   |
+| `FIRECRAWL_UPSTREAM_URL`                    | `https://api.firecrawl.dev` | Gateway 的 Firecrawl 上游 |
+| `DEEPSEEK_GATEWAY_PROVIDER_MODE`            | `firecrawl-first`           | Provider 选择策略         |
+| `DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` | `60`                        | Firecrawl 402 熔断秒数    |
+| `GATEWAY_API_KEY`                           | 无                          | 远程网关 Bearer Token     |
 
 环境变量优先于本地 credential store。非 loopback 的 DeepSeek base URL 必须使用
 HTTPS。API Key 不接受 CLI 参数或 MCP 参数。

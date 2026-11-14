@@ -306,6 +306,7 @@ export function createGatewayHandler(
   let sitemapReader = dependencies.sitemapReader;
   const crawlJobs = dependencies.crawlJobs ?? new CrawlJobManager();
   let firecrawlExhaustedUntil = 0;
+  const creditsCooldownMs = dependencies.config.creditsCooldownMs ?? 60_000;
   const now = dependencies.now ?? Date.now;
   const authLimiter = new AuthFailureLimiter({
     now,
@@ -514,7 +515,7 @@ export function createGatewayHandler(
           dependencies,
         );
         if (upstream.status === 402 && route !== undefined && providerMode === "firecrawl-first") {
-          firecrawlExhaustedUntil = now() + 60_000;
+          firecrawlExhaustedUntil = now() + creditsCooldownMs;
           provider = "deepseek";
           fallback = true;
           fallbackReason = "firecrawl_credits_exhausted";

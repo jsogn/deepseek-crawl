@@ -407,6 +407,11 @@ describe("parseCli", () => {
       remote: false,
       providerMode: "deepseek-first",
     });
+    expect(parseCli(["gateway", "--credits-cooldown", "120"])).toEqual({
+      kind: "gateway",
+      remote: false,
+      creditsCooldownSeconds: 120,
+    });
     expect(parseCli(["gateway", "status", "--json"])).toEqual({
       kind: "gateway-status",
       json: true,
@@ -639,6 +644,8 @@ describe("parseCli", () => {
     [["gateway", "extra"], /argument/i],
     [["gateway", "--host", "   "], /host/i],
     [["gateway", "--provider-mode", "sometimes"], /provider mode/i],
+    [["gateway", "--credits-cooldown", "-1"], /cooldown/i],
+    [["gateway", "--credits-cooldown", "3601"], /cooldown/i],
     [["gateway", "url", "--port", "0"], /port/i],
     [["gateway", "status", "--port", "8787"], /unknown option/i],
     [["gateway", "url", "extra"], /argument/i],

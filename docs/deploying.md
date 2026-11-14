@@ -21,11 +21,15 @@ Optional:
 FIRECRAWL_API_KEY=fc-...
 FIRECRAWL_UPSTREAM_URL=https://api.firecrawl.dev
 DEEPSEEK_GATEWAY_PROVIDER_MODE=firecrawl-first
+DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS=60
 ```
 
 Provider mode defaults to `firecrawl-first`. Set `deepseek-first` to avoid
 Firecrawl for common routes, or `no-fallback` to keep every common route on
 Firecrawl and pass quota errors through.
+
+The credits cooldown defaults to 60 seconds and only applies in
+`firecrawl-first` mode. Set it to `0` to retry Firecrawl on every request.
 
 Keep the environment file private (`0600`). Never put these values in an image,
 Compose file, shell command, or repository.

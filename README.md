@@ -322,10 +322,14 @@ Provider 策略默认为 `firecrawl-first`。可通过 CLI 或环境变量选择
 ```bash
 deepseek-crawl gateway --provider-mode deepseek-first
 DEEPSEEK_GATEWAY_PROVIDER_MODE=no-fallback deepseek-crawl gateway
+deepseek-crawl gateway --credits-cooldown 120
+DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS=120 deepseek-crawl gateway
 ```
 
 `deepseek-first` 让常用路由直接使用 DeepSeek；`no-fallback` 让常用路由始终使用
 Firecrawl，Firecrawl `402` 会原样返回而不会切换 Provider。
+`firecrawl-first` 收到 402 后默认冷却 60 秒；`--credits-cooldown 0` 表示每次都
+重新尝试 Firecrawl。
 
 其他终端或脚本可以发现当前实际地址：
 

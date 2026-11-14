@@ -102,7 +102,9 @@ describe("package documentation", () => {
       "FIRECRAWL_API_URL",
       "FIRECRAWL_UPSTREAM_URL",
       "DEEPSEEK_GATEWAY_PROVIDER_MODE",
+      "DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS",
       "--provider-mode",
+      "--credits-cooldown",
       "GATEWAY_API_KEY",
       "Firecrawl-compatible",
       "gateway url",
@@ -190,6 +192,7 @@ describe("deployment assets", () => {
       "DEEPSEEK_API_KEY",
       "FIRECRAWL_API_KEY",
       "DEEPSEEK_GATEWAY_PROVIDER_MODE",
+      "DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS",
     ]) {
       expect(environmentExample).toContain(`${key}=`);
     }

@@ -141,6 +141,7 @@ Defaults:
 - Remote mode: fixed `8787` unless `--port` is supplied
 - Upstream: `FIRECRAWL_UPSTREAM_URL` or `https://api.firecrawl.dev`
 - Provider mode: `firecrawl-first`, `deepseek-first`, or `no-fallback`
+- Firecrawl 402 cooldown: 60 seconds by default, configurable from 0–3600
 
 Use `auth set firecrawl` to make Firecrawl-first local mode available; otherwise
 common routes use DeepSeek. Remote mode requires `auth set gateway`, or the

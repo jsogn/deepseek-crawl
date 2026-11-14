@@ -64,6 +64,11 @@ policy:
 - `deepseek-first`: use DeepSeek directly for common routes.
 - `no-fallback`: keep common routes on Firecrawl and pass `402` through.
 
+`gateway --credits-cooldown` or
+`DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` controls the `firecrawl-first`
+exhausted-credit cooldown from 0–3600 seconds. The default is 60 seconds; zero
+retries Firecrawl on every request. Other provider modes ignore this value.
+
 Remote mode requires a stored `gateway` token. Clients supply it as the Firecrawl
 SDK `apiKey`; the gateway strips it and uses its own Firecrawl provider
 credential upstream. Never configure the gateway token as the Firecrawl upstream
@@ -196,18 +201,19 @@ CLI Map and Crawl request Sitemaps directly and accept only public HTTP(S) targe
 
 ## Environment
 
-| Variable                         | Default                     | Purpose                           |
-| -------------------------------- | --------------------------- | --------------------------------- |
-| `DEEPSEEK_API_KEY`               | optional override           | DeepSeek API credential           |
-| `DEEPSEEK_BASE_URL`              | `https://api.deepseek.com`  | Test or gateway endpoint          |
-| `DEEPSEEK_TIMEOUT_MS`            | `60000`                     | Request timeout, 1000–120000      |
-| `DEEPSEEK_MAX_RETRIES`           | `2`                         | Retry 408, 429, and transient 5xx |
-| `DEEPSEEK_CACHE_DIR`             | platform cache directory    | Fetch cache directory             |
-| `DEEPSEEK_GATEWAY_RUNTIME_DIR`   | platform runtime/cache      | Gateway instance state dir        |
-| `FIRECRAWL_API_KEY`              | none                        | Firecrawl upstream credential     |
-| `FIRECRAWL_UPSTREAM_URL`         | `https://api.firecrawl.dev` | Gateway Firecrawl upstream        |
-| `DEEPSEEK_GATEWAY_PROVIDER_MODE` | `firecrawl-first`           | Provider selection policy         |
-| `GATEWAY_API_KEY`                | none                        | Remote gateway Bearer token       |
+| Variable                                    | Default                     | Purpose                           |
+| ------------------------------------------- | --------------------------- | --------------------------------- |
+| `DEEPSEEK_API_KEY`                          | optional override           | DeepSeek API credential           |
+| `DEEPSEEK_BASE_URL`                         | `https://api.deepseek.com`  | Test or gateway endpoint          |
+| `DEEPSEEK_TIMEOUT_MS`                       | `60000`                     | Request timeout, 1000–120000      |
+| `DEEPSEEK_MAX_RETRIES`                      | `2`                         | Retry 408, 429, and transient 5xx |
+| `DEEPSEEK_CACHE_DIR`                        | platform cache directory    | Fetch cache directory             |
+| `DEEPSEEK_GATEWAY_RUNTIME_DIR`              | platform runtime/cache      | Gateway instance state dir        |
+| `FIRECRAWL_API_KEY`                         | none                        | Firecrawl upstream credential     |
+| `FIRECRAWL_UPSTREAM_URL`                    | `https://api.firecrawl.dev` | Gateway Firecrawl upstream        |
+| `DEEPSEEK_GATEWAY_PROVIDER_MODE`            | `firecrawl-first`           | Provider selection policy         |
+| `DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` | `60`                        | Firecrawl 402 cooldown seconds    |
+| `GATEWAY_API_KEY`                           | none                        | Remote gateway Bearer token       |
 
 Environment variables override the local credential store. Non-loopback DeepSeek
 base URLs must use HTTPS. API keys are never accepted as CLI flags or MCP

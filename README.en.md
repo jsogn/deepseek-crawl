@@ -28,6 +28,18 @@ Current release: `0.14.0` · [npm](https://www.npmjs.com/package/deepseek-crawl)
 | You want DeepSeek-native Search, Fetch, Map, or bounded Crawl | [DeepSeek CLI](#path-b-use-the-deepseek-cli-directly)                    |
 | You only need to read known URLs                              | DeepSeek CLI plus `fetch`                                                |
 
+## Let an AI install it
+
+Copy this sentence into an AI that can run terminal commands:
+
+```text
+Read https://github.com/jsogn/deepseek-crawl and install and configure deepseek-crawl on this computer by following it: if the Firecrawl CLI is already installed, configure it as a transparent `firecrawl-first` gateway; otherwise configure the DeepSeek CLI; inspect Node.js, the Firecrawl CLI, and existing configuration before modifying anything, preserve unrelated files and the original Firecrawl API URL, ask me for any required DeepSeek or Firecrawl key only through a secure method and never echo it, then run `doctor` plus the relevant `gateway status` or CLI verification and report the actual results, and do not publish the npm package, create tags, or create releases.
+```
+
+This prompt permits local software installation and changes to the current
+user's Firecrawl CLI configuration. Use `gateway status`, `gateway stop`, and
+`gateway uninstall` to inspect or clean it up later.
+
 ## Path A: Keep Firecrawl with a transparent gateway
 
 Choose this path when you already use the Firecrawl CLI or an AI Skill invokes

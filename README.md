@@ -25,6 +25,17 @@ CLI、Agent Skill 和 MCP 作为 DeepSeek 原生网页工具使用。
 | 想直接用 DeepSeek 做 Search、Fetch、Map 或受限 Crawl | [DeepSeek CLI](#路线-b直接使用-deepseek-cli)  |
 | 只需要已知 URL 的页面读取                            | DeepSeek CLI + `fetch`                        |
 
+## 让 AI 自己安装
+
+把下面这句话复制给能够执行终端命令的 AI：
+
+```text
+请阅读 https://github.com/jsogn/deepseek-crawl 的 README，并按其中步骤在这台电脑上安装和配置 deepseek-crawl：如果本机已有 Firecrawl CLI，就配置为透明的 firecrawl-first 网关，否则配置为 DeepSeek CLI；修改前先检查 Node.js、Firecrawl CLI 和现有配置，保留无关文件及原 Firecrawl API URL，只在必要时通过安全方式向我索取 DeepSeek 或 Firecrawl 密钥且不得回显，完成后运行 doctor 以及对应的 gateway status 或 CLI 验证并如实报告结果，不要发布 npm 包、创建 tag 或 Release。
+```
+
+这段提示允许 AI 安装软件并修改当前用户的 Firecrawl CLI 配置；之后可用
+`gateway status`、`gateway stop` 和 `gateway uninstall` 检查或清理。
+
 ## 路线 A：保留 Firecrawl，使用透明网关
 
 适合已经使用 Firecrawl CLI，或者 AI Skill 内部直接执行 `firecrawl` 的工作流。

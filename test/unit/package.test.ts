@@ -57,6 +57,21 @@ describe("package executable", () => {
 });
 
 describe("package documentation", () => {
+  it("offers one-prompt AI installation in both languages", async () => {
+    const [readme, readmeEnglish] = await Promise.all([
+      readFile(new URL("../../README.md", import.meta.url), "utf8"),
+      readFile(new URL("../../README.en.md", import.meta.url), "utf8"),
+    ]);
+
+    expect(readme).toContain("## 让 AI 自己安装");
+    expect(readme).toContain("请阅读 https://github.com/jsogn/deepseek-crawl");
+    expect(readme).toContain("不要发布 npm 包");
+
+    expect(readmeEnglish).toContain("## Let an AI install it");
+    expect(readmeEnglish).toContain("Read https://github.com/jsogn/deepseek-crawl");
+    expect(readmeEnglish).toContain("do not publish the npm package");
+  });
+
   it("documents every public CLI and MCP capability", async () => {
     const [
       readme,

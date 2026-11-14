@@ -61,7 +61,8 @@
     "smoke:docker": "bash scripts/smoke-docker-gateway.sh",
     "check:release": "node scripts/check-release.mjs",
     "prepublishOnly": "npm run verify && npm run check:release",
-    "test:live": "npm run build && node scripts/live-smoke.mjs"
+    "test:live": "npm run build && node scripts/live-smoke.mjs",
+    "test:live:gateway": "npm run build && node scripts/live-gateway-smoke.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

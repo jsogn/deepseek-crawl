@@ -470,4 +470,13 @@ npm run verify
 DEEPSEEK_API_KEY=sk-... npm run test:live
 ```
 
+显式验证官方 Firecrawl SDK 经 Gateway 的 Firecrawl 透传和 DeepSeek fallback：
+
+```bash
+npm run test:live:gateway -- --billable
+```
+
+该命令固定执行两次 `example.com` 单页 Scrape；缺少 `--billable` 时会拒绝运行。
+凭据从环境变量或本机 Secure Store 读取，不会输出 Key。
+
 项目使用 MIT License。

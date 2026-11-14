@@ -88,6 +88,10 @@ gateway returns `502 upstream_unavailable` without switching providers. This
 keeps temporary Firecrawl outages from silently changing the provider or result
 shape.
 
+Maintainers can run `npm run test:live:gateway -- --billable` from a source
+checkout to verify Firecrawl passthrough and DeepSeek fallback with two
+single-page Scrapes. The command refuses to run without that explicit flag.
+
 DeepSeek Crawl jobs live only in the current gateway process and expire after 24
 hours. Restarting the gateway does not restore them. One gateway process can
 serve multiple local Firecrawl clients.

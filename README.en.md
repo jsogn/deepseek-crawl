@@ -505,4 +505,15 @@ Normal tests do not call DeepSeek. Explicit live testing is billable:
 DEEPSEEK_API_KEY=sk-... npm run test:live
 ```
 
+Explicitly verify Firecrawl passthrough and DeepSeek fallback through the
+official Firecrawl SDK and Gateway:
+
+```bash
+npm run test:live:gateway -- --billable
+```
+
+This command performs exactly two single-page `example.com` Scrapes. It refuses
+to run without `--billable`. Credentials come from environment variables or the
+local secure store and are never printed.
+
 The project is licensed under MIT.

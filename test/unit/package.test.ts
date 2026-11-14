@@ -46,6 +46,9 @@ describe("package executable", () => {
     expect(packageJson.private).not.toBe(true);
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.scripts?.["smoke:docker"]).toBe("bash scripts/smoke-docker-gateway.sh");
+    expect(packageJson.scripts?.["test:live:gateway"]).toBe(
+      "npm run build && node scripts/live-gateway-smoke.mjs",
+    );
   });
 });
 
@@ -81,6 +84,7 @@ describe("package documentation", () => {
       "deepseek-crawl auth remove",
       "deepseek-crawl balance",
       "deepseek-crawl gateway",
+      "test:live:gateway",
       "auth set firecrawl",
       "auth import firecrawl",
       "--remote",

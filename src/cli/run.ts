@@ -1,6 +1,6 @@
-import { stat } from "node:fs/promises";
+import { lstat, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { executeBatchFetch, executeBatchFetchRetry } from "../application/batch.js";
@@ -19,7 +19,17 @@ import { resolveCacheDirectory } from "../cache/paths.js";
 import type { FetchCache } from "../cache/types.js";
 import { loadConfig } from "../config.js";
 import { parseCrawlBaseline } from "../crawl/baseline.js";
+import { canonicalizeCrawlUrl } from "../crawl/filters.js";
 import { CrawlJobStore, readCrawlJobState } from "../crawl/job.js";
+import { CrawlMonitorStore, readCrawlMonitorState } from "../crawl/monitor.js";
+import type {
+  CrawlChanges,
+  CrawlCheckpointOptions,
+  CrawlContentVersion,
+  CrawlMonitorInfo,
+  CrawlMonitorState,
+  CrawlRunResult,
+} from "../crawl/types.js";
 import { readSecret } from "../credentials/input.js";
 import { type CredentialStore, createCredentialStore } from "../credentials/store.js";
 import { DeepSeekClient } from "../deepseek/client.js";
@@ -61,6 +71,7 @@ export interface CliDependencies {
   secretReader?: () => Promise<string>;
   fetchCache?: FetchCache;
   cacheClock?: () => Date;
+  monitorClock?: () => Date;
   stdin: NodeJS.ReadableStream;
 }
 
@@ -75,6 +86,9 @@ Usage:
   deepseek-crawl crawl <url> --job-dir <dir> -o <dir> [options]
   deepseek-crawl crawl resume <job-dir> -o <dir> [options]
   deepseek-crawl crawl status <job-dir> [--json]
+  deepseek-crawl crawl monitor <url> --monitor-dir <dir> -o <runs-dir> [options]
+  deepseek-crawl crawl monitor status <monitor-dir> [--json]
+  deepseek-crawl crawl monitor reset <monitor-dir> [--json]
   deepseek-crawl crawl --retry-failed <crawl.json> -o <dir> [options]
   deepseek-crawl cache clear [--json]
   deepseek-crawl doctor [--live] [--json]
@@ -133,6 +147,12 @@ Options:
 
        deepseek-crawl crawl status <job-dir> [--json]
 
+       deepseek-crawl crawl monitor <url> --monitor-dir <dir> -o <runs-dir> [options]
+
+       deepseek-crawl crawl monitor status <monitor-dir> [--json]
+
+       deepseek-crawl crawl monitor reset <monitor-dir> [--json]
+
 Options:
   --max-depth <0..5>
   --max-pages <1..100>
@@ -164,6 +184,16 @@ while retaining the complete change classification in crawl.json.
 With --job-dir, Crawl keeps page files and per-page checkpoints in a durable
 job directory. Resume with "crawl resume <job-dir>" and inspect with
 "crawl status <job-dir>".
+
+Monitor runs one incremental Crawl and exits. Schedule the command with cron,
+CI, or Agent Automation. The first run seeds the baseline. Later runs write a
+new timestamped report under --output and atomically rotate state.
+
+Monitor options:
+  --monitor-dir <dir> (required)
+  --fail-on-change (exit 3 when changes are detected)
+  --only-modified (trigger and write only modified pages)
+  --ignore-removed (do not trigger on removed pages)
 `,
   doctor: `Usage: deepseek-crawl doctor [--live] [--json]
 
@@ -213,6 +243,7 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     ...(dependencies.secretReader === undefined ? {} : { secretReader: dependencies.secretReader }),
     ...(dependencies.fetchCache === undefined ? {} : { fetchCache: dependencies.fetchCache }),
     ...(dependencies.cacheClock === undefined ? {} : { cacheClock: dependencies.cacheClock }),
+    ...(dependencies.monitorClock === undefined ? {} : { monitorClock: dependencies.monitorClock }),
     stdin: dependencies.stdin ?? process.stdin,
   };
 }
@@ -661,6 +692,287 @@ async function runCrawlStatus(
   return 0;
 }
 
+function monitorOptions(
+  command: Extract<ParsedCommand, { kind: "crawl-monitor" }>,
+): CrawlCheckpointOptions {
+  return {
+    maxDepth: command.maxDepth,
+    maxPages: command.maxPages,
+    concurrency: command.concurrency,
+    delayMs: command.delayMs,
+    includePaths: [...(command.includePaths ?? [])],
+    excludePaths: [...(command.excludePaths ?? [])],
+    ignoreQueryParameters: command.ignoreQueryParameters ?? false,
+    sitemapMode: command.sitemapMode,
+  };
+}
+
+function emptyChanges(): CrawlChanges {
+  return { added: [], modified: [], unchanged: [], removed: [] };
+}
+
+function monitorHasChanges(
+  changes: CrawlChanges,
+  onlyModified: boolean,
+  ignoreRemoved: boolean,
+): boolean {
+  if (onlyModified) {
+    return changes.modified.length > 0;
+  }
+  return (
+    changes.added.length > 0 ||
+    changes.modified.length > 0 ||
+    (!ignoreRemoved && changes.removed.length > 0)
+  );
+}
+
+function rotatedMonitorBaseline(
+  previous: readonly CrawlContentVersion[],
+  result: CrawlRunResult,
+  changes: CrawlChanges,
+): CrawlContentVersion[] {
+  const baseline = new Map(previous.map((page) => [page.url, page.content_hash]));
+  for (const page of changes.removed) {
+    baseline.delete(page.url);
+  }
+  for (const page of result.pages) {
+    baseline.set(page.url, page.content_hash);
+  }
+  return [...baseline.entries()]
+    .map(([url, content_hash]) => ({ url, content_hash }))
+    .sort((left, right) => left.url.localeCompare(right.url));
+}
+
+function monitorRunId(date: Date): string {
+  return date.toISOString().replace(/[-:.]/g, "");
+}
+
+async function allocateMonitorRun(
+  runsDirectory: string,
+  date: Date,
+): Promise<{ runId: string; directory: string }> {
+  const root = resolve(runsDirectory);
+  const base = monitorRunId(date);
+  for (let sequence = 1; sequence <= 10_000; sequence += 1) {
+    const runId = sequence === 1 ? base : `${base}-${sequence}`;
+    const directory = join(root, runId);
+    try {
+      await lstat(directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return { runId, directory };
+      }
+      throw error;
+    }
+  }
+  throw new Error(`Could not allocate a unique Crawl monitor run ID under ${root}.`);
+}
+
+function formatCrawlMonitorStatus(stateDirectory: string, state: CrawlMonitorState): string {
+  const changes = state.last_changes;
+  return [
+    `Monitor: ${stateDirectory}`,
+    `Seed: ${state.seed_url}`,
+    `Baseline pages: ${state.baseline.length}`,
+    `Last run: ${state.last_run_at} (${state.last_run_id})`,
+    `Changes: +${changes.added.length} ~${changes.modified.length} =${changes.unchanged.length} -${changes.removed.length}`,
+    `Has changes: ${state.last_has_changes ? "yes" : "no"}`,
+    `Output: ${state.last_output}`,
+  ].join("\n");
+}
+
+async function completeWriterOperation<T>(
+  operation: () => Promise<T>,
+  release: () => Promise<void>,
+): Promise<T> {
+  let result!: T;
+  let operationError: unknown;
+  let operationFailed = false;
+  try {
+    result = await operation();
+  } catch (error) {
+    operationFailed = true;
+    operationError = error;
+  }
+
+  try {
+    await release();
+  } catch (error) {
+    if (!operationFailed) {
+      throw error;
+    }
+  }
+
+  if (operationFailed) {
+    throw operationError;
+  }
+  return result;
+}
+
+async function runCrawlMonitor(
+  command: Extract<ParsedCommand, { kind: "crawl-monitor" }>,
+  deps: CliDependencies,
+) {
+  const clock = deps.monitorClock ?? (() => new Date());
+  const runStartedAt = clock();
+  const monitor = await CrawlMonitorStore.open(command.monitorDir);
+  return completeWriterOperation(
+    async () => {
+      const previousState = monitor.state;
+      const options = previousState?.options ?? monitorOptions(command);
+      const requestedSeed = canonicalizeCrawlUrl(
+        command.url,
+        undefined,
+        options.ignoreQueryParameters,
+      );
+      if (!requestedSeed) {
+        throw new Error("Crawl URL must be an HTTP(S) URL with a host and no credentials.");
+      }
+      if (previousState && requestedSeed.href !== previousState.seed_url) {
+        throw new Error(
+          `Crawl monitor seed does not match ${previousState.seed_url}; reset the monitor before changing its seed.`,
+        );
+      }
+
+      const config = loadConfig(deps.env, deps.credentialStore);
+      const client = withFetchCache(
+        deps.crawlClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl }),
+        command.cacheTtl,
+        command.fresh,
+        deps,
+      );
+      const reader = deps.sitemapReader ?? (await defaultSitemapReader());
+      const run = await allocateMonitorRun(command.output, runStartedAt);
+      const writer = await createCrawlOutputWriter(run.directory, { allowMissingPages: true });
+      let result: CrawlRunResult;
+      let changes: CrawlChanges;
+      let hasChanges: boolean;
+      let info: CrawlMonitorInfo;
+
+      try {
+        const baseline = previousState
+          ? {
+              source: join(monitor.directory, "state.json"),
+              hashes: new Map(previousState.baseline.map((page) => [page.url, page.content_hash])),
+            }
+          : undefined;
+        result = await executeCrawl(
+          client,
+          { url: command.url },
+          {
+            ...options,
+            discoveryLimit: 10_000,
+            pageContentLimit: 1_000_000,
+            sitemapReader: reader,
+            ...(baseline ? { baseline, changedOnly: true } : {}),
+            now: clock,
+          },
+          async (page) => {
+            if (
+              !previousState ||
+              page.change_status === "modified" ||
+              (!command.onlyModified && page.change_status === "added")
+            ) {
+              await writer.writePage(page);
+            }
+          },
+          deps.signal,
+        );
+        changes = result.changes ?? emptyChanges();
+        hasChanges = previousState
+          ? monitorHasChanges(changes, command.onlyModified, command.ignoreRemoved)
+          : false;
+        info = {
+          first_run: !previousState,
+          run_id: run.runId,
+          state_dir: monitor.directory,
+          has_changes: hasChanges,
+          triggered: command.failOnChange && hasChanges,
+          fail_on_change: command.failOnChange,
+          only_modified: command.onlyModified,
+          ignore_removed: command.ignoreRemoved,
+        };
+        result.monitor = info;
+        const output = await writer.finish(result);
+
+        const nextState: CrawlMonitorState = {
+          version: 1,
+          seed_url: result.seed_url,
+          options,
+          baseline: rotatedMonitorBaseline(previousState?.baseline ?? [], result, changes),
+          last_run_at: runStartedAt.toISOString(),
+          last_run_id: run.runId,
+          last_output: run.directory,
+          last_changes: changes,
+          last_has_changes: hasChanges,
+        };
+        await monitor.checkpoint(nextState);
+        deps.stdout.write(
+          command.json
+            ? `${JSON.stringify(output, null, 2)}\n`
+            : `${formatCrawlHuman(output, run.directory)}\n`,
+        );
+      } catch (error) {
+        await writer.abort().catch(() => undefined);
+        throw error;
+      }
+
+      return command.failOnChange && hasChanges ? 3 : 0;
+    },
+    () => monitor.release(),
+  );
+}
+
+async function runCrawlMonitorStatus(
+  command: Extract<ParsedCommand, { kind: "crawl-monitor-status" }>,
+  deps: CliDependencies,
+) {
+  const state = await readCrawlMonitorState(command.monitorDir);
+  if (!state) {
+    throw new Error(`Crawl monitor is not initialized: ${resolve(command.monitorDir)}`);
+  }
+  const stateDirectory = resolve(command.monitorDir);
+  deps.stdout.write(
+    command.json
+      ? `${JSON.stringify({ state_dir: stateDirectory, ...state }, null, 2)}\n`
+      : `${formatCrawlMonitorStatus(stateDirectory, state)}\n`,
+  );
+  return 0;
+}
+
+async function runCrawlMonitorReset(
+  command: Extract<ParsedCommand, { kind: "crawl-monitor-reset" }>,
+  deps: CliDependencies,
+) {
+  const stateDirectory = resolve(command.monitorDir);
+  let exists = true;
+  try {
+    await lstat(stateDirectory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      exists = false;
+    } else {
+      throw error;
+    }
+  }
+  let removed = false;
+  if (exists) {
+    const monitor = await CrawlMonitorStore.open(stateDirectory);
+    removed = await completeWriterOperation(
+      () => monitor.reset(),
+      () => monitor.release(),
+    );
+  }
+  deps.stdout.write(
+    command.json
+      ? `${JSON.stringify({ state_dir: stateDirectory, removed }, null, 2)}\n`
+      : removed
+        ? `Reset Crawl monitor: ${stateDirectory}\n`
+        : `Crawl monitor has no baseline to reset: ${stateDirectory}\n`,
+  );
+  return 0;
+}
+
 async function runCacheClear(
   command: Extract<ParsedCommand, { kind: "cache-clear" }>,
   deps: CliDependencies,
@@ -801,6 +1113,12 @@ export async function runCli(
         return await runCrawlResume(command, deps);
       case "crawl-status":
         return await runCrawlStatus(command, deps);
+      case "crawl-monitor":
+        return await runCrawlMonitor(command, deps);
+      case "crawl-monitor-status":
+        return await runCrawlMonitorStatus(command, deps);
+      case "crawl-monitor-reset":
+        return await runCrawlMonitorReset(command, deps);
       case "cache-clear":
         return await runCacheClear(command, deps);
       case "setup-skills":

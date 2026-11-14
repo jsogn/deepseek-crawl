@@ -78,6 +78,8 @@ describe("runCli", () => {
     expect(stdout.value()).toContain("--sitemap <include|only|skip> (default: include)");
     expect(stdout.value()).toContain("--plan-only");
     expect(stdout.value()).toContain("--retry-failed");
+    expect(stdout.value()).toContain("crawl monitor");
+    expect(stdout.value()).toContain("--fail-on-change");
   });
 
   it("clears the configured Fetch cache without an API key", async () => {

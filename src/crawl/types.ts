@@ -267,6 +267,7 @@ export interface CrawlRunResult {
     source: string;
   };
   changes?: CrawlChanges;
+  monitor?: CrawlMonitorInfo;
 }
 
 export interface CrawlContentVersion {
@@ -283,6 +284,29 @@ export interface CrawlChanges {
   modified: CrawlModifiedContent[];
   unchanged: CrawlContentVersion[];
   removed: CrawlContentVersion[];
+}
+
+export interface CrawlMonitorState {
+  version: 1;
+  seed_url: string;
+  options: CrawlCheckpointOptions;
+  baseline: CrawlContentVersion[];
+  last_run_at: string;
+  last_run_id: string;
+  last_output: string;
+  last_changes: CrawlChanges;
+  last_has_changes: boolean;
+}
+
+export interface CrawlMonitorInfo {
+  first_run: boolean;
+  run_id: string;
+  state_dir: string;
+  has_changes: boolean;
+  triggered: boolean;
+  fail_on_change: boolean;
+  only_modified: boolean;
+  ignore_removed: boolean;
 }
 
 export interface CrawlOutputResult extends Omit<CrawlRunResult, "pages"> {

@@ -1,10 +1,10 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
-import { assertPathMissing, createExistingPathError } from "../output/files.js";
+import { assertPathMissing } from "../output/files.js";
 import { pageRelativePath, renderPageMarkdown } from "../output/page.js";
 import { createStagedDirectoryOutput } from "../output/publication.js";
+import { acquireWriterLock, releaseWriterLock, writeJsonAtomic } from "./persistence.js";
 import type {
   CrawlCheckpointState,
   CrawlOutputResult,
@@ -102,55 +102,6 @@ const stateSchema = z.object({
   last_error: z.string().optional(),
 });
 
-function lockPath(directory: string): string {
-  return join(directory, "writer.lock");
-}
-
-function processIsAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code !== "ESRCH";
-  }
-}
-
-async function atomicJson(path: string, value: unknown): Promise<void> {
-  const temporary = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`);
-  try {
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-      flag: "wx",
-    });
-    await rename(temporary, path);
-  } finally {
-    await rm(temporary, { force: true }).catch(() => undefined);
-  }
-}
-
-async function acquireWriterLock(directory: string): Promise<void> {
-  const path = lockPath(directory);
-  const payload = JSON.stringify({ pid: process.pid, created_at: new Date().toISOString() });
-  try {
-    await writeFile(path, payload, { encoding: "utf8", mode: 0o600, flag: "wx" });
-    return;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-      throw error;
-    }
-  }
-  const existing = JSON.parse(await readFile(path, "utf8")) as { pid?: unknown };
-  if (!Number.isSafeInteger(existing.pid) || (existing.pid as number) < 1) {
-    throw createExistingPathError(path);
-  }
-  if (processIsAlive(existing.pid as number)) {
-    throw createExistingPathError(path);
-  }
-  await rm(path, { force: true });
-  await writeFile(path, payload, { encoding: "utf8", mode: 0o600, flag: "wx" });
-}
-
 export async function readCrawlJobState(directory: string): Promise<CrawlCheckpointState> {
   const parsed = stateSchema.safeParse(
     JSON.parse(await readFile(join(resolve(directory), "job.json"), "utf8")) as unknown,
@@ -194,7 +145,7 @@ export class CrawlJobStore {
 
   async checkpoint(state: CrawlCheckpointState): Promise<void> {
     this.#assertActive();
-    await atomicJson(join(this.directory, "job.json"), state);
+    await writeJsonAtomic(join(this.directory, "job.json"), state);
     this.#state = state;
   }
 
@@ -252,7 +203,7 @@ export class CrawlJobStore {
       return;
     }
     this.#released = true;
-    await rm(lockPath(this.directory), { force: true });
+    await releaseWriterLock(this.directory);
   }
 
   #assertActive(): void {

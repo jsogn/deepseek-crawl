@@ -90,6 +90,28 @@ export type ParsedCommand =
       json: boolean;
     }
   | { kind: "crawl-status"; jobDir: string; json: boolean }
+  | {
+      kind: "crawl-monitor";
+      url: string;
+      monitorDir: string;
+      maxDepth: number;
+      maxPages: number;
+      concurrency: number;
+      delayMs: number;
+      includePaths?: string[];
+      excludePaths?: string[];
+      ignoreQueryParameters?: boolean;
+      sitemapMode: CrawlSitemapMode;
+      cacheTtl?: number;
+      fresh?: boolean;
+      failOnChange: boolean;
+      onlyModified: boolean;
+      ignoreRemoved: boolean;
+      output: string;
+      json: boolean;
+    }
+  | { kind: "crawl-monitor-status"; monitorDir: string; json: boolean }
+  | { kind: "crawl-monitor-reset"; monitorDir: string; json: boolean }
   | { kind: "cache-clear"; json: boolean }
   | { kind: "doctor"; live: boolean; json: boolean }
   | {
@@ -371,6 +393,102 @@ export function parseCli(argv: string[]): ParsedCommand {
         return result;
       }
       case "crawl": {
+        if (args[0] === "monitor") {
+          const subcommand = args[1];
+          if (subcommand === "status" || subcommand === "reset") {
+            const parsed = parseArgs({
+              args: args.slice(2),
+              allowPositionals: true,
+              strict: true,
+              options: {
+                json: { type: "boolean" },
+                help: { type: "boolean", short: "h" },
+              },
+            });
+            if (parsed.values.help) {
+              return { kind: "help", command: "crawl" };
+            }
+            return {
+              kind: subcommand === "status" ? "crawl-monitor-status" : "crawl-monitor-reset",
+              monitorDir: exactPositional(parsed.positionals, "monitor-dir"),
+              json: parsed.values.json ?? false,
+            };
+          }
+
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: true,
+            strict: true,
+            options: {
+              "monitor-dir": { type: "string" },
+              "max-depth": { type: "string" },
+              "max-pages": { type: "string" },
+              concurrency: { type: "string" },
+              "delay-ms": { type: "string" },
+              "include-paths": { type: "string" },
+              "exclude-paths": { type: "string" },
+              "ignore-query-parameters": { type: "boolean" },
+              sitemap: { type: "string" },
+              "cache-ttl": { type: "string" },
+              fresh: { type: "boolean" },
+              "fail-on-change": { type: "boolean" },
+              "only-modified": { type: "boolean" },
+              "ignore-removed": { type: "boolean" },
+              output: { type: "string", short: "o" },
+              json: { type: "boolean" },
+              help: { type: "boolean", short: "h" },
+            },
+          });
+          if (parsed.values.help) {
+            return { kind: "help", command: "crawl" };
+          }
+          const monitorDir = parsed.values["monitor-dir"]?.trim();
+          if (!monitorDir) {
+            throw new CliUsageError("monitor-dir is required.");
+          }
+          const output = parsed.values.output?.trim();
+          if (!output) {
+            throw new CliUsageError("output is required.");
+          }
+          return {
+            kind: "crawl-monitor",
+            url: exactPositional(parsed.positionals, "url"),
+            monitorDir,
+            maxDepth:
+              parsed.values["max-depth"] === undefined
+                ? 2
+                : parseInteger(parsed.values["max-depth"], "max-depth", 0, 5),
+            maxPages:
+              parsed.values["max-pages"] === undefined
+                ? 20
+                : parseInteger(parsed.values["max-pages"], "max-pages", 1, 100),
+            concurrency:
+              parsed.values.concurrency === undefined
+                ? 2
+                : parseInteger(parsed.values.concurrency, "concurrency", 1, 5),
+            delayMs:
+              parsed.values["delay-ms"] === undefined
+                ? 250
+                : parseInteger(parsed.values["delay-ms"], "delay-ms", 0, 5000),
+            ...(parsed.values["include-paths"] === undefined
+              ? {}
+              : { includePaths: parsePatterns(parsed.values["include-paths"], "include-paths") }),
+            ...(parsed.values["exclude-paths"] === undefined
+              ? {}
+              : { excludePaths: parsePatterns(parsed.values["exclude-paths"], "exclude-paths") }),
+            ...(parsed.values["ignore-query-parameters"] ? { ignoreQueryParameters: true } : {}),
+            sitemapMode:
+              parsed.values.sitemap === undefined
+                ? "include"
+                : parseSitemapMode(parsed.values.sitemap),
+            ...parseCacheOptions(parsed.values["cache-ttl"], parsed.values.fresh),
+            failOnChange: parsed.values["fail-on-change"] ?? false,
+            onlyModified: parsed.values["only-modified"] ?? false,
+            ignoreRemoved: parsed.values["ignore-removed"] ?? false,
+            output,
+            json: parsed.values.json ?? false,
+          };
+        }
         if (args[0] === "resume") {
           const parsed = parseArgs({
             args: args.slice(1),

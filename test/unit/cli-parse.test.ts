@@ -299,6 +299,49 @@ describe("parseCli", () => {
     });
   });
 
+  it("parses Crawl monitor commands", () => {
+    expect(
+      parseCli([
+        "crawl",
+        "monitor",
+        "https://example.com/",
+        "--monitor-dir",
+        "monitor",
+        "--output",
+        "runs",
+        "--max-depth",
+        "1",
+        "--fail-on-change",
+        "--only-modified",
+        "--ignore-removed",
+        "--cache-ttl",
+        "60",
+        "--json",
+      ]),
+    ).toMatchObject({
+      kind: "crawl-monitor",
+      url: "https://example.com/",
+      monitorDir: "monitor",
+      output: "runs",
+      maxDepth: 1,
+      failOnChange: true,
+      onlyModified: true,
+      ignoreRemoved: true,
+      cacheTtl: 60,
+      json: true,
+    });
+    expect(parseCli(["crawl", "monitor", "status", "monitor", "--json"])).toEqual({
+      kind: "crawl-monitor-status",
+      monitorDir: "monitor",
+      json: true,
+    });
+    expect(parseCli(["crawl", "monitor", "reset", "monitor", "--json"])).toEqual({
+      kind: "crawl-monitor-reset",
+      monitorDir: "monitor",
+      json: true,
+    });
+  });
+
   it("parses doctor and help", () => {
     expect(parseCli(["doctor", "--live", "--json"])).toEqual({
       kind: "doctor",
@@ -405,6 +448,9 @@ describe("parseCli", () => {
     [["crawl", "https://example.com", "-o", "out", "--job-dir", "job", "--plan-only"], /job|plan/i],
     [["crawl", "resume", "job"], /output is required/i],
     [["crawl", "status"], /job-dir|required/i],
+    [["crawl", "monitor", "https://example.com/", "--output", "runs"], /monitor-dir/i],
+    [["crawl", "monitor", "https://example.com/", "--monitor-dir", "state"], /output is required/i],
+    [["crawl", "monitor", "status"], /monitor-dir|required/i],
     [["setup"], /skills|subcommand/i],
     [["setup", "unknown"], /unknown|skills/i],
     [["setup", "skills", "--global", "--project"], /global|project/i],

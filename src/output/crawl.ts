@@ -38,7 +38,7 @@ export async function createCrawlOutputWriter(
         const pages = result.pages.map((summary) => {
           const path = pagePaths.get(summary.index);
           if (!path) {
-            if (options.allowMissingPages && summary.change_status === "unchanged") {
+            if (options.allowMissingPages) {
               return { ...summary, written: false };
             }
             throw new Error(`Crawl page ${summary.index} was not written.`);
@@ -105,6 +105,13 @@ export function formatCrawlHuman(result: CrawlRunResult, outputDirectory: string
   }
   if (result.baseline) {
     lines.push(`Baseline: ${result.baseline.source}`);
+  }
+  if (result.monitor) {
+    lines.push(
+      `Monitor run: ${result.monitor.run_id}`,
+      `Monitor first run: ${result.monitor.first_run ? "yes" : "no"}`,
+      `Monitor changes: ${result.monitor.has_changes ? "yes" : "no"}`,
+    );
   }
   if (
     result.stats.added !== undefined ||

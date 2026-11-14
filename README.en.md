@@ -29,40 +29,113 @@ Agent use should prefer the CLI plus the bundled Skill.
 - **Keep state local**: there is no remote storage or telemetry; cache and
   resumable state stay on the machine.
 
-## Quick start
+## Install and first run
 
-Requirements: Node.js 22.12 or newer and a
-[DeepSeek API key](https://platform.deepseek.com/api_keys).
+### Requirements
+
+- Node.js 22.12 or newer.
+- A [DeepSeek API key](https://platform.deepseek.com/api_keys).
+- Direct target-site Sitemap access for Map and Crawl.
+
+### Choose an installation method
+
+| Usage              | Best for                                  | Command                                      |
+| ------------------ | ----------------------------------------- | -------------------------------------------- |
+| `npx`              | Temporary use or CI                       | `npx -y deepseek-crawl@latest`               |
+| Global install     | Repeated everyday CLI use                 | `npm install -g deepseek-crawl`              |
+| Project dependency | Pinning a version or embedding in Node.js | `npm install deepseek-crawl`                 |
+| GitHub `main`      | Testing unreleased code                   | `npm install -g github:jsogn/deepseek-crawl` |
+
+Global installation is recommended for regular use:
 
 ```bash
 npm install -g deepseek-crawl
-deepseek-crawl setup skills
+deepseek-crawl --version
+```
+
+The version command should print the current release, for example:
+
+```text
+0.10.0
+```
+
+If global npm lacks write permission, do not use `sudo npm install -g`. Use your
+Node.js version manager or configure a user-owned npm global prefix instead.
+
+You can run the same CLI without a global install:
+
+```bash
+npx -y deepseek-crawl@latest --version
+npx -y deepseek-crawl@latest auth set
+npx -y deepseek-crawl@latest doctor
+```
+
+After installing it as a project dependency, invoke it through `npx`:
+
+```bash
+npm install deepseek-crawl
+npx deepseek-crawl --version
+```
+
+GitHub installation follows `main` and is intended only for testing unreleased
+changes:
+
+```bash
+npm install -g github:jsogn/deepseek-crawl
+deepseek-crawl --version
+```
+
+Upgrade a global installation to the latest npm release:
+
+```bash
+npm install -g deepseek-crawl@latest
+```
+
+### Configure the API key
+
+The examples below assume a global install. For `npx`, prefix the command with
+`npx -y deepseek-crawl@latest`.
+
+```bash
 deepseek-crawl auth set
-deepseek-crawl doctor
-deepseek-crawl fetch "https://api-docs.deepseek.com/" \
-  -o .deepseek-crawl/deepseek-api-home.md
+deepseek-crawl auth status --json
 ```
 
 `auth set` reads the API key from a hidden prompt. `DEEPSEEK_API_KEY` is also
 supported. macOS Keychain stores the credential; other platforms use a private
 file with mode `0600`.
 
+`auth status` reports only the source and storage backend, never the key. Remove
+the local credential with:
+
 ```bash
-deepseek-crawl auth status --json
 deepseek-crawl auth remove
 ```
 
-`doctor` makes no billable call. `doctor --live` performs one billable Search.
-
-Install from GitHub or work locally:
+### Verify the CLI and credential
 
 ```bash
-npm install -g github:jsogn/deepseek-crawl
-
-npm install
-npm run build
-npm link
+deepseek-crawl doctor
 ```
+
+`doctor` checks configuration and makes no billable call. `doctor --live`
+performs one billable Search.
+
+### Make the first request
+
+After installation and authentication, verify end-to-end page reading with a
+known URL:
+
+```bash
+deepseek-crawl fetch "https://api-docs.deepseek.com/" \
+  -o .deepseek-crawl/deepseek-api-home.md
+```
+
+This command makes one DeepSeek Fetch request. For a fully non-billable install
+check, stop after `--version`, `auth status`, and `doctor`.
+
+Installing the Agent Skill is optional and is not required for basic CLI use.
+See [Agent integration](#agent-integration).
 
 ## Choose the right operation
 
@@ -233,7 +306,12 @@ Full limits, MCP differences, environment variables, and privacy details:
 ## Development
 
 ```bash
-npm install
+git clone https://github.com/jsogn/deepseek-crawl.git
+cd deepseek-crawl
+npm ci
+npm run build
+npm link
+node dist/bin.js --version
 npm run verify
 ```
 

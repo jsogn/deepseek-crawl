@@ -23,39 +23,108 @@ Firecrawl API 或 SDK 兼容层。MCP 为可选接口；日常 Agent 使用优�
 - **有失败记录**：部分失败保留成功页面、错误、来源、hash 和稳定路径。
 - **本地优先**：没有远程存储、无遥测；缓存和续跑状态保存在本机。
 
-## 60 秒上手
+## 安装与首次运行
 
-需要 Node.js 22.12 或更高版本，以及
-[DeepSeek API Key](https://platform.deepseek.com/api_keys)。
+### 环境要求
+
+- Node.js 22.12 或更高版本。
+- [DeepSeek API Key](https://platform.deepseek.com/api_keys)。
+- Map 和 Crawl 需要能直接访问目标站点的 Sitemap。
+
+### 选择安装方式
+
+| 使用方式      | 适合场景                      | 命令                                         |
+| ------------- | ----------------------------- | -------------------------------------------- |
+| `npx`         | 临时体验或 CI                 | `npx -y deepseek-crawl@latest`               |
+| 全局安装      | 日常重复使用 CLI              | `npm install -g deepseek-crawl`              |
+| 项目依赖      | 固定版本或集成到 Node.js 项目 | `npm install deepseek-crawl`                 |
+| GitHub `main` | 测试尚未发布的最新代码        | `npm install -g github:jsogn/deepseek-crawl` |
+
+日常使用推荐全局安装：
 
 ```bash
 npm install -g deepseek-crawl
-deepseek-crawl setup skills
+deepseek-crawl --version
+```
+
+版本命令应输出当前发布版本，例如：
+
+```text
+0.10.0
+```
+
+如果全局 npm 没有写权限，不要直接使用 `sudo npm install -g`。应使用自带的
+Node.js 版本管理器，或配置当前用户的 npm global prefix 后再安装。
+
+不全局安装也可以临时运行同一个 CLI：
+
+```bash
+npx -y deepseek-crawl@latest --version
+npx -y deepseek-crawl@latest auth set
+npx -y deepseek-crawl@latest doctor
+```
+
+作为项目依赖安装后，通过 `npx deepseek-crawl` 调用：
+
+```bash
+npm install deepseek-crawl
+npx deepseek-crawl --version
+```
+
+GitHub 安装会跟随 `main`，只建议用于测试未发布改动：
+
+```bash
+npm install -g github:jsogn/deepseek-crawl
+deepseek-crawl --version
+```
+
+全局安装升级到最新发布版：
+
+```bash
+npm install -g deepseek-crawl@latest
+```
+
+### 配置 API Key
+
+以下命令以全局安装为例；使用 `npx` 时在前面加上
+`npx -y deepseek-crawl@latest`。
+
+```bash
 deepseek-crawl auth set
+deepseek-crawl auth status --json
+```
+
+`auth set` 通过隐藏终端读取 Key。也可以使用 `DEEPSEEK_API_KEY` 环境变量。
+macOS Keychain 保存凭据；其他平台使用权限为 `0600` 的私有文件。
+
+`auth status` 只显示来源和存储后端，不输出 Key。删除本机凭据：
+
+```bash
+deepseek-crawl auth remove
+```
+
+### 验证 CLI 与凭据
+
+```bash
 deepseek-crawl doctor
+```
+
+`doctor` 检查配置且不调用计费接口；`doctor --live` 会执行一次计费 Search。
+
+### 第一次请求
+
+安装和认证成功后，用一个已知 URL 验证端到端读取：
+
+```bash
 deepseek-crawl fetch "https://api-docs.deepseek.com/" \
   -o .deepseek-crawl/deepseek-api-home.md
 ```
 
-`auth set` 通过隐藏终端输入 API Key。也可以使用 `DEEPSEEK_API_KEY` 环境变量。
-macOS Keychain 保存凭据；其他平台使用权限为 `0600` 的私有文件。
+这条命令会产生一次 DeepSeek Fetch 请求。需要完全无计费的安装检查时，到此为止，
+只使用 `--version`、`auth status` 和 `doctor`。
 
-```bash
-deepseek-crawl auth status --json
-deepseek-crawl auth remove
-```
-
-`doctor` 不调用计费接口；`doctor --live` 会执行一次计费 Search。
-
-从 GitHub 安装或进行本地开发：
-
-```bash
-npm install -g github:jsogn/deepseek-crawl
-
-npm install
-npm run build
-npm link
-```
+Agent Skill 安装不是基础 CLI 使用的必需步骤，详见下方的
+[Agent 集成](#agent-集成)。
 
 ## 选择正确的命令
 
@@ -214,7 +283,12 @@ CLI 的客户端，提供 `deepseek_search`、`deepseek_fetch`、`deepseek_map` 
 ## 开发
 
 ```bash
-npm install
+git clone https://github.com/jsogn/deepseek-crawl.git
+cd deepseek-crawl
+npm ci
+npm run build
+npm link
+node dist/bin.js --version
 npm run verify
 ```
 

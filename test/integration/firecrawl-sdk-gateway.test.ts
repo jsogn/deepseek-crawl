@@ -396,4 +396,44 @@ describe("Firecrawl SDK against the gateway", () => {
       code: "unsupported_fallback_feature",
     });
   });
+
+  it("uses the official SDK apiKey as a gateway token without forwarding it upstream", async () => {
+    const upstream = await startMockUpstream(() => ({
+      body: {
+        success: true,
+        data: {
+          markdown: "# Example",
+          metadata: {
+            title: "Example",
+            sourceURL: "https://example.com/",
+            url: "https://example.com/",
+            statusCode: 200,
+          },
+        },
+      },
+    }));
+    const gateway = await startGatewayServer({
+      config: {
+        ...testConfig(upstream.url),
+        gatewayApiKey: "gateway-token",
+      },
+      env: {
+        GATEWAY_API_KEY: "gateway-token",
+        FIRECRAWL_API_KEY: "fc-upstream",
+      },
+      fetchImpl: fetch,
+    });
+    servers.push(gateway);
+    const client = new Firecrawl({
+      apiKey: "gateway-token",
+      apiUrl: gateway.url.href.replace(/\/$/, ""),
+    });
+
+    const scraped = await client.scrape("https://example.com/", {
+      formats: ["markdown"],
+    });
+
+    expect(scraped.markdown).toBe("# Example");
+    expect(upstream.requests[0]?.authorization).toBe("Bearer fc-upstream");
+  });
 });

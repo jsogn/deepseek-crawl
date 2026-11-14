@@ -61,6 +61,10 @@ Firecrawl upstream and falls back to DeepSeek for common Search, Scrape, Map, an
 Crawl operations after Firecrawl reports exhausted credits. It never starts
 automatically and is separate from ordinary CLI and MCP requests.
 
+Non-loopback listeners require `GATEWAY_API_KEY`; clients pass it as the
+Firecrawl SDK `apiKey`. The gateway strips that token before forwarding to the
+Firecrawl upstream.
+
 Do not claim full Advanced Firecrawl compatibility. The gateway does not replace
 the normal CLI operation selection in this Skill.
 

@@ -52,6 +52,12 @@ deepseek-crawl gateway --host 0.0.0.0 --allow-remote
 网关进程只使用 `FIRECRAWL_UPSTREAM_URL` 指定 Firecrawl 上游，避免把客户端指向
 网关自身后又把网关请求代理回自己。
 
+默认 loopback 模式可用于本机 BYOK。非 loopback 监听必须设置
+`GATEWAY_API_KEY`；客户端把该值作为 Firecrawl SDK `apiKey`。网关认证后剥离这个
+Authorization，并使用自己的 `FIRECRAWL_API_KEY` 调 Firecrawl。不要把网关 Token
+配置成 Firecrawl upstream Key。上游响应采用流式传输；网关关闭时会取消仍在运行
+的本地 Crawl jobs。
+
 DeepSeek fallback 覆盖 `POST /v2/search`、`POST /v2/scrape`、`POST /v2/map`、
 `POST /v2/crawl`，以及本地 `dsc_` Crawl job 的 status、errors 和取消。
 
@@ -139,6 +145,7 @@ CLI Map 和 Crawl 直接请求目标站点的 Sitemap，仅接受公网 HTTP(S) 
 | `DEEPSEEK_CACHE_DIR`     | 平台缓存目录                | Fetch 缓存目录            |
 | `FIRECRAWL_API_KEY`      | 无                          | Firecrawl upstream 凭据   |
 | `FIRECRAWL_UPSTREAM_URL` | `https://api.firecrawl.dev` | Gateway 的 Firecrawl 上游 |
+| `GATEWAY_API_KEY`        | 无                          | 远程网关 Bearer Token     |
 
 非 loopback 的 DeepSeek base URL 必须使用 HTTPS。API Key 不接受 CLI 参数或 MCP
 参数。

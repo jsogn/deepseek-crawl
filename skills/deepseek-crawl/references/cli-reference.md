@@ -129,6 +129,12 @@ Defaults:
 - Port: `8787`
 - Upstream: `FIRECRAWL_UPSTREAM_URL` or `https://api.firecrawl.dev`
 
+A non-loopback host requires `GATEWAY_API_KEY`. Set the Firecrawl SDK `apiKey` to
+this gateway token. When authentication is enabled, the gateway removes the
+incoming Authorization value before requesting Firecrawl and uses its own
+`FIRECRAWL_API_KEY`. Loopback mode without `GATEWAY_API_KEY` preserves local BYOK
+passthrough.
+
 The gateway supports these common routes:
 
 ```text
@@ -162,6 +168,8 @@ The gateway process does not read `FIRECRAWL_API_URL`. Set
 `FIRECRAWL_UPSTREAM_URL` only when the Firecrawl upstream is not
 `https://api.firecrawl.dev`. Use `--allow-remote` only when intentionally
 exposing the gateway beyond loopback.
+Upstream responses are streamed. SIGINT/close cancels active process-local
+DeepSeek Crawl jobs.
 
 ## Escalation
 

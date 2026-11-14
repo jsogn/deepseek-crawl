@@ -347,6 +347,16 @@ behavior. DeepSeek Crawl jobs remain in the current gateway process and expire
 after 24 hours. The default listener is `127.0.0.1`; a public listener requires
 the explicit `--allow-remote` flag.
 
+A non-loopback listener also requires `GATEWAY_API_KEY`. Set the Firecrawl SDK
+`apiKey` to that gateway token. After authentication, the gateway strips it and
+uses its own `FIRECRAWL_API_KEY` for Firecrawl, so the gateway token is never
+forwarded upstream. In local loopback mode without `GATEWAY_API_KEY`, the client
+`apiKey` can still pass through as the Firecrawl upstream key.
+
+Firecrawl upstream responses stream through the gateway instead of being fully
+buffered, including large Crawl responses. Normal gateway shutdown cancels
+active process-local DeepSeek Crawl jobs.
+
 Offline compatibility tests use the official `firecrawl` Node SDK to cover
 Search, Scrape, Map, Crawl, fallback, and structured errors without calling paid
 APIs.

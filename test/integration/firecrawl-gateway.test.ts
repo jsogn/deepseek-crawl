@@ -1,11 +1,28 @@
+import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DeepSeekGateway } from "../../src/deepseek/gateway.js";
+import { CrawlJobManager } from "../../src/gateway/crawl-jobs.js";
 import { type GatewayServer, startGatewayServer } from "../../src/gateway/server.js";
 
-const servers: GatewayServer[] = [];
+const servers: Array<GatewayServer | Server> = [];
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => server.close()));
+  await Promise.all(
+    servers.splice(0).map((server) => {
+      if ("url" in server) {
+        return server.close();
+      }
+      return new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      });
+    }),
+  );
 });
 
 function testConfig() {
@@ -405,5 +422,174 @@ describe("Firecrawl-compatible gateway", () => {
     expect(response.status).toBe(413);
     expect(await response.json()).toMatchObject({ code: "request_too_large" });
     expect(upstreamCalls).toBe(0);
+  });
+
+  it("requires the gateway token and keeps it out of Firecrawl upstream auth", async () => {
+    let upstreamAuthorization: string | null = null;
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        gatewayApiKey: "gateway-token",
+      },
+      env: {
+        FIRECRAWL_API_KEY: "fc-upstream",
+        GATEWAY_API_KEY: "gateway-token",
+      },
+      fetchImpl: async (_input, init) => {
+        upstreamAuthorization = new Headers(init?.headers).get("authorization");
+        return Response.json({ success: true, data: { markdown: "# Example" } });
+      },
+    });
+    servers.push(server);
+
+    const unauthorized = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/" }),
+    });
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers.get("www-authenticate")).toBe(
+      'Bearer realm="deepseek-crawl-gateway"',
+    );
+    expect(await unauthorized.json()).toMatchObject({ code: "unauthorized" });
+    expect(upstreamAuthorization).toBeNull();
+
+    const wrongToken = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer wrong-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url: "https://example.com/" }),
+    });
+    expect(wrongToken.status).toBe(401);
+    expect(upstreamAuthorization).toBeNull();
+
+    const authorized = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer gateway-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url: "https://example.com/" }),
+    });
+    expect(authorized.status).toBe(200);
+    expect(upstreamAuthorization).toBe("Bearer fc-upstream");
+  });
+
+  it("streams upstream response bytes before the upstream response completes", async () => {
+    let releaseUpstream: () => void = () => undefined;
+    const upstreamCanFinish = new Promise<void>((resolve) => {
+      releaseUpstream = resolve;
+    });
+    const upstream = createServer(async (request, response) => {
+      for await (const _chunk of request) {
+        // Drain the request before streaming the response.
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.write('{"success":true,');
+      await upstreamCanFinish;
+      response.end('"data":{"markdown":"# Example"}}');
+    });
+    await new Promise<void>((resolve, reject) => {
+      upstream.once("error", reject);
+      upstream.listen(0, "127.0.0.1", resolve);
+    });
+    servers.push(upstream);
+    const address = upstream.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Streaming upstream did not expose a TCP address.");
+    }
+    const gateway = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        upstreamUrl: new URL(`http://127.0.0.1:${address.port}/`),
+      },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      fetchImpl: fetch,
+    });
+    servers.push(gateway);
+
+    const firstChunk = (async () => {
+      const response = await fetch(new URL("/v2/scrape", gateway.url), {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer fc-test",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: "https://example.com/" }),
+      });
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("Gateway response did not expose a body.");
+      }
+      return { reader, chunk: await reader.read() };
+    })();
+    const timeout = new Promise<never>((_resolve, reject) => {
+      setTimeout(() => reject(new Error("Gateway buffered the upstream response.")), 500);
+    });
+
+    const { reader, chunk } = await Promise.race([firstChunk, timeout]).finally(releaseUpstream);
+    expect(chunk.done).toBe(false);
+    const decoder = new TextDecoder();
+    let body = chunk.value ? decoder.decode(chunk.value, { stream: true }) : "";
+
+    releaseUpstream();
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) {
+        break;
+      }
+      body += decoder.decode(next.value, { stream: true });
+    }
+    body += decoder.decode();
+    expect(JSON.parse(body)).toEqual({
+      success: true,
+      data: { markdown: "# Example" },
+    });
+  });
+
+  it("cancels active DeepSeek crawl jobs when the gateway closes", async () => {
+    const crawlJobs = new CrawlJobManager({ idFactory: () => "dsc_close" });
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: {},
+      crawlJobs,
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        fetch(_input, signal) {
+          return new Promise((_resolve, reject) => {
+            if (signal?.aborted) {
+              reject(signal.reason);
+              return;
+            }
+            signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+          });
+        },
+      },
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+
+    const response = await fetch(new URL("/v2/crawl", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com/",
+        limit: 1,
+        maxDiscoveryDepth: 0,
+        sitemap: "skip",
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(crawlJobs.status("dsc_close")?.status).toBe("scraping");
+
+    await server.close();
+
+    expect(crawlJobs.status("dsc_close")?.status).toBe("cancelled");
+    await crawlJobs.waitForIdle("dsc_close");
   });
 });

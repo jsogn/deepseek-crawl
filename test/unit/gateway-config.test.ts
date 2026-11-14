@@ -24,15 +24,30 @@ describe("loadGatewayConfig", () => {
     ).toThrow(/allow-remote/i);
   });
 
-  it("accepts a non-loopback listener with --allow-remote", () => {
-    expect(
+  it("rejects a non-loopback listener without a gateway API key", () => {
+    expect(() =>
       loadGatewayConfig({
         host: "0.0.0.0",
         port: 8787,
         allowRemote: true,
         env: {},
       }),
-    ).toMatchObject({ host: "0.0.0.0", allowRemote: true });
+    ).toThrow(/GATEWAY_API_KEY/i);
+  });
+
+  it("accepts a non-loopback listener with --allow-remote and a gateway API key", () => {
+    expect(
+      loadGatewayConfig({
+        host: "0.0.0.0",
+        port: 8787,
+        allowRemote: true,
+        env: { GATEWAY_API_KEY: "gateway-token" },
+      }),
+    ).toMatchObject({
+      host: "0.0.0.0",
+      allowRemote: true,
+      gatewayApiKey: "gateway-token",
+    });
   });
 
   it("does not use FIRECRAWL_API_URL as the gateway upstream", () => {
@@ -61,5 +76,13 @@ describe("loadGatewayConfig", () => {
 
   it.each([0, 65_536, 1.5])("rejects invalid port %s", (port) => {
     expect(() => loadGatewayConfig({ port, env: {} })).toThrow(/port/i);
+  });
+
+  it("rejects a multiline gateway API key", () => {
+    expect(() =>
+      loadGatewayConfig({
+        env: { GATEWAY_API_KEY: "gateway\nsecret" },
+      }),
+    ).toThrow(/newline/i);
   });
 });

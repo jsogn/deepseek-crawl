@@ -325,6 +325,14 @@ Firecrawl 凭据时，网关使用 DeepSeek；Crawl 还会提供兼容的 job st
 DeepSeek Crawl job 只保存在当前网关进程内，24 小时后过期。默认只监听
 `127.0.0.1`；监听公网地址必须显式添加 `--allow-remote`。
 
+非 loopback 监听还必须设置 `GATEWAY_API_KEY`。此时 Firecrawl SDK 的 `apiKey`
+填写网关 Token；网关校验后会剥离它，并使用服务器自己的 `FIRECRAWL_API_KEY`
+访问 Firecrawl，避免把网关凭据泄露给上游。loopback 本地模式不设置
+`GATEWAY_API_KEY` 时，仍可把客户端 `apiKey` 作为 Firecrawl upstream Key 透传。
+
+Firecrawl 上游响应采用流式透传，不会把大型 Crawl 响应完整缓冲在网关内存中。
+网关正常关闭时会取消仍在运行的本地 DeepSeek Crawl jobs。
+
 离线兼容测试使用官方 `firecrawl` Node SDK，覆盖 Search、Scrape、Map、Crawl、
 fallback 和结构化错误，不访问真实付费 API。
 

@@ -89,6 +89,12 @@ Firecrawl credentials are resolved in this order:
 
 DeepSeek credentials use the existing `loadConfig` resolution order.
 
+Non-loopback listeners require `GATEWAY_API_KEY`. Clients pass this token as the
+Firecrawl SDK `apiKey`. The gateway validates it with a constant-time comparison,
+strips the incoming Authorization value, and uses only `FIRECRAWL_API_KEY` for
+the Firecrawl upstream. Loopback mode without `GATEWAY_API_KEY` preserves local
+BYOK passthrough.
+
 ## Routing
 
 For a supported route:
@@ -115,8 +121,11 @@ silently switch providers. They are returned to the caller.
 - Default request timeout: 120 seconds.
 - Host defaults to `127.0.0.1`.
 - A non-loopback host requires an explicit `--allow-remote` flag.
+- A non-loopback host also requires `GATEWAY_API_KEY`.
 - Hop-by-hop headers and `Host` are not forwarded upstream.
 - Authorization headers are never logged.
+- Firecrawl upstream response bodies stream to the client without whole-body
+  buffering.
 
 ## DeepSeek Compatibility Mapping
 
@@ -279,6 +288,9 @@ Responsibilities:
 
 The gateway may import application and DeepSeek modules. None of those modules
 may import the gateway or Firecrawl modules.
+
+`GatewayServer.close()` cancels all active process-local Crawl jobs before
+closing the listener.
 
 ## Testing
 

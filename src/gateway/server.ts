@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { MapSitemapReader } from "../application/map.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import type { GatewayConfig } from "./config.js";
-import type { CrawlJobManager } from "./crawl-jobs.js";
+import { CrawlJobManager } from "./crawl-jobs.js";
 import { createGatewayHandler } from "./handler.js";
 
 export interface GatewayServerOptions {
@@ -46,6 +46,7 @@ function serverUrl(server: Server, fallbackHost: string): URL {
 }
 
 export async function startGatewayServer(options: GatewayServerOptions): Promise<GatewayServer> {
+  const crawlJobs = options.crawlJobs ?? new CrawlJobManager();
   const server = createServer(
     createGatewayHandler({
       config: options.config,
@@ -53,22 +54,34 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
       fetchImpl: options.fetchImpl,
       ...(options.deepseekClient === undefined ? {} : { deepseekClient: options.deepseekClient }),
       ...(options.sitemapReader === undefined ? {} : { sitemapReader: options.sitemapReader }),
-      ...(options.crawlJobs === undefined ? {} : { crawlJobs: options.crawlJobs }),
+      crawlJobs,
     }),
   );
   await listen(server, options.config.host, options.config.port);
+  let closing: Promise<void> | undefined;
 
   return {
     url: serverUrl(server, options.config.host),
-    close: () =>
-      new Promise((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve();
-          }
+    close: () => {
+      if (closing) {
+        return closing;
+      }
+      closing = (async () => {
+        crawlJobs.cancelAll();
+        if (!server.listening) {
+          return;
+        }
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error) {
+              reject(error);
+            } else {
+              resolve();
+            }
+          });
         });
-      }),
+      })();
+      return closing;
+    },
   };
 }

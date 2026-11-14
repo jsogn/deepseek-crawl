@@ -274,6 +274,9 @@ Options:
   --host <host>       Listener host (default: 127.0.0.1)
   --port <1..65535>   Listener port (default: 8787)
   --allow-remote      Allow binding to a non-loopback host
+
+A non-loopback host also requires GATEWAY_API_KEY. Firecrawl SDK clients set
+their apiKey to this gateway token. See README.md for local BYOK behavior.
 `,
   cache: `Usage: deepseek-crawl cache clear [--json]
 

@@ -69,6 +69,7 @@ describe("package documentation", () => {
       "--ignore-query-parameters",
       "FIRECRAWL_API_URL",
       "FIRECRAWL_UPSTREAM_URL",
+      "GATEWAY_API_KEY",
       "Firecrawl-compatible",
     ]) {
       expect(allDocumentation).toContain(text);

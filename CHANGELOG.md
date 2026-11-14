@@ -17,9 +17,13 @@
 
 - Bind the gateway to loopback by default and require `--allow-remote` for a
   non-loopback listener.
+- Require `GATEWAY_API_KEY` for non-loopback listeners and never forward the
+  gateway token to the Firecrawl upstream.
 - Keep the Firecrawl upstream origin pinned independently of client request
   targets.
 - Limit inbound gateway request bodies to 8 MiB and never log credentials.
+- Stream Firecrawl upstream responses and cancel active local Crawl jobs during
+  gateway shutdown.
 
 ### Testing
 

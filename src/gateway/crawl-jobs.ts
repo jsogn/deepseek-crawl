@@ -286,6 +286,16 @@ export class CrawlJobManager {
     return true;
   }
 
+  cancelAll(): number {
+    let cancelled = 0;
+    for (const id of this.#jobs.keys()) {
+      if (this.cancel(id)) {
+        cancelled += 1;
+      }
+    }
+    return cancelled;
+  }
+
   #job(id: string): CrawlJob {
     const job = this.#jobs.get(id);
     if (!job) {

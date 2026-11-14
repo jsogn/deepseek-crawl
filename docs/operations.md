@@ -50,6 +50,13 @@ Clients set `FIRECRAWL_API_URL` or the SDK `apiUrl` to the gateway root. The
 gateway process uses only `FIRECRAWL_UPSTREAM_URL` for its Firecrawl upstream,
 preventing a loop back into itself.
 
+The default loopback mode supports local BYOK. A non-loopback listener requires
+`GATEWAY_API_KEY`, supplied by clients as the Firecrawl SDK `apiKey`. After
+authentication, the gateway strips that Authorization value and uses its own
+`FIRECRAWL_API_KEY` for Firecrawl. Never configure the gateway token as the
+Firecrawl upstream key. Upstream responses are streamed, and gateway shutdown
+cancels active process-local Crawl jobs.
+
 DeepSeek fallback covers `POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`,
 `POST /v2/crawl`, and status, errors, and cancellation for local `dsc_` Crawl
 jobs.
@@ -147,6 +154,7 @@ CLI Map and Crawl request Sitemaps directly and accept only public HTTP(S) targe
 | `DEEPSEEK_CACHE_DIR`     | platform cache directory    | Fetch cache directory             |
 | `FIRECRAWL_API_KEY`      | none                        | Firecrawl upstream credential     |
 | `FIRECRAWL_UPSTREAM_URL` | `https://api.firecrawl.dev` | Gateway Firecrawl upstream        |
+| `GATEWAY_API_KEY`        | none                        | Remote gateway Bearer token       |
 
 Non-loopback DeepSeek base URLs must use HTTPS. API keys are never accepted as CLI
 flags or MCP arguments.

@@ -1,4 +1,8 @@
+import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { z } from "zod";
 import type { MapSitemapReader } from "../application/map.js";
 import { loadConfig } from "../config.js";
@@ -43,20 +47,44 @@ export interface GatewayHandlerDependencies {
   now?: () => number;
 }
 
-function sendJson(response: ServerResponse, status: number, body: unknown): void {
+function sendJson(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+): void {
   const payload = Buffer.from(`${JSON.stringify(body)}\n`);
   response.writeHead(status, {
+    ...headers,
     "content-type": "application/json",
     "content-length": String(payload.byteLength),
   });
   response.end(payload);
 }
 
-function sendUpstream(response: ServerResponse, upstream: Response, payload: Buffer): void {
+function authorized(request: IncomingMessage, gatewayApiKey: string): boolean {
+  const match = request.headers.authorization?.match(/^Bearer\s+(.+)$/i);
+  const supplied = match?.[1] ?? "";
+  const expectedBytes = Buffer.from(gatewayApiKey);
+  const suppliedBytes = Buffer.from(supplied);
+  return (
+    expectedBytes.byteLength === suppliedBytes.byteLength &&
+    timingSafeEqual(expectedBytes, suppliedBytes)
+  );
+}
+
+async function sendUpstream(response: ServerResponse, upstream: Response): Promise<void> {
   const headers = responseHeaders(upstream.headers);
-  headers.set("content-length", String(payload.byteLength));
   response.writeHead(upstream.status, Object.fromEntries(headers));
-  response.end(payload);
+  if (!upstream.body) {
+    response.end();
+    return;
+  }
+  try {
+    await pipeline(Readable.fromWeb(upstream.body as unknown as NodeReadableStream), response);
+  } catch {
+    response.destroy();
+  }
 }
 
 type FallbackRoute =
@@ -229,10 +257,15 @@ async function readRequestBody(
   return Buffer.concat(chunks);
 }
 
-function incomingHeaders(request: IncomingMessage): Headers {
+function incomingHeaders(request: IncomingMessage, stripAuthorization: boolean): Headers {
   const headers = new Headers();
   for (const [name, value] of Object.entries(request.headers)) {
-    if (value === undefined || HOP_BY_HOP_HEADERS.has(name.toLowerCase())) {
+    const normalizedName = name.toLowerCase();
+    if (
+      value === undefined ||
+      HOP_BY_HOP_HEADERS.has(normalizedName) ||
+      (stripAuthorization && normalizedName === "authorization")
+    ) {
       continue;
     }
     if (Array.isArray(value)) {
@@ -274,6 +307,26 @@ export function createGatewayHandler(
   };
 
   return async (request, response) => {
+    if (
+      dependencies.config.gatewayApiKey !== undefined &&
+      !authorized(request, dependencies.config.gatewayApiKey)
+    ) {
+      request.resume();
+      sendJson(
+        response,
+        401,
+        {
+          success: false,
+          error: "Gateway authentication is required.",
+          code: "unauthorized",
+        },
+        {
+          "www-authenticate": 'Bearer realm="deepseek-crawl-gateway"',
+        },
+      );
+      return;
+    }
+
     let body: Uint8Array | undefined;
     try {
       body = await readRequestBody(request, dependencies.config.requestBodyLimit);
@@ -299,7 +352,9 @@ export function createGatewayHandler(
     const shouldTryDeepSeekFirst =
       route !== undefined &&
       (isLocalCrawlRoute ||
-        !hasAuthorization(request, dependencies.env) ||
+        (dependencies.config.gatewayApiKey === undefined
+          ? !hasAuthorization(request, dependencies.env)
+          : !dependencies.env.FIRECRAWL_API_KEY?.trim()) ||
         now() < firecrawlExhaustedUntil);
 
     if (!shouldTryDeepSeekFirst) {
@@ -308,7 +363,7 @@ export function createGatewayHandler(
           {
             method: request.method ?? "GET",
             path: request.url ?? "/",
-            headers: incomingHeaders(request),
+            headers: incomingHeaders(request, dependencies.config.gatewayApiKey !== undefined),
             ...(body === undefined ? {} : { body }),
           },
           dependencies,
@@ -317,8 +372,7 @@ export function createGatewayHandler(
           firecrawlExhaustedUntil = now() + 60_000;
           await upstream.body?.cancel().catch(() => undefined);
         } else {
-          const payload = Buffer.from(await upstream.arrayBuffer());
-          sendUpstream(response, upstream, payload);
+          await sendUpstream(response, upstream);
           return;
         }
       } catch {

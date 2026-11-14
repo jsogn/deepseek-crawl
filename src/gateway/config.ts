@@ -10,6 +10,7 @@ export interface GatewayConfig {
   host: string;
   port: number;
   allowRemote: boolean;
+  gatewayApiKey?: string;
   upstreamUrl: URL;
   requestBodyLimit: number;
   timeoutMs: number;
@@ -84,13 +85,30 @@ function validatePort(port: number): number {
   return port;
 }
 
+function parseGatewayApiKey(value: string | undefined): string | undefined {
+  const key = value?.trim();
+  if (!key) {
+    return undefined;
+  }
+  if (/[\r\n]/.test(key)) {
+    throw new Error("GATEWAY_API_KEY must not contain a newline.");
+  }
+  return key;
+}
+
 export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConfig {
   const env = options.env ?? process.env;
   const allowRemote = options.allowRemote ?? false;
+  const host = validateHost(options.host ?? DEFAULT_HOST, allowRemote);
+  const gatewayApiKey = parseGatewayApiKey(env.GATEWAY_API_KEY);
+  if (!isLoopbackHostname(host) && !gatewayApiKey) {
+    throw new Error("GATEWAY_API_KEY is required for a non-loopback gateway host.");
+  }
   return {
-    host: validateHost(options.host ?? DEFAULT_HOST, allowRemote),
+    host,
     port: validatePort(options.port ?? DEFAULT_PORT),
     allowRemote,
+    ...(gatewayApiKey === undefined ? {} : { gatewayApiKey }),
     upstreamUrl: parseUpstreamUrl(env.FIRECRAWL_UPSTREAM_URL),
     requestBodyLimit: DEFAULT_REQUEST_BODY_LIMIT,
     timeoutMs: DEFAULT_TIMEOUT_MS,

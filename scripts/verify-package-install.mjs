@@ -40,7 +40,11 @@ try {
     ["pack", "--json", "--pack-destination", temporaryRoot],
     projectRoot,
   );
-  const tarball = join(temporaryRoot, JSON.parse(packed.stdout)[0].filename);
+  const packedResult = JSON.parse(packed.stdout);
+  const packedPackage = Array.isArray(packedResult)
+    ? packedResult[0]
+    : Object.values(packedResult)[0];
+  const tarball = join(temporaryRoot, packedPackage.filename);
   const consumerRoot = join(temporaryRoot, "consumer");
   await mkdir(consumerRoot);
 

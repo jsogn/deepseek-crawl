@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Reframe the bilingual READMEs around the transparent Firecrawl gateway and
+  DeepSeek-native CLI as two explicit usage paths.
+- Move detailed installation, command, capacity, and deployment guidance behind
+  the focused documentation entry points.
+- Update the package description and keywords for clearer npm discovery.
+
 ## 0.14.0 - 2026-11-14
 
 ### Added

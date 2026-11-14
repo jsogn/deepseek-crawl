@@ -33,6 +33,7 @@ describe("package executable", () => {
     ) as {
       files?: string[];
       description?: string;
+      keywords?: string[];
       private?: boolean;
       license?: string;
       scripts?: Record<string, string>;
@@ -40,9 +41,12 @@ describe("package executable", () => {
     expect(packageJson.files).toContain("skills");
     expect(packageJson.files).toContain("README.en.md");
     expect(packageJson.files).toContain("LICENSE");
-    expect(packageJson.description).toMatch(/CLI-first/i);
-    expect(packageJson.description).toMatch(/MCP/i);
-    expect(packageJson.description).toMatch(/optional Firecrawl-compatible gateway/i);
+    expect(packageJson.description).toMatch(/Firecrawl-compatible/i);
+    expect(packageJson.description).toMatch(/DeepSeek fallback/i);
+    expect(packageJson.description).toMatch(/Agent-native/i);
+    expect(packageJson.keywords).toEqual(
+      expect.arrayContaining(["firecrawl", "firecrawl-compatible", "gateway", "proxy"]),
+    );
     expect(packageJson.private).not.toBe(true);
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.scripts?.["smoke:docker"]).toBe("bash scripts/smoke-docker-gateway.sh");
@@ -54,12 +58,48 @@ describe("package executable", () => {
 
 describe("package documentation", () => {
   it("documents every public CLI and MCP capability", async () => {
-    const readme = await readFile(new URL("../../README.md", import.meta.url), "utf8");
-    const readmeEnglish = await readFile(new URL("../../README.en.md", import.meta.url), "utf8");
-    const allDocumentation = `${readme}\n${readmeEnglish}`;
+    const [
+      readme,
+      readmeEnglish,
+      cliReference,
+      operations,
+      operationsChinese,
+      workflows,
+      workflowsChinese,
+      deploying,
+      deployingChinese,
+    ] = await Promise.all([
+      readFile(new URL("../../README.md", import.meta.url), "utf8"),
+      readFile(new URL("../../README.en.md", import.meta.url), "utf8"),
+      readFile(
+        new URL("../../skills/deepseek-crawl/references/cli-reference.md", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../../docs/operations.md", import.meta.url), "utf8"),
+      readFile(new URL("../../docs/operations.zh-CN.md", import.meta.url), "utf8"),
+      readFile(new URL("../../docs/workflows.md", import.meta.url), "utf8"),
+      readFile(new URL("../../docs/workflows.zh-CN.md", import.meta.url), "utf8"),
+      readFile(new URL("../../docs/deploying.md", import.meta.url), "utf8"),
+      readFile(new URL("../../docs/deploying.zh-CN.md", import.meta.url), "utf8"),
+    ]);
+    const allDocumentation = [
+      readme,
+      readmeEnglish,
+      cliReference,
+      operations,
+      operationsChinese,
+      workflows,
+      workflowsChinese,
+      deploying,
+      deployingChinese,
+    ].join("\n");
 
     expect(readme).toContain("[English](README.en.md)");
     expect(readmeEnglish).toContain("[简体中文](README.md)");
+    expect(readme).toContain("Firecrawl 额度用完后，DeepSeek 接手");
+    expect(readmeEnglish).toContain(
+      "Keep your Firecrawl workflows running. Use Firecrawl while credits last",
+    );
 
     for (const text of [
       "deepseek-crawl map",
@@ -68,7 +108,6 @@ describe("package documentation", () => {
       "deepseek_crawl",
       "robots.txt",
       "Firecrawl",
-      "CLI-first",
       "skills/deepseek-crawl",
       "map <url> [--search <text>]",
       "deepseek-crawl crawl <url> -o <dir>",

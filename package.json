@@ -1,7 +1,7 @@
 {
   "name": "deepseek-crawl",
   "version": "0.14.0",
-  "description": "CLI-first AI web search, page reading, mapping, crawling, MCP, and an optional Firecrawl-compatible gateway",
+  "description": "Firecrawl-compatible gateway for common web routes with DeepSeek fallback, plus an Agent-native search, fetch, map, and crawl CLI",
   "type": "module",
   "license": "MIT",
   "homepage": "https://github.com/jsogn/deepseek-crawl#readme",
@@ -20,8 +20,11 @@
     "agent-skill",
     "cli",
     "firecrawl",
+    "firecrawl-compatible",
     "gateway",
-    "proxy"
+    "proxy",
+    "llm",
+    "web-data"
   ],
   "bin": {
     "deepseek-crawl": "dist/bin.js"

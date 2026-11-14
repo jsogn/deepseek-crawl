@@ -73,6 +73,9 @@ Credentials:
 - `deepseek-crawl auth status [credential] --json`
 - `deepseek-crawl auth remove [credential] --json`
 
+macOS Keychain stores saved credentials; other platforms use a private file
+with mode `0600`. Status output reports only the source and storage backend.
+
 Optional environment:
 
 - `DEEPSEEK_BASE_URL`
@@ -153,6 +156,14 @@ Defaults:
 - Capacity: 100 HTTP requests, 100 Provider requests, 10 active Crawl jobs,
   100 retained Crawl jobs, and 256 MiB of retained Crawl documents by default
 
+Capacity flags:
+
+- `--max-concurrent-requests <count>`
+- `--max-provider-requests <count>`
+- `--max-crawl-jobs <count>`
+- `--max-retained-crawl-jobs <count>`
+- `--max-retained-crawl-bytes <bytes>`
+
 Use `auth set firecrawl` to make Firecrawl-first local mode available; otherwise
 common routes use DeepSeek. Remote mode requires `auth set gateway`, or the
 equivalent environment variables in non-interactive deployments. Set the
@@ -205,7 +216,8 @@ export FIRECRAWL_API_URL="$(deepseek-crawl gateway url)"
 exist, pass `--port`. `gateway status --json` lists all healthy instances and
 removes stale PID/state entries. It also reports nonsecret credential readiness
 for `deepseek`, `firecrawl`, and `gateway_auth`. Instance JSON uses
-`started_at`, `provider_mode`, and `credits_cooldown_seconds`.
+`started_at`, `provider_mode`, `credits_cooldown_seconds`, and capacity fields
+including `max_retained_crawl_bytes`.
 
 `GET /healthz` is unauthenticated and returns only status, version, PID,
 local/remote mode, provider mode, credits cooldown, and capacity limits. It never

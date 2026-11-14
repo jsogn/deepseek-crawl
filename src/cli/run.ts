@@ -42,6 +42,11 @@ import type {
   CrawlMonitorState,
   CrawlRunResult,
 } from "../crawl/types.js";
+import {
+  type FirecrawlCliCredential,
+  maskCredential,
+  readFirecrawlCliCredential,
+} from "../credentials/firecrawl-cli.js";
 import { readSecret } from "../credentials/input.js";
 import {
   type CredentialName,
@@ -89,6 +94,7 @@ export interface CliDependencies {
   };
   credentialStore?: CredentialStore;
   credentialStores?: Partial<Record<CredentialName, CredentialStore>>;
+  firecrawlCredentialReader?: () => FirecrawlCliCredential;
   secretReader?: () => Promise<string>;
   fetchCache?: FetchCache;
   cacheClock?: () => Date;
@@ -113,6 +119,7 @@ Gateway
 Credentials and setup
   init [options]                 Configure DeepSeek and install the Skill
   auth set [credential]          Store deepseek, firecrawl, or gateway credentials
+  auth import firecrawl          Import an existing Firecrawl CLI credential
   auth status [credential]       Show credential source
   auth remove [credential]       Remove a stored credential
   doctor [--live] [--json]       Check DeepSeek configuration
@@ -281,16 +288,23 @@ Options:
 `,
   auth: `Usage:
   deepseek-crawl auth set [deepseek|firecrawl|gateway]
+  deepseek-crawl auth import firecrawl [--json]
   deepseek-crawl auth status [credential] [--json]
   deepseek-crawl auth remove [credential] [--json]
 
 Credential defaults to deepseek. Values are read from hidden input and stored in
-the user's Keychain or a private credential file.
+the user's Keychain or a private credential file. The auth import firecrawl
+command reads an existing Firecrawl CLI login instead of prompting for input.
 `,
   "auth set": `Usage: deepseek-crawl auth set [deepseek|firecrawl|gateway]
 
 Read one credential through hidden input and store it in Keychain or the private
 credential file. Omitting the provider selects deepseek.
+`,
+  "auth import": `Usage: deepseek-crawl auth import firecrawl [--json]
+
+Read the Firecrawl CLI credential, show only a masked hint, and store it as the
+Firecrawl provider credential.
 `,
   "auth status": `Usage: deepseek-crawl auth status [credential] [--json]
 
@@ -361,6 +375,9 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     ...(dependencies.credentialStores === undefined
       ? {}
       : { credentialStores: dependencies.credentialStores }),
+    ...(dependencies.firecrawlCredentialReader === undefined
+      ? {}
+      : { firecrawlCredentialReader: dependencies.firecrawlCredentialReader }),
     ...(dependencies.secretReader === undefined ? {} : { secretReader: dependencies.secretReader }),
     ...(dependencies.fetchCache === undefined ? {} : { fetchCache: dependencies.fetchCache }),
     ...(dependencies.cacheClock === undefined ? {} : { cacheClock: dependencies.cacheClock }),
@@ -1593,6 +1610,43 @@ async function runAuthSet(
   return 0;
 }
 
+async function runAuthImport(
+  command: Extract<ParsedCommand, { kind: "auth-import" }>,
+  deps: CliDependencies,
+) {
+  const store = resolvedCredentialStore(deps, command.credential);
+  const imported = await (deps.firecrawlCredentialReader ?? readFirecrawlCliCredential)();
+  const replaced = store.get() !== undefined;
+  store.set(imported.apiKey);
+  const environmentOverride = Boolean(deps.env.FIRECRAWL_API_KEY?.trim());
+  const result = {
+    imported: true,
+    credential: "firecrawl",
+    source: "firecrawl-cli",
+    backend: store.name,
+    replaced,
+    environment_override: environmentOverride,
+    api_key_hint: maskCredential(imported.apiKey),
+  };
+  if (command.json) {
+    deps.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  } else {
+    const storageAction = replaced
+      ? `replaced the existing ${store.name} credential`
+      : `saved in ${store.name}`;
+    deps.stdout.write(
+      [
+        `Firecrawl API key imported from Firecrawl CLI and ${storageAction}: ${result.api_key_hint}.`,
+        ...(environmentOverride
+          ? ["FIRECRAWL_API_KEY is set and currently overrides the stored credential."]
+          : []),
+        "",
+      ].join("\n"),
+    );
+  }
+  return 0;
+}
+
 async function runAuthStatus(
   command: Extract<ParsedCommand, { kind: "auth-status" }>,
   deps: CliDependencies,
@@ -1738,6 +1792,8 @@ export async function runCli(
         return await runSetupSkills(command, deps);
       case "auth-set":
         return await runAuthSet(command, deps);
+      case "auth-import":
+        return await runAuthImport(command, deps);
       case "auth-status":
         return await runAuthStatus(command, deps);
       case "auth-remove":

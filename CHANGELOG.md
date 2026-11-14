@@ -8,6 +8,8 @@
   Search, Scrape, Map, and asynchronous Crawl clients.
 - Add Provider-specific `auth set|status|remove` support for `deepseek`,
   `firecrawl`, and `gateway` credentials.
+- Add `auth import firecrawl` to copy an existing Firecrawl CLI credential into
+  the private DeepSeek Crawl credential store with a masked hint.
 - Add `gateway url`, `gateway status`, `/healthz`, and multi-instance runtime
   discovery with stale-state cleanup.
 - Forward common Firecrawl requests to the Firecrawl upstream while preserving

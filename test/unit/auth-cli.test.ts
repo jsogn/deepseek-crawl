@@ -154,6 +154,97 @@ describe("auth commands", () => {
     expect(environment.stdout.value()).not.toContain("gateway-secret");
   });
 
+  it("imports a Firecrawl CLI credential without printing the full secret", async () => {
+    const firecrawl = memoryStore();
+    const environment = providerDependencies({ firecrawl });
+    const imported = "fc-imported-secret";
+
+    expect(
+      await runCli(["auth", "import", "firecrawl", "--json"], {
+        ...environment.deps,
+        firecrawlCredentialReader: () => ({
+          apiKey: imported,
+          path: "/tmp/firecrawl-cli/credentials.json",
+        }),
+      }),
+    ).toBe(0);
+
+    expect(firecrawl.value()).toBe(imported);
+    expect(JSON.parse(environment.stdout.value())).toEqual({
+      imported: true,
+      credential: "firecrawl",
+      source: "firecrawl-cli",
+      backend: "keychain",
+      replaced: false,
+      environment_override: false,
+      api_key_hint: "fc-imp...cret",
+    });
+    expect(environment.stdout.value()).not.toContain(imported);
+    expect(environment.stderr.value()).toBe("");
+  });
+
+  it("reports when importing replaces an existing Firecrawl credential", async () => {
+    const firecrawl = memoryStore("old-firecrawl-secret");
+    const environment = providerDependencies({ firecrawl });
+
+    expect(
+      await runCli(["auth", "import", "firecrawl"], {
+        ...environment.deps,
+        firecrawlCredentialReader: () => ({
+          apiKey: "new-firecrawl-secret",
+          path: "/tmp/firecrawl-cli/credentials.json",
+        }),
+      }),
+    ).toBe(0);
+
+    expect(firecrawl.value()).toBe("new-firecrawl-secret");
+    expect(environment.stdout.value()).toContain("replaced");
+    expect(environment.stdout.value()).toContain("new-fi...cret");
+    expect(environment.stdout.value()).not.toContain("new-firecrawl-secret");
+  });
+
+  it("warns when an environment variable still overrides the imported credential", async () => {
+    const firecrawl = memoryStore();
+    const environment = providerDependencies(
+      { firecrawl },
+      { FIRECRAWL_API_KEY: "environment-firecrawl-secret" },
+    );
+
+    expect(
+      await runCli(["auth", "import", "firecrawl", "--json"], {
+        ...environment.deps,
+        firecrawlCredentialReader: () => ({
+          apiKey: "imported-firecrawl-secret",
+          path: "/tmp/firecrawl-cli/credentials.json",
+        }),
+      }),
+    ).toBe(0);
+
+    expect(JSON.parse(environment.stdout.value())).toMatchObject({
+      imported: true,
+      environment_override: true,
+    });
+    expect(environment.stdout.value()).not.toContain("environment-firecrawl-secret");
+    expect(environment.stdout.value()).not.toContain("imported-firecrawl-secret");
+  });
+
+  it("reports missing Firecrawl CLI credentials without changing storage", async () => {
+    const firecrawl = memoryStore();
+    const environment = providerDependencies({ firecrawl });
+
+    expect(
+      await runCli(["auth", "import", "firecrawl"], {
+        ...environment.deps,
+        firecrawlCredentialReader: () => {
+          throw new Error("Firecrawl CLI credentials were not found.");
+        },
+      }),
+    ).toBe(1);
+
+    expect(firecrawl.value()).toBeUndefined();
+    expect(environment.stderr.value()).toContain("Firecrawl CLI credentials were not found");
+  });
+
   it("reports provider-specific environment and stored status", async () => {
     const gateway = memoryStore("stored-gateway");
     const stored = providerDependencies({ gateway });

@@ -13,6 +13,35 @@ interface SlowServer {
   close(): Promise<void>;
 }
 
+interface ExhaustedFirecrawl {
+  baseUrl: string;
+  close(): Promise<void>;
+}
+
+async function startExhaustedFirecrawl(): Promise<ExhaustedFirecrawl> {
+  const server = createServer((request, response) => {
+    request.resume();
+    request.once("end", () => {
+      response.writeHead(402, { "content-type": "application/json" });
+      response.end(JSON.stringify({ success: false, error: "Payment required." }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Firecrawl mock did not bind a TCP port.");
+  }
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}/`,
+    close: async () => {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    },
+  };
+}
+
 async function startSlowDeepSeek(): Promise<SlowServer> {
   let resolveRequest!: () => void;
   const requestStarted = new Promise<void>((resolve) => {
@@ -122,9 +151,12 @@ describe("CLI signal handling", () => {
 
   it("gracefully stops the Gateway and clears runtime state on SIGTERM", async () => {
     const runtimeDirectory = await mkdtemp(join(tmpdir(), "deepseek-gateway-sigterm-"));
+    const firecrawl = await startExhaustedFirecrawl();
     const server = await startSlowDeepSeek();
     const process = spawnCli(["gateway"], server.baseUrl, {
       DEEPSEEK_GATEWAY_RUNTIME_DIR: runtimeDirectory,
+      FIRECRAWL_API_KEY: "offline-firecrawl-key",
+      FIRECRAWL_UPSTREAM_URL: firecrawl.baseUrl,
     });
 
     await waitFor(() => /listening on http:\/\/127\.0\.0\.1:\d+\//.test(process.stdout()));
@@ -148,6 +180,7 @@ describe("CLI signal handling", () => {
     process.child.kill("SIGTERM");
     const result = await process.closed;
     await server.close();
+    await firecrawl.close();
 
     expect(result).toEqual({ code: 0, signal: null });
     expect(await readdir(runtimeDirectory)).toEqual([]);

@@ -520,6 +520,11 @@ describe("parseCli", () => {
       kind: "auth-set",
       credential: "firecrawl",
     });
+    expect(parseCli(["auth", "import", "firecrawl", "--json"])).toEqual({
+      kind: "auth-import",
+      credential: "firecrawl",
+      json: true,
+    });
     expect(parseCli(["auth", "status", "--json"])).toEqual({
       kind: "auth-status",
       credential: "deepseek",
@@ -538,6 +543,10 @@ describe("parseCli", () => {
     expect(parseCli(["auth", "set", "firecrawl", "--help"])).toEqual({
       kind: "help",
       command: "auth set",
+    });
+    expect(parseCli(["auth", "import", "firecrawl", "--help"])).toEqual({
+      kind: "help",
+      command: "auth import",
     });
   });
 
@@ -614,6 +623,10 @@ describe("parseCli", () => {
     [["auth", "unknown"], /auth|subcommand/i],
     [["auth", "set", "--json"], /unknown option/i],
     [["auth", "set", "unknown"], /credential|deepseek|firecrawl|gateway/i],
+    [["auth", "import"], /firecrawl|credential/i],
+    [["auth", "import", "deepseek"], /firecrawl/i],
+    [["auth", "import", "firecrawl", "extra"], /at most one|argument/i],
+    [["auth", "import", "firecrawl", "--unknown"], /unknown option/i],
     [["balance", "extra"], /argument|unknown option/i],
     [["balance", "--live"], /unknown option/i],
     [["gateway", "--port", "0"], /port/i],

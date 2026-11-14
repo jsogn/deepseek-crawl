@@ -54,6 +54,8 @@ Local mode searches from `8787` for an available port; explicit `--port` and
 remote mode use strict fixed ports. Provider credentials come from environment
 variables first, then the Keychain/file stores populated by
 `deepseek-crawl auth set [deepseek|firecrawl|gateway]`.
+`deepseek-crawl auth import firecrawl` can copy an existing Firecrawl CLI login
+into that store while displaying only a masked hint.
 
 Remote mode requires a stored `gateway` token. Clients supply it as the Firecrawl
 SDK `apiKey`; the gateway strips it and uses its own Firecrawl provider

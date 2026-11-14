@@ -53,9 +53,13 @@ Only start the gateway when the user explicitly wants an existing Firecrawl v2
 client to keep working without changing its API calls:
 
 ```bash
+deepseek-crawl auth import firecrawl  # reuse an existing Firecrawl CLI login
 deepseek-crawl auth set firecrawl   # optional when already configured
 deepseek-crawl gateway
 ```
+
+`auth import firecrawl` prints only a masked hint. `FIRECRAWL_API_KEY` still takes
+precedence over the imported credential.
 
 Point the Firecrawl client at the URL printed by the command. Local mode starts
 at `8787` and automatically chooses the next available port when occupied.

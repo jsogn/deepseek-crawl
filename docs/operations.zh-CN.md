@@ -55,6 +55,8 @@ deepseek-crawl gateway --remote
 默认 loopback 模式从 `8787` 开始自动寻找可用端口；显式 `--port` 和远程模式使用
 严格固定端口。Provider 凭据优先从环境变量读取，否则使用
 `deepseek-crawl auth set [deepseek|firecrawl|gateway]` 保存的 Keychain/file。
+`deepseek-crawl auth import firecrawl` 可以把已有的 Firecrawl CLI 登录导入这个
+store，只显示掩码提示。
 
 远程模式要求已配置 `gateway` Token；客户端把它作为 Firecrawl SDK `apiKey`。
 网关认证后剥离这个 Authorization，并使用自己的 Firecrawl Provider 凭据调上游。

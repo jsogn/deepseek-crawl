@@ -144,6 +144,7 @@ export type ParsedCommand =
       json: boolean;
     }
   | { kind: "auth-set"; credential: CredentialName }
+  | { kind: "auth-import"; credential: "firecrawl"; json: boolean }
   | { kind: "auth-status"; credential: CredentialName; json: boolean }
   | { kind: "auth-remove"; credential: CredentialName; json: boolean }
   | {
@@ -912,6 +913,34 @@ export function parseCli(argv: string[]): ParsedCommand {
             credential: parseCredential(parsed.positionals[0]),
           };
         }
+        if (subcommand === "import") {
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: true,
+            strict: true,
+            options: {
+              json: { type: "boolean" },
+              help: { type: "boolean", short: "h" },
+            },
+          });
+          if (parsed.values.help) {
+            return { kind: "help", command: "auth import" };
+          }
+          if (parsed.positionals.length === 0) {
+            throw new CliUsageError("auth import requires firecrawl.");
+          }
+          if (parsed.positionals.length > 1) {
+            throw new CliUsageError("auth import accepts at most one credential.");
+          }
+          if (parsed.positionals[0] !== "firecrawl") {
+            throw new CliUsageError("Only a Firecrawl API key can be imported.");
+          }
+          return {
+            kind: "auth-import",
+            credential: "firecrawl",
+            json: parsed.values.json ?? false,
+          };
+        }
         if (subcommand === "status" || subcommand === "remove") {
           const parsed = parseArgs({
             args: args.slice(1),
@@ -937,7 +966,7 @@ export function parseCli(argv: string[]): ParsedCommand {
         throw new CliUsageError(
           subcommand
             ? `Unknown auth subcommand: ${subcommand}`
-            : "auth subcommand set, status, or remove is required.",
+            : "auth subcommand set, import, status, or remove is required.",
         );
       }
       case "mcp": {

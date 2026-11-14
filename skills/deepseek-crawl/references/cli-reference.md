@@ -69,6 +69,7 @@ Credentials:
 
 - `DEEPSEEK_API_KEY`, or a key stored by `deepseek-crawl init` / `auth set`
 - `deepseek-crawl auth set [deepseek|firecrawl|gateway]`
+- `deepseek-crawl auth import firecrawl --json`
 - `deepseek-crawl auth status [credential] --json`
 - `deepseek-crawl auth remove [credential] --json`
 

@@ -140,11 +140,17 @@ deepseek-crawl auth remove
 网关相关 Provider 凭据使用同一套命令：
 
 ```bash
+deepseek-crawl auth import firecrawl
 deepseek-crawl auth set firecrawl
 deepseek-crawl auth set gateway
 deepseek-crawl auth status firecrawl --json
 deepseek-crawl auth remove gateway
 ```
+
+如果本机已经运行 `firecrawl config`，`auth import firecrawl` 会从 Firecrawl
+CLI 的平台配置目录读取 Key，只显示首尾掩码，再写入 DeepSeek Crawl 自己的
+Keychain/file store。`FIRECRAWL_API_KEY` 环境变量仍然优先；导入命令会明确提示
+这种覆盖关系。
 
 不指定 Provider 时仍默认为 `deepseek`，兼容原有命令。
 
@@ -299,11 +305,13 @@ CLI 默认合并 Sitemap 和 Markdown 发现，并限制在种子页的 exact or
 普通 CLI 和 MCP 不启动 HTTP 服务。需要让现有 Firecrawl v2 客户端直接连接时：
 
 ```bash
-deepseek-crawl auth set firecrawl
+deepseek-crawl auth import firecrawl
 deepseek-crawl gateway
 ```
 
-只使用 DeepSeek 可以不执行 `auth set firecrawl`，网关仍可工作。DeepSeek Key
+已有 Firecrawl CLI 登录时可直接导入；也可以继续使用
+`auth set firecrawl` 手动输入。只使用 DeepSeek 可以不导入 Firecrawl 凭据，
+网关仍可工作。DeepSeek Key
 继续使用现有的 `deepseek-crawl auth set` 或 Keychain 配置。
 
 本地默认从 `8787` 开始寻找可用端口，冲突时自动尝试下一个，并打印实际地址。

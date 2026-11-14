@@ -151,11 +151,18 @@ deepseek-crawl auth remove
 Gateway providers use the same credential commands:
 
 ```bash
+deepseek-crawl auth import firecrawl
 deepseek-crawl auth set firecrawl
 deepseek-crawl auth set gateway
 deepseek-crawl auth status firecrawl --json
 deepseek-crawl auth remove gateway
 ```
+
+When Firecrawl CLI is already authenticated with `firecrawl config`,
+`auth import firecrawl` reads its platform credential file, prints only a masked
+hint, and stores the key in the DeepSeek Crawl Keychain/file store.
+`FIRECRAWL_API_KEY` still takes precedence, and the import command explicitly
+reports that override.
 
 Omitting the provider keeps the existing `deepseek` default.
 
@@ -319,12 +326,14 @@ The ordinary CLI and MCP do not start an HTTP service. To connect an existing
 Firecrawl v2 client:
 
 ```bash
-deepseek-crawl auth set firecrawl
+deepseek-crawl auth import firecrawl
 deepseek-crawl gateway
 ```
 
-DeepSeek-only use can skip `auth set firecrawl`. DeepSeek credentials continue to
-use the existing `deepseek-crawl auth set` or Keychain configuration.
+An existing Firecrawl CLI login can be imported directly. `auth set firecrawl`
+remains available for manual entry. DeepSeek-only use can skip the Firecrawl
+credential. DeepSeek credentials continue to use the existing
+`deepseek-crawl auth set` or Keychain configuration.
 
 Local mode starts at `8787`, tries subsequent ports when it is occupied, and
 prints the actual URL. An explicit `--port` is strict and fails if unavailable.

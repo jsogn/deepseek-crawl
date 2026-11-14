@@ -77,6 +77,11 @@ export {
 } from "./credentials/store.js";
 export { DeepSeekClient } from "./deepseek/client.js";
 export { DeepSeekError } from "./deepseek/errors.js";
+export type {
+  AuthFailureLimiterOptions,
+  AuthLimiterCheck,
+} from "./gateway/auth-limiter.js";
+export { AuthFailureLimiter } from "./gateway/auth-limiter.js";
 export type { GatewayConfig, GatewayConfigInput } from "./gateway/config.js";
 export { loadGatewayConfig } from "./gateway/config.js";
 export type {
@@ -101,6 +106,8 @@ export type {
   GatewayServerRuntimeOptions,
 } from "./gateway/server.js";
 export { startGatewayServer } from "./gateway/server.js";
+export type { GatewayLogger, GatewayRequestLog } from "./gateway/telemetry.js";
+export { gatewayRequestId, normalizeGatewayRoute } from "./gateway/telemetry.js";
 export type { RetryAttempt, RetrySummary } from "./retry/types.js";
 export type {
   BalanceAmount,

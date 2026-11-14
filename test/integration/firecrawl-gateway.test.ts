@@ -7,6 +7,7 @@ import type { DeepSeekGateway } from "../../src/deepseek/gateway.js";
 import { CrawlJobManager } from "../../src/gateway/crawl-jobs.js";
 import { listGatewayRuntimeStates } from "../../src/gateway/runtime.js";
 import { type GatewayServer, startGatewayServer } from "../../src/gateway/server.js";
+import type { GatewayRequestLog } from "../../src/gateway/telemetry.js";
 
 const servers: Array<GatewayServer | Server> = [];
 
@@ -66,6 +67,28 @@ describe("Firecrawl-compatible gateway", () => {
       mode: "local",
     });
     expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("applies bounded HTTP timeout settings", async () => {
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        headersTimeoutMs: 1234,
+        requestTimeoutMs: 5678,
+        keepAliveTimeoutMs: 901,
+      },
+      env: {},
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+    servers.push(server);
+
+    expect(server.timeouts).toEqual({
+      headers_timeout_ms: 1234,
+      request_timeout_ms: 5678,
+      keep_alive_timeout_ms: 901,
+    });
   });
 
   it("registers and removes a runtime state file for a running gateway", async () => {
@@ -536,6 +559,174 @@ describe("Firecrawl-compatible gateway", () => {
     });
     expect(authorized.status).toBe(200);
     expect(upstreamAuthorization).toBe("Bearer fc-upstream");
+  });
+
+  it("rate limits repeated gateway authentication failures", async () => {
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        gatewayApiKey: "gateway-token",
+        authFailureLimit: 2,
+        authFailureWindowMs: 60_000,
+        authBlockMs: 1000,
+      },
+      env: {
+        GATEWAY_API_KEY: "gateway-token",
+        FIRECRAWL_API_KEY: "fc-upstream",
+      },
+      fetchImpl: async () => {
+        throw new Error("Authenticated upstream request was not expected.");
+      },
+    });
+    servers.push(server);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(new URL("/v2/search", server.url), {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer wrong-token",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query: "test" }),
+      });
+      expect(response.status).toBe(401);
+    }
+
+    const blocked = await fetch(new URL("/v2/search", server.url), {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer gateway-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query: "test" }),
+    });
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get("retry-after")).toBe("1");
+    expect(await blocked.json()).toMatchObject({ code: "too_many_auth_failures" });
+  });
+
+  it("rejects requests above the concurrent request limit", async () => {
+    let upstreamCalls = 0;
+    let releaseUpstream: () => void = () => undefined;
+    let markStarted: () => void = () => undefined;
+    const upstreamStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const upstreamCanFinish = new Promise<void>((resolve) => {
+      releaseUpstream = resolve;
+    });
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        maxConcurrentRequests: 1,
+      },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      fetchImpl: async () => {
+        upstreamCalls += 1;
+        if (upstreamCalls === 1) {
+          markStarted();
+          await upstreamCanFinish;
+        }
+        return Response.json({ success: true, data: { markdown: "# Example" } });
+      },
+    });
+    servers.push(server);
+
+    const first = fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/" }),
+    });
+    await upstreamStarted;
+    try {
+      const second = await fetch(new URL("/v2/scrape", server.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/" }),
+      });
+
+      expect(second.status).toBe(503);
+      expect(second.headers.get("retry-after")).toBe("1");
+      expect(await second.json()).toMatchObject({ code: "too_many_requests" });
+      expect(upstreamCalls).toBe(1);
+    } finally {
+      releaseUpstream();
+    }
+    expect((await first).status).toBe(200);
+  });
+
+  it("echoes request IDs and writes sanitized request logs", async () => {
+    const events: GatewayRequestLog[] = [];
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: { FIRECRAWL_API_KEY: "fc-upstream" },
+      fetchImpl: async () => Response.json({ success: true, data: { markdown: "# Example" } }),
+      logger: (event) => events.push(event),
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape?secret-query=do-not-log", server.url), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-request-id": "client-request-1",
+      },
+      body: JSON.stringify({ url: "https://example.com/secret-page" }),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-request-id")).toBe("client-request-1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      event: "gateway_request",
+      request_id: "client-request-1",
+      method: "POST",
+      route: "/v2/scrape",
+      status: 200,
+      provider: "firecrawl",
+      fallback: false,
+    });
+    const serialized = JSON.stringify(events);
+    expect(serialized).not.toContain("do-not-log");
+    expect(serialized).not.toContain("secret-page");
+    expect(serialized).not.toContain("fc-upstream");
+  });
+
+  it("logs the provider fallback reason without request content", async () => {
+    const events: GatewayRequestLog[] = [];
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: { FIRECRAWL_API_KEY: "fc-upstream" },
+      fetchImpl: async () =>
+        Response.json({ success: false, error: "Payment required." }, { status: 402 }),
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          return { title: "Example", content: "# Example" };
+        },
+      },
+      logger: (event) => events.push(event),
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/" }),
+    });
+    expect(response.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(events[0]).toMatchObject({
+      route: "/v2/scrape",
+      status: 200,
+      provider: "deepseek",
+      fallback: true,
+      fallback_reason: "firecrawl_credits_exhausted",
+    });
   });
 
   it("streams upstream response bytes before the upstream response completes", async () => {

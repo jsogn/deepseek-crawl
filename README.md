@@ -366,6 +366,12 @@ CI 和容器可以直接用 `GATEWAY_API_KEY` 环境变量覆盖已存储 Token�
 Firecrawl 上游响应采用流式透传，不会把大型 Crawl 响应完整缓冲在网关内存中。
 网关正常关闭时会取消仍在运行的本地 DeepSeek Crawl jobs。
 
+远程网关默认对同一来源连续 5 次认证失败锁定 60 秒，并将并发请求限制为 100。
+每个请求返回 `x-request-id`。CLI 网关向 stderr 写入单行 JSON 请求日志，只记录
+规范化路由、状态码、耗时、Provider 和 fallback 原因，不记录 Key、正文、查询
+字符串或完整目标 URL。默认 header timeout 为 15 秒、request timeout 为 120 秒、
+keep-alive timeout 为 5 秒。
+
 离线兼容测试使用官方 `firecrawl` Node SDK，覆盖 Search、Scrape、Map、Crawl、
 fallback 和结构化错误，不访问真实付费 API。
 

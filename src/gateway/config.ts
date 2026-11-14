@@ -18,6 +18,13 @@ export interface GatewayConfig {
   autoPort?: boolean;
   gatewayApiKey?: string;
   firecrawlApiKey?: string;
+  authFailureLimit?: number;
+  authFailureWindowMs?: number;
+  authBlockMs?: number;
+  maxConcurrentRequests?: number;
+  headersTimeoutMs?: number;
+  requestTimeoutMs?: number;
+  keepAliveTimeoutMs?: number;
   upstreamUrl: URL;
   requestBodyLimit: number;
   timeoutMs: number;

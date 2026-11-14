@@ -61,6 +61,10 @@ deepseek-crawl gateway --remote
 不要把网关 Token 配置成 Firecrawl upstream Key。上游响应采用流式传输；网关关闭
 时会取消仍在运行的本地 Crawl jobs。
 
+CLI 网关的 stderr 采用单行 JSON 日志。每条请求包含 `x-request-id`、规范化
+`route`、status、耗时、Provider 和 fallback 原因；不会写 API Key、请求体、查询
+字符串或完整 URL。反向代理部署应在代理层再配置全局限流和可信来源处理。
+
 DeepSeek fallback 覆盖 `POST /v2/search`、`POST /v2/scrape`、`POST /v2/map`、
 `POST /v2/crawl`，以及本地 `dsc_` Crawl job 的 status、errors 和取消。
 
@@ -119,6 +123,11 @@ deepseek-crawl cache clear --json
 | Gateway 入站请求体       | 8 MiB                  |
 | Gateway 上游请求超时     | 120 秒                 |
 | DeepSeek Crawl job 保留  | 24 小时，仅当前进程    |
+| Gateway 并发请求         | 100                    |
+| 认证失败窗口             | 60 秒内 5 次           |
+| 认证失败锁定             | 60 秒，按来源地址      |
+| Gateway Header timeout   | 15 秒                  |
+| Gateway Keep-alive       | 5 秒                   |
 
 CLI Crawl 最多 100 页，MCP Crawl 最多 20 页。两者的 depth 和 concurrency 硬上限
 分别为 5。

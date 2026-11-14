@@ -185,6 +185,11 @@ for `deepseek`, `firecrawl`, and `gateway_auth`. Instance JSON uses
 `GET /healthz` is unauthenticated and returns only status, version, PID, and
 local/remote mode. It never returns provider keys or user content.
 
+Every response includes `x-request-id`. CLI request logs are one JSON object on
+stderr with normalized route, status, duration, provider, and fallback reason.
+API keys, request bodies, query strings, and full target URLs are excluded.
+Authentication failures and request concurrency are bounded.
+
 The gateway process does not read `FIRECRAWL_API_URL`. Set
 `FIRECRAWL_UPSTREAM_URL` only when the Firecrawl upstream is not
 `https://api.firecrawl.dev`. `--allow-remote` remains a compatibility alias for

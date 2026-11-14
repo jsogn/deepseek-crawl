@@ -392,6 +392,13 @@ Firecrawl upstream responses stream through the gateway instead of being fully
 buffered, including large Crawl responses. Normal gateway shutdown cancels
 active process-local DeepSeek Crawl jobs.
 
+Remote mode locks a source for 60 seconds after 5 consecutive authentication
+failures and caps concurrent requests at 100. Every request receives an
+`x-request-id`. The CLI gateway writes one JSON log line per request to stderr,
+containing only normalized route, status, duration, provider, and fallback
+reason. It never logs keys, page bodies, query strings, or full target URLs.
+Default header, request, and keep-alive timeouts are 15, 120, and 5 seconds.
+
 Offline compatibility tests use the official `firecrawl` Node SDK to cover
 Search, Scrape, Map, Crawl, fallback, and structured errors without calling paid
 APIs.

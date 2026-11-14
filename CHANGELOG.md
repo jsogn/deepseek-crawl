@@ -23,11 +23,14 @@
   non-loopback listener.
 - Require `GATEWAY_API_KEY` for non-loopback listeners and never forward the
   gateway token to the Firecrawl upstream.
+- Rate-limit repeated authentication failures and cap concurrent gateway
+  requests.
 - Keep the Firecrawl upstream origin pinned independently of client request
   targets.
 - Limit inbound gateway request bodies to 8 MiB and never log credentials.
 - Stream Firecrawl upstream responses and cancel active local Crawl jobs during
   gateway shutdown.
+- Add request IDs, bounded HTTP timeouts, and sanitized structured request logs.
 
 ### Changed
 

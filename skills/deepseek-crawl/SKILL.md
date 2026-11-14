@@ -74,6 +74,10 @@ Clients pass the gateway token as the Firecrawl SDK `apiKey`. The gateway strips
 that token before forwarding to Firecrawl. The gateway never starts
 automatically and is separate from ordinary CLI and MCP requests.
 
+Every gateway response includes `x-request-id`. JSON request logs exclude
+credentials, bodies, query strings, and full target URLs. Authentication
+failures are rate-limited and concurrent requests are bounded.
+
 Do not claim full Advanced Firecrawl compatibility. The gateway does not replace
 the normal CLI operation selection in this Skill.
 

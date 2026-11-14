@@ -61,6 +61,11 @@ credential upstream. Never configure the gateway token as the Firecrawl upstream
 key. Upstream responses are streamed, and gateway shutdown cancels active
 process-local Crawl jobs.
 
+CLI gateway stderr uses one JSON object per request with `x-request-id`,
+normalized `route`, status, duration, provider, and fallback reason. API keys,
+request bodies, query strings, and full URLs are excluded. Add global rate limits
+and trusted source handling at a reverse proxy when deployed behind one.
+
 DeepSeek fallback covers `POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`,
 `POST /v2/crawl`, and status, errors, and cancellation for local `dsc_` Crawl
 jobs.
@@ -108,25 +113,30 @@ job state.
 
 ## Hard limits
 
-| Area                         | Hard limit                    |
-| ---------------------------- | ----------------------------- |
-| DeepSeek Fetch response body | 8 MiB                         |
-| CLI Batch input/report       | 8 MiB                         |
-| Batch Fetch URLs             | 10,000                        |
-| Fetch Cache TTL              | 31,536,000 seconds            |
-| Fetch Cache entry            | 16 MiB                        |
-| Crawl page content           | 1,000,000 Unicode code points |
-| CLI Crawl URL discovery      | 10,000                        |
-| MCP Crawl URL discovery      | 2,000                         |
-| MCP Crawl structured text    | 100,000 Unicode code points   |
-| Sitemap documents            | 10                            |
-| Map candidate URLs           | 10,000                        |
-| Sitemap response body        | 5 MiB                         |
-| Sitemap request timeout      | 15 seconds                    |
-| Sitemap redirects            | 3, same-origin only           |
-| Gateway inbound request body | 8 MiB                         |
-| Gateway upstream timeout     | 120 seconds                   |
-| DeepSeek Crawl job retention | 24 hours, process-local       |
+| Area                          | Hard limit                    |
+| ----------------------------- | ----------------------------- |
+| DeepSeek Fetch response body  | 8 MiB                         |
+| CLI Batch input/report        | 8 MiB                         |
+| Batch Fetch URLs              | 10,000                        |
+| Fetch Cache TTL               | 31,536,000 seconds            |
+| Fetch Cache entry             | 16 MiB                        |
+| Crawl page content            | 1,000,000 Unicode code points |
+| CLI Crawl URL discovery       | 10,000                        |
+| MCP Crawl URL discovery       | 2,000                         |
+| MCP Crawl structured text     | 100,000 Unicode code points   |
+| Sitemap documents             | 10                            |
+| Map candidate URLs            | 10,000                        |
+| Sitemap response body         | 5 MiB                         |
+| Sitemap request timeout       | 15 seconds                    |
+| Sitemap redirects             | 3, same-origin only           |
+| Gateway inbound request body  | 8 MiB                         |
+| Gateway upstream timeout      | 120 seconds                   |
+| DeepSeek Crawl job retention  | 24 hours, process-local       |
+| Gateway concurrent requests   | 100                           |
+| Authentication failure window | 5 failures in 60 seconds      |
+| Authentication lockout        | 60 seconds, by source address |
+| Gateway header timeout        | 15 seconds                    |
+| Gateway keep-alive timeout    | 5 seconds                     |
 
 CLI Crawl caps pages at 100; MCP Crawl caps pages at 20. Both cap depth and
 concurrency at 5.

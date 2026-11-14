@@ -5,6 +5,7 @@ import type { GatewayConfig } from "./config.js";
 import { CrawlJobManager } from "./crawl-jobs.js";
 import { createGatewayHandler } from "./handler.js";
 import { removeGatewayRuntimeState, writeGatewayRuntimeState } from "./runtime.js";
+import type { GatewayLogger } from "./telemetry.js";
 
 export interface GatewayServerRuntimeOptions {
   directory: string;
@@ -20,11 +21,17 @@ export interface GatewayServerOptions {
   sitemapReader?: MapSitemapReader;
   crawlJobs?: CrawlJobManager;
   runtimeState?: GatewayServerRuntimeOptions;
+  logger?: GatewayLogger;
 }
 
 export interface GatewayServer {
   url: URL;
   runtimeStatePath?: string;
+  timeouts: {
+    headers_timeout_ms: number;
+    request_timeout_ms: number;
+    keep_alive_timeout_ms: number;
+  };
   close(): Promise<void>;
 }
 
@@ -91,8 +98,17 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
       ...(options.deepseekClient === undefined ? {} : { deepseekClient: options.deepseekClient }),
       ...(options.sitemapReader === undefined ? {} : { sitemapReader: options.sitemapReader }),
       crawlJobs,
+      ...(options.logger === undefined ? {} : { logger: options.logger }),
     }),
   );
+  const timeouts = {
+    headers_timeout_ms: options.config.headersTimeoutMs ?? 15_000,
+    request_timeout_ms: options.config.requestTimeoutMs ?? 120_000,
+    keep_alive_timeout_ms: options.config.keepAliveTimeoutMs ?? 5_000,
+  };
+  server.headersTimeout = timeouts.headers_timeout_ms;
+  server.requestTimeout = timeouts.request_timeout_ms;
+  server.keepAliveTimeout = timeouts.keep_alive_timeout_ms;
   await listenGateway(server, options.config);
   const url = serverUrl(server, options.config.host);
   let runtimeStatePath: string | undefined;
@@ -114,6 +130,7 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
 
   return {
     url,
+    timeouts,
     ...(runtimeStatePath === undefined ? {} : { runtimeStatePath }),
     close: () => {
       if (closing) {
@@ -131,6 +148,7 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
                   resolve();
                 }
               });
+              server.closeIdleConnections();
             });
           }
         } finally {

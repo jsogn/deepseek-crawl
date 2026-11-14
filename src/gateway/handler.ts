@@ -16,6 +16,7 @@ import {
 } from "../firecrawl/compat.js";
 import { requestFirecrawlUpstream, responseHeaders } from "../firecrawl/upstream.js";
 import { packageVersion } from "../version.js";
+import { AuthFailureLimiter } from "./auth-limiter.js";
 import type { GatewayConfig } from "./config.js";
 import { CrawlJobManager } from "./crawl-jobs.js";
 import {
@@ -23,6 +24,12 @@ import {
   GatewayNotFoundError,
   UnsupportedFallbackFeatureError,
 } from "./errors.js";
+import {
+  type GatewayLogger,
+  type GatewayRequestLog,
+  gatewayRequestId,
+  normalizeGatewayRoute,
+} from "./telemetry.js";
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -46,6 +53,7 @@ export interface GatewayHandlerDependencies {
   sitemapReader?: MapSitemapReader;
   crawlJobs?: CrawlJobManager;
   now?: () => number;
+  logger?: GatewayLogger;
 }
 
 function sendJson(
@@ -299,6 +307,21 @@ export function createGatewayHandler(
   const crawlJobs = dependencies.crawlJobs ?? new CrawlJobManager();
   let firecrawlExhaustedUntil = 0;
   const now = dependencies.now ?? Date.now;
+  const authLimiter = new AuthFailureLimiter({
+    now,
+    ...(dependencies.config.authFailureLimit === undefined
+      ? {}
+      : { failureLimit: dependencies.config.authFailureLimit }),
+    ...(dependencies.config.authFailureWindowMs === undefined
+      ? {}
+      : { windowMs: dependencies.config.authFailureWindowMs }),
+    ...(dependencies.config.authBlockMs === undefined
+      ? {}
+      : { blockMs: dependencies.config.authBlockMs }),
+  });
+  let activeRequests = 0;
+  const maxConcurrentRequests = dependencies.config.maxConcurrentRequests ?? 100;
+  const logger = dependencies.logger;
 
   const resolveDeepSeekClient = (): DeepSeekGateway => {
     if (!deepseekClient) {
@@ -320,7 +343,40 @@ export function createGatewayHandler(
 
   return async (request, response) => {
     const requestUrl = new URL(request.url ?? "/", "http://gateway.local");
+    const requestId = gatewayRequestId(request.headers["x-request-id"]);
+    const normalizedRoute = normalizeGatewayRoute(requestUrl.pathname);
+    response.setHeader("x-request-id", requestId);
+    const startedAt = performance.now();
+    let provider: GatewayRequestLog["provider"] = "none";
+    let fallback = false;
+    let fallbackReason: string | undefined;
+    let logged = false;
+    const logRequest = () => {
+      if (logged || normalizedRoute === "/healthz" || !logger) {
+        return;
+      }
+      logged = true;
+      try {
+        logger({
+          event: "gateway_request",
+          request_id: requestId,
+          method: request.method ?? "GET",
+          route: normalizedRoute,
+          status: response.statusCode,
+          duration_ms: Math.round(performance.now() - startedAt),
+          provider,
+          fallback,
+          ...(fallbackReason === undefined ? {} : { fallback_reason: fallbackReason }),
+        });
+      } catch {
+        // Logging must not affect request handling.
+      }
+    };
+    response.once("finish", logRequest);
+    response.once("close", logRequest);
+
     if (request.method === "GET" && requestUrl.pathname === "/healthz") {
+      provider = "gateway";
       sendJson(
         response,
         200,
@@ -335,25 +391,68 @@ export function createGatewayHandler(
       return;
     }
 
-    if (
-      dependencies.config.gatewayApiKey !== undefined &&
-      !authorized(request, dependencies.config.gatewayApiKey)
-    ) {
+    if (dependencies.config.gatewayApiKey !== undefined) {
+      const authClient = request.socket.remoteAddress ?? "unknown";
+      const limiter = authLimiter.check(authClient);
+      if (!limiter.allowed) {
+        request.resume();
+        sendJson(
+          response,
+          429,
+          {
+            success: false,
+            error: "Too many failed gateway authentication attempts.",
+            code: "too_many_auth_failures",
+          },
+          { "retry-after": String(limiter.retryAfterSeconds ?? 1) },
+        );
+        return;
+      }
+      if (!authorized(request, dependencies.config.gatewayApiKey)) {
+        authLimiter.failure(authClient);
+        request.resume();
+        sendJson(
+          response,
+          401,
+          {
+            success: false,
+            error: "Gateway authentication is required.",
+            code: "unauthorized",
+          },
+          {
+            "www-authenticate": 'Bearer realm="deepseek-crawl-gateway"',
+          },
+        );
+        return;
+      }
+      authLimiter.success(authClient);
+    }
+
+    if (activeRequests >= maxConcurrentRequests) {
       request.resume();
       sendJson(
         response,
-        401,
+        503,
         {
           success: false,
-          error: "Gateway authentication is required.",
-          code: "unauthorized",
+          error: "Gateway concurrency limit reached.",
+          code: "too_many_requests",
         },
-        {
-          "www-authenticate": 'Bearer realm="deepseek-crawl-gateway"',
-        },
+        { "retry-after": "1" },
       );
       return;
     }
+    activeRequests += 1;
+    let released = false;
+    const release = () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      activeRequests -= 1;
+    };
+    response.once("finish", release);
+    response.once("close", release);
 
     let body: Uint8Array | undefined;
     try {
@@ -376,25 +475,33 @@ export function createGatewayHandler(
       route?.kind === "crawl-status" ||
       route?.kind === "crawl-errors" ||
       route?.kind === "crawl-cancel";
+    const hasFirecrawl = hasFirecrawlCredential(request, dependencies.env, dependencies.config);
+    const inCreditCooldown = now() < firecrawlExhaustedUntil;
     const shouldTryDeepSeekFirst =
-      route !== undefined &&
-      (isLocalCrawlRoute ||
-        !hasFirecrawlCredential(request, dependencies.env, dependencies.config) ||
-        now() < firecrawlExhaustedUntil);
+      route !== undefined && (isLocalCrawlRoute || !hasFirecrawl || inCreditCooldown);
 
     if (!shouldTryDeepSeekFirst) {
+      provider = "firecrawl";
       try {
+        const upstreamHeaders = incomingHeaders(
+          request,
+          dependencies.config.gatewayApiKey !== undefined,
+        );
+        upstreamHeaders.set("x-request-id", requestId);
         const upstream = await requestFirecrawlUpstream(
           {
             method: request.method ?? "GET",
             path: request.url ?? "/",
-            headers: incomingHeaders(request, dependencies.config.gatewayApiKey !== undefined),
+            headers: upstreamHeaders,
             ...(body === undefined ? {} : { body }),
           },
           dependencies,
         );
         if (upstream.status === 402 && route !== undefined) {
           firecrawlExhaustedUntil = now() + 60_000;
+          provider = "deepseek";
+          fallback = true;
+          fallbackReason = "firecrawl_credits_exhausted";
           await upstream.body?.cancel().catch(() => undefined);
         } else {
           await sendUpstream(response, upstream);
@@ -408,6 +515,14 @@ export function createGatewayHandler(
         });
         return;
       }
+    } else {
+      provider = "deepseek";
+      fallback = true;
+      fallbackReason = isLocalCrawlRoute
+        ? "local_crawl_job"
+        : !hasFirecrawl
+          ? "no_firecrawl_credential"
+          : "firecrawl_credits_cooldown";
     }
 
     try {

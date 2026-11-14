@@ -463,6 +463,7 @@ async function runGateway(
         deps.gatewayRuntimeDirectory ?? resolveGatewayRuntimeDirectory(deps.env, homedir()),
       mode: command.remote ? "remote" : "local",
     },
+    logger: (event) => deps.stderr.write(`${JSON.stringify(event)}\n`),
   });
   deps.stdout.write(`Firecrawl gateway listening on ${server.url.href}\n`);
   deps.stdout.write(

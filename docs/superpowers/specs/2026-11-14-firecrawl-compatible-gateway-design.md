@@ -274,10 +274,12 @@ src/gateway/
   config.ts
   server.ts
   handler.ts
+  auth-limiter.ts
   errors.ts
   route.ts
   crawl-jobs.ts
   runtime.ts
+  telemetry.ts
 src/firecrawl/
   types.ts
   upstream.ts
@@ -295,6 +297,10 @@ Responsibilities:
 - `src/gateway/crawl-jobs.ts` owns in-memory DeepSeek-backed Crawl jobs.
 - `src/gateway/runtime.ts` owns per-instance runtime state, URL discovery, PID and
   health validation, and stale-state cleanup.
+- `src/gateway/auth-limiter.ts` owns source-scoped authentication failure
+  lockouts.
+- `src/gateway/telemetry.ts` owns request IDs, route normalization, and
+  structured nonsecret request logs.
 
 The gateway may import application and DeepSeek modules. None of those modules
 may import the gateway or Firecrawl modules.
@@ -305,6 +311,11 @@ closing the listener.
 The gateway exposes unauthenticated `GET /healthz` with only status, version,
 PID, and local/remote mode. Runtime files contain the same nonsecret metadata
 and are stored with user-only permissions.
+
+Remote authentication failures are rate-limited in memory. Concurrent provider
+requests are bounded. Request IDs are echoed and forwarded upstream. Structured
+logs contain normalized route, method, status, duration, provider, and fallback
+reason but exclude credentials, bodies, query strings, and full target URLs.
 
 `gateway status --json` lists healthy instances using `started_at` and summarizes
 nonsecret credential readiness for DeepSeek, Firecrawl, and gateway

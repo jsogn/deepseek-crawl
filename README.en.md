@@ -5,8 +5,8 @@
 **CLI-first** web search, page reading, URL mapping, and bounded crawling for AI
 agents, backed by DeepSeek's official Search and Fetch APIs.
 
-Current release: `0.10.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
-[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.10.0)
+Current release: `0.11.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
+[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.11.0)
 
 ```text
 Agent → deepseek-crawl CLI → DeepSeek APIs → files/JSON → Agent
@@ -56,7 +56,7 @@ deepseek-crawl --version
 The version command should print the current release, for example:
 
 ```text
-0.10.0
+0.11.0
 ```
 
 If global npm lacks write permission, do not use `sudo npm install -g`. Use your

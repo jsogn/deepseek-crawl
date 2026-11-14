@@ -20,6 +20,16 @@ describe("published package", () => {
     expect(result.stdout).toContain("Installed deepseek-crawl@0.11.0 from its package tarball.");
     expect(result.stdout).toContain("Installed CLI version: 0.11.0");
     expect(result.stdout).toContain("Installed Skill setup command is available.");
+    expect(result.stdout).toContain(
+      "Verified packaged init with environment credentials and a copied Skill.",
+    );
+    expect(result.stdout).toContain("Verified packaged init conflict handling with --force.");
+    expect(result.stdout).toContain(
+      "Verified packaged init JSON failure without a billable request.",
+    );
+    if (process.platform !== "darwin") {
+      expect(result.stdout).toContain("Verified packaged init with a piped API key.");
+    }
     expect(result.stderr).toBe("");
   }, 120_000);
 });

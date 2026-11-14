@@ -14,14 +14,19 @@ export {
   executeSearch,
 } from "./application/index.js";
 export type { MapOptions, MapSitemapReader } from "./application/map.js";
+export { BatchFetchJobStore, readBatchFetchJobState } from "./batch/job.js";
 export type {
   BatchFetchFailure,
+  BatchFetchJobRequest,
+  BatchFetchJobState,
+  BatchFetchJobStatus,
   BatchFetchOptions,
   BatchFetchOutputResult,
   BatchFetchPage,
   BatchFetchPageIndex,
   BatchFetchPageSummary,
   BatchFetchResult,
+  BatchFetchSettings,
 } from "./batch/types.js";
 export {
   CachedFetchGateway,

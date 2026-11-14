@@ -107,6 +107,41 @@ describe("parseCli", () => {
     });
   });
 
+  it("parses Batch Fetch job commands", () => {
+    expect(
+      parseCli([
+        "fetch",
+        "--input",
+        "urls.json",
+        "--output-dir",
+        "pages",
+        "--job-dir",
+        "job",
+        "--json",
+      ]),
+    ).toEqual({
+      kind: "fetch",
+      input: "urls.json",
+      outputDir: "pages",
+      jobDir: "job",
+      concurrency: 3,
+      delayMs: 250,
+      json: true,
+    });
+    expect(parseCli(["fetch", "status", "job", "--json"])).toEqual({
+      kind: "fetch-status",
+      jobDir: "job",
+      json: true,
+    });
+    expect(parseCli(["fetch", "resume", "job", "--cache-ttl", "60", "--fresh", "--json"])).toEqual({
+      kind: "fetch-resume",
+      jobDir: "job",
+      cacheTtl: 60,
+      fresh: true,
+      json: true,
+    });
+  });
+
   it("parses Map options and defaults", () => {
     expect(
       parseCli(["map", "https://example.com", "--limit", "25", "--output", "urls.json"]),
@@ -459,7 +494,9 @@ describe("parseCli", () => {
     [["search", "x", "--max-content-chars=-1"], /content limit/i],
     [["fetch", "https://example.com", "--max-chars=1000001"], /content limit/i],
     [["fetch", "https://example.com", "--input", "urls.json"], /input|url/i],
+    [["fetch", "https://example.com", "--job-dir", "job"], /job-dir|input/i],
     [["fetch", "--input", "urls.json"], /output-dir/i],
+    [["fetch", "--input", "urls.json", "--job-dir", "job"], /output-dir/i],
     [["fetch", "--input", "urls.json", "--output-dir", "pages", "--output", "out"], /output/i],
     [["fetch", "--retry-failed", "fetch.json", "--output-dir", "retry", "url"], /retry|URL/i],
     [
@@ -468,9 +505,15 @@ describe("parseCli", () => {
     ],
     [["fetch", "--retry-failed", "fetch.json"], /output-dir/i],
     [
+      ["fetch", "--retry-failed", "fetch.json", "--output-dir", "retry", "--job-dir", "job"],
+      /job-dir|retry/i,
+    ],
+    [
       ["fetch", "--retry-failed", "fetch.json", "--output-dir", "retry", "--output", "out"],
       /output/i,
     ],
+    [["fetch", "status"], /job-dir|required/i],
+    [["fetch", "resume"], /job-dir|required/i],
     [["fetch", "https://example.com", "--concurrency", "2"], /concurrency/i],
     [["map", "https://example.com", "--limit", "0"], /limit/i],
     [["map", "https://example.com", "--limit", "1001"], /limit/i],

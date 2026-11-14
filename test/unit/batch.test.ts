@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   executeBatchFetch,
+  executeBatchFetchPrepared,
   executeBatchFetchRetry,
   parseBatchFetchInput,
+  prepareBatchFetch,
 } from "../../src/application/batch.js";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
 
@@ -45,6 +47,109 @@ describe("parseBatchFetchInput", () => {
 });
 
 describe("executeBatchFetch", () => {
+  it("resumes only pending requests and merges completed state", async () => {
+    const prepared = prepareBatchFetch({
+      urls: [
+        { url: "https://example.com/a" },
+        { url: "https://example.com/b" },
+        { url: "https://example.com/c" },
+        { url: "file:///etc/passwd" },
+      ],
+    });
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content: `body:${url}`,
+    }));
+    const written: number[] = [];
+    const recordedFailures: string[] = [];
+
+    const result = await executeBatchFetchPrepared(
+      { search: vi.fn(), fetch },
+      {
+        ...prepared,
+        requests: prepared.requests.filter((request) => request.index === 3),
+      },
+      "resume.json",
+      options,
+      async (page) => {
+        written.push(page.index);
+      },
+      undefined,
+      {
+        uniqueCount: prepared.requests.length,
+        initialPages: [
+          {
+            index: 1,
+            url: "https://example.com/a",
+            title: "A",
+            content_length: 6,
+            content_hash: "a".repeat(64),
+            content_truncated: false,
+          },
+        ],
+        initialFailures: [
+          ...prepared.failures,
+          {
+            index: 2,
+            url: "https://example.com/b",
+            kind: "timeout",
+            message: "timed out",
+          },
+        ],
+        onFailure: async (failure) => {
+          recordedFailures.push(failure.url);
+        },
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith({ url: "https://example.com/c" }, expect.any(AbortSignal));
+    expect(written).toEqual([3]);
+    expect(recordedFailures).toEqual([]);
+    expect(result).toMatchObject({
+      stats: { input: 4, unique: 3, fetched: 2, failed: 2 },
+      pages: [
+        { index: 1, url: "https://example.com/a" },
+        { index: 3, url: "https://example.com/c" },
+      ],
+      failures: [
+        { index: 2, url: "https://example.com/b", kind: "timeout" },
+        { index: 4, url: "file:///etc/passwd", kind: "invalid_url" },
+      ],
+    });
+  });
+
+  it("records a provider failure through the job callback", async () => {
+    const prepared = prepareBatchFetch("https://example.com/fail");
+    const recordedFailures: string[] = [];
+    const result = await executeBatchFetchPrepared(
+      {
+        search: vi.fn(),
+        fetch: vi.fn(async () => Promise.reject(new Error("down"))),
+      },
+      prepared,
+      "job",
+      options,
+      async () => undefined,
+      undefined,
+      {
+        onFailure: async (failure) => {
+          recordedFailures.push(`${failure.index}:${failure.kind}:${failure.message}`);
+        },
+      },
+    );
+
+    expect(recordedFailures).toEqual(["1:fetch:down"]);
+    expect(result.failures).toEqual([
+      {
+        index: 1,
+        url: "https://example.com/fail",
+        kind: "fetch",
+        message: "down",
+      },
+    ]);
+  });
+
   it("rejects more than 10,000 input entries before making requests", async () => {
     const fetch = vi.fn();
     const input = Array.from({ length: 10_001 }, (_, index) => `https://example.com/${index}`);
@@ -91,8 +196,8 @@ describe("executeBatchFetch", () => {
       "https://example.com/a",
     ]);
     expect(result.failures).toEqual([
-      expect.objectContaining({ url: "file:///etc/passwd", kind: "invalid_url" }),
       expect.objectContaining({ url: "https://example.com/fail", kind: "not_found" }),
+      expect.objectContaining({ url: "file:///etc/passwd", kind: "invalid_url" }),
     ]);
     expect(result.stats).toEqual({
       input: 5,

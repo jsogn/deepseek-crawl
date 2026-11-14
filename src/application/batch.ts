@@ -1,8 +1,11 @@
+import { summarizeBatchFetchPage } from "../batch/summary.js";
 import type {
   BatchFetchFailure,
   BatchFetchOptions,
   BatchFetchPage,
   BatchFetchPageSummary,
+  BatchFetchPreparation,
+  BatchFetchPreparedRequest,
   BatchFetchResult,
 } from "../batch/types.js";
 import {
@@ -134,25 +137,8 @@ function errorKind(error: unknown): string {
   return error instanceof DeepSeekError ? error.kind : "fetch";
 }
 
-function summaryFor(page: BatchFetchPage): BatchFetchPageSummary {
-  const summary: BatchFetchPageSummary = {
-    index: page.index,
-    url: page.url,
-    title: page.title,
-    content_length: codepointLength(page.content),
-    content_hash: page.contentHash,
-    content_truncated: page.contentTruncated,
-  };
-  if (page.contentTruncated) {
-    summary.content_original_length = page.contentOriginalLength;
-  }
-  if (page.retryOf) {
-    summary.retry_of = page.retryOf;
-  }
-  if (page.retrievedFrom) {
-    summary.retrieved_from = page.retrievedFrom;
-  }
-  return summary;
+function byIndex(left: { index?: number }, right: { index?: number }): number {
+  return (left.index ?? Number.MAX_SAFE_INTEGER) - (right.index ?? Number.MAX_SAFE_INTEGER);
 }
 
 interface BatchOutcome {
@@ -166,14 +152,24 @@ interface BatchFetchRequest {
   retryOf?: RetryAttempt;
 }
 
+interface PreparedExecutionOptions {
+  uniqueCount?: number;
+  initialPages?: BatchFetchPageSummary[];
+  initialFailures?: BatchFetchFailure[];
+  onFailure?: (failure: BatchFetchFailure) => Promise<void>;
+}
+
 async function executeBatchRequests(
   client: DeepSeekGateway,
   requests: BatchFetchRequest[],
+  initialPages: BatchFetchPageSummary[],
   initialFailures: BatchFetchFailure[],
   inputCount: number,
+  uniqueCount: number,
   source: string,
   settings: BatchFetchOptions,
   onPage: (page: BatchFetchPage) => Promise<void>,
+  onFailure: ((failure: BatchFetchFailure) => Promise<void>) | undefined,
   signal?: AbortSignal,
   retryOf?: RetrySummary,
 ): Promise<BatchFetchResult> {
@@ -210,26 +206,35 @@ async function executeBatchRequests(
           controller.abort(error);
           throw error;
         }
-        return { summary: summaryFor(page), failure: null };
+        return { summary: summarizeBatchFetchPage(page), failure: null };
       } catch (error) {
         if (combinedSignal.aborted) {
           throw error;
         }
+        const failure: BatchFetchFailure = {
+          url: request.url,
+          index: request.index,
+          kind: errorKind(error),
+          message: errorMessage(error),
+          ...(request.retryOf ? { retry_of: request.retryOf } : {}),
+        };
+        if (onFailure) {
+          try {
+            await onFailure(failure);
+          } catch (callbackError) {
+            controller.abort(callbackError);
+            throw callbackError;
+          }
+        }
         return {
           summary: null,
-          failure: {
-            url: request.url,
-            index: request.index,
-            kind: errorKind(error),
-            message: errorMessage(error),
-            ...(request.retryOf ? { retry_of: request.retryOf } : {}),
-          },
+          failure,
         };
       }
     },
   });
 
-  const pages: BatchFetchPageSummary[] = [];
+  const pages: BatchFetchPageSummary[] = [...initialPages];
   for (const outcome of outcomes) {
     if (outcome.summary) {
       pages.push(outcome.summary);
@@ -238,6 +243,7 @@ async function executeBatchRequests(
     }
   }
   pages.sort((left, right) => left.index - right.index);
+  failures.sort(byIndex);
 
   const cacheStats = cacheStatsFor(client);
   return {
@@ -252,7 +258,7 @@ async function executeBatchRequests(
     },
     stats: {
       input: inputCount,
-      unique: requests.length,
+      unique: uniqueCount,
       fetched: pages.length,
       failed: failures.length,
       ...(cacheStats
@@ -277,13 +283,17 @@ export async function executeBatchFetch(
   onPage: (page: BatchFetchPage) => Promise<void>,
   signal?: AbortSignal,
 ): Promise<BatchFetchResult> {
-  const settings = normalizeOptions(options);
+  const prepared = prepareBatchFetch(input);
+  return executeBatchFetchPrepared(client, prepared, source, options, onPage, signal);
+}
+
+export function prepareBatchFetch(input: string | unknown): BatchFetchPreparation {
   const entries = parseBatchFetchInput(input);
   if (entries.length > MAX_BATCH_URLS) {
     throw new Error(`Batch Fetch supports at most ${MAX_BATCH_URLS.toLocaleString("en-US")} URLs.`);
   }
   const failures: BatchFetchFailure[] = [];
-  const requests: BatchFetchRequest[] = [];
+  const requests: BatchFetchPreparedRequest[] = [];
   const seen = new Set<string>();
   for (const [index, entry] of entries.entries()) {
     const normalized = normalizeHttpUrl(entry);
@@ -301,14 +311,36 @@ export async function executeBatchFetch(
       requests.push({ url: normalized.href, index: requests.length + 1 });
     }
   }
+  return { input: entries.length, requests, failures };
+}
+
+export async function executeBatchFetchPrepared(
+  client: DeepSeekGateway,
+  prepared: BatchFetchPreparation,
+  source: string,
+  options: BatchFetchOptions,
+  onPage: (page: BatchFetchPage) => Promise<void>,
+  signal?: AbortSignal,
+  resume: PreparedExecutionOptions = {},
+): Promise<BatchFetchResult> {
+  const settings = normalizeOptions(options);
+  const initialFailures = [...prepared.failures, ...(resume.initialFailures ?? [])].filter(
+    (failure, index, failures) =>
+      failures.findIndex(
+        (candidate) => candidate.index === failure.index && candidate.url === failure.url,
+      ) === index,
+  );
   return executeBatchRequests(
     client,
-    requests,
-    failures,
-    entries.length,
+    prepared.requests,
+    resume.initialPages ?? [],
+    initialFailures,
+    prepared.input,
+    resume.uniqueCount ?? prepared.requests.length,
     source,
     settings,
     onPage,
+    resume.onFailure,
     signal,
   );
 }
@@ -362,10 +394,13 @@ export async function executeBatchFetchRetry(
     client,
     requests,
     [],
+    [],
     report.failures.length,
+    requests.length,
     `${reportSource} [retry-failed]`,
     settings,
     onPage,
+    undefined,
     signal,
     retryOf,
   );

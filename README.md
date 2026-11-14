@@ -221,6 +221,21 @@ deepseek-crawl fetch \
 `--input` 支持 Map JSON、URL 数组、包含 `url` 字段的对象数组和逐行 URL 文本。
 完整输入格式、缓存和失败重试见下方工作流指南。
 
+大规模 Batch 可启用本地 Job 检查点：
+
+```bash
+deepseek-crawl fetch \
+  --input .deepseek-crawl/map-docs.json \
+  --output-dir .deepseek-crawl/pages-docs \
+  --job-dir .deepseek-crawl/jobs/docs
+
+deepseek-crawl fetch status .deepseek-crawl/jobs/docs --json
+deepseek-crawl fetch resume .deepseek-crawl/jobs/docs
+```
+
+续跑只请求尚未完成的 URL，不重复读取已成功页面。任务完成后才原子发布最终
+`fetch.json` 和页面目录。
+
 ### Map
 
 ```bash

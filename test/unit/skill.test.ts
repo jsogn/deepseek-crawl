@@ -11,6 +11,7 @@ describe("deepseek-crawl skill", () => {
     expect(skill).toContain("deepseek-crawl init");
     expect(skill).toContain("deepseek-crawl doctor --json");
     expect(skill).toContain("deepseek-crawl balance --json");
+    expect(skill).toContain("fetch status <job-dir> --json");
     expect(skill).toContain("references/cli-reference.md");
     expect(skill).toMatch(/MCP is optional/i);
     await expect(

@@ -162,12 +162,20 @@ Defaults:
 ```text
 deepseek-crawl fetch --input <path|->
   --output-dir <dir>
+  [--job-dir <dir>]
   [--concurrency <1..5>]
   [--delay-ms <0..5000>]
   [--max-chars <0..1000000>]
   [--cache-ttl <1..31536000>]
   [--fresh]
   [--json]
+
+deepseek-crawl fetch resume <job-dir>
+  [--cache-ttl <1..31536000>]
+  [--fresh]
+  [--json]
+
+deepseek-crawl fetch status <job-dir> [--json]
 
 deepseek-crawl fetch --retry-failed <fetch.json>
   --output-dir <dir>
@@ -184,6 +192,13 @@ Defaults:
 - concurrency: `3`
 - delay: `250 ms`
 - max chars: `0`
+
+With `--job-dir`, the initial command requires an absent job directory and an
+absent final output directory. The job persists normalized URLs, settings,
+successful page summaries, and failures after each item. `resume` runs only
+pending URLs and publishes the final output atomically after all pending URLs are
+attempted. Recorded failures are not retried by `resume`; use Batch Retry after
+the final report exists. `status` does not require credentials.
 
 Input formats:
 

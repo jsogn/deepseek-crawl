@@ -3,7 +3,12 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { executeBatchFetch, executeBatchFetchRetry } from "../application/batch.js";
+import {
+  executeBatchFetch,
+  executeBatchFetchPrepared,
+  executeBatchFetchRetry,
+  prepareBatchFetch,
+} from "../application/batch.js";
 import {
   executeBalance,
   executeCrawl,
@@ -14,6 +19,12 @@ import {
   executeSearch,
 } from "../application/index.js";
 import type { MapSitemapReader } from "../application/map.js";
+import { BatchFetchJobStore, readBatchFetchJobState } from "../batch/job.js";
+import type {
+  BatchFetchJobState,
+  BatchFetchPreparation,
+  BatchFetchResult,
+} from "../batch/types.js";
 import { CachedFetchGateway } from "../cache/cached-gateway.js";
 import { FileFetchCache } from "../cache/file-cache.js";
 import { resolveCacheDirectory } from "../cache/paths.js";
@@ -83,6 +94,9 @@ Usage:
   deepseek-crawl search <query> [options]
   deepseek-crawl fetch <url> [options]
   deepseek-crawl fetch --retry-failed <fetch.json> --output-dir <dir> [options]
+  deepseek-crawl fetch --input <path|-> --output-dir <dir> --job-dir <dir> [options]
+  deepseek-crawl fetch resume <job-dir> [options]
+  deepseek-crawl fetch status <job-dir> [--json]
   deepseek-crawl map <url> [options]
   deepseek-crawl crawl <url> [options]
   deepseek-crawl crawl <url> --job-dir <dir> -o <dir> [options]
@@ -123,6 +137,12 @@ Options:
 
        deepseek-crawl fetch --retry-failed <fetch.json> --output-dir <dir> [options]
 
+       deepseek-crawl fetch --input <path|-> --output-dir <dir> --job-dir <dir> [options]
+
+       deepseek-crawl fetch resume <job-dir> [--cache-ttl <seconds>] [--fresh] [--json]
+
+       deepseek-crawl fetch status <job-dir> [--json]
+
 Options:
   --max-chars <0..1000000>
   --cache-ttl <1..31536000>
@@ -130,10 +150,14 @@ Options:
   --input <path|->
   --retry-failed <fetch.json>
   --output-dir <dir>
+  --job-dir <dir>
   --concurrency <1..5>
   --delay-ms <0..5000>
   --json
   --output, -o <path>
+
+With --job-dir, Batch Fetch checkpoints every successful or failed URL. Resume with
+"fetch resume <job-dir>" and inspect with "fetch status <job-dir>".
 `,
   map: `Usage: deepseek-crawl map <url> [options]
 
@@ -374,12 +398,9 @@ async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps
   );
 
   if (command.input) {
-    const source = command.input === "-" ? "stdin" : command.input;
-    let inputText: string;
-    if (command.input === "-") {
-      inputText = await readStdinBounded(deps.stdin, "Batch Fetch input");
-    } else {
-      inputText = await readTextFileBounded(command.input, "Batch Fetch input");
+    const { inputText, source } = await readBatchFetchInput(command.input, deps);
+    if (command.jobDir) {
+      return runNewBatchFetchJob(command, client, inputText, source, deps);
     }
 
     const writer = await createBatchFetchOutputWriter(command.outputDir ?? "");
@@ -427,6 +448,215 @@ async function runFetch(command: Extract<ParsedCommand, { kind: "fetch" }>, deps
     command.json ? `${JSON.stringify(output, null, 2)}\n` : `${formatFetchHuman(output)}\n`,
   );
   return 0;
+}
+
+async function readBatchFetchInput(
+  input: string,
+  deps: CliDependencies,
+): Promise<{ inputText: string; source: string }> {
+  if (input === "-") {
+    return {
+      inputText: await readStdinBounded(deps.stdin, "Batch Fetch input"),
+      source: "stdin",
+    };
+  }
+  return {
+    inputText: await readTextFileBounded(input, "Batch Fetch input"),
+    source: input,
+  };
+}
+
+function batchFetchExitCode(result: BatchFetchResult): number {
+  return result.stats.fetched === 0 && result.stats.failed > 0 ? 1 : 0;
+}
+
+async function runBatchFetchJob(
+  store: BatchFetchJobStore,
+  prepared: BatchFetchPreparation,
+  client: DeepSeekGateway,
+  deps: CliDependencies,
+  json: boolean,
+): Promise<number> {
+  const state = store.state;
+  try {
+    const result = await executeBatchFetchPrepared(
+      client,
+      prepared,
+      state.source,
+      {
+        concurrency: state.settings.concurrency,
+        delayMs: state.settings.delay_ms,
+        maxChars: state.settings.max_chars,
+      },
+      async (page) => {
+        await store.recordPage(page);
+      },
+      deps.signal,
+      {
+        uniqueCount: state.requests.length,
+        initialPages: state.pages,
+        initialFailures: state.failures,
+        onFailure: async (failure) => {
+          await store.recordFailure(failure);
+        },
+      },
+    );
+    await store.markCompleted();
+    const output = await store.finalize();
+    deps.stdout.write(
+      json
+        ? `${JSON.stringify(output, null, 2)}\n`
+        : `${formatBatchFetchHuman(output, state.output_dir)}\n`,
+    );
+    return batchFetchExitCode(result);
+  } catch (error) {
+    if (store.state.status !== "completed") {
+      await store.markInterrupted(error).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+async function runNewBatchFetchJob(
+  command: Extract<ParsedCommand, { kind: "fetch" }>,
+  client: DeepSeekGateway,
+  inputText: string,
+  source: string,
+  deps: CliDependencies,
+): Promise<number> {
+  const prepared = prepareBatchFetch(inputText);
+  const outputDirectory = resolve(command.outputDir ?? "");
+  await assertPathMissing(outputDirectory);
+  const timestamp = new Date().toISOString();
+  const state: BatchFetchJobState = {
+    version: 1,
+    status: "running",
+    source,
+    output_dir: outputDirectory,
+    started_at: timestamp,
+    updated_at: timestamp,
+    input: prepared.input,
+    settings: {
+      concurrency: command.concurrency ?? 3,
+      delay_ms: command.delayMs ?? 250,
+      max_chars: command.maxChars ?? 0,
+    },
+    requests: prepared.requests,
+    pages: [],
+    failures: prepared.failures,
+  };
+  const store = await BatchFetchJobStore.create(command.jobDir ?? "", state);
+  try {
+    return await runBatchFetchJob(
+      store,
+      {
+        input: prepared.input,
+        requests: prepared.requests,
+        failures: [],
+      },
+      client,
+      deps,
+      command.json,
+    );
+  } finally {
+    await store.release().catch(() => undefined);
+  }
+}
+
+function pendingBatchFetchRequests(state: BatchFetchJobState) {
+  const completed = new Set([
+    ...state.pages.map((page) => page.index),
+    ...state.failures.flatMap((failure) => (failure.index === undefined ? [] : [failure.index])),
+  ]);
+  return state.requests.filter((request) => !completed.has(request.index));
+}
+
+function batchFetchJobStatus(jobDir: string, state: BatchFetchJobState) {
+  const pending = pendingBatchFetchRequests(state);
+  return {
+    directory: jobDir,
+    status: state.status,
+    source: state.source,
+    output_dir: state.output_dir,
+    started_at: state.started_at,
+    updated_at: state.updated_at,
+    input: state.input,
+    requests: state.requests.length,
+    pages: state.pages.length,
+    failures: state.failures.length,
+    pending: pending.length,
+    ...(state.last_error ? { last_error: state.last_error } : {}),
+  };
+}
+
+function formatBatchFetchJobStatus(status: ReturnType<typeof batchFetchJobStatus>): string {
+  return [
+    `Job: ${status.directory}`,
+    `Status: ${status.status}`,
+    `Source: ${status.source}`,
+    `Output: ${status.output_dir}`,
+    `URLs: ${status.input} input, ${status.requests} unique`,
+    `Fetched: ${status.pages}`,
+    `Failed: ${status.failures}`,
+    `Pending: ${status.pending}`,
+    `Updated: ${status.updated_at}`,
+    ...(status.last_error ? [`Last error: ${status.last_error}`] : []),
+  ].join("\n");
+}
+
+async function runBatchFetchJobStatus(
+  command: Extract<ParsedCommand, { kind: "fetch-status" }>,
+  deps: CliDependencies,
+) {
+  const state = await readBatchFetchJobState(command.jobDir);
+  const status = batchFetchJobStatus(command.jobDir, state);
+  deps.stdout.write(
+    command.json
+      ? `${JSON.stringify(status, null, 2)}\n`
+      : `${formatBatchFetchJobStatus(status)}\n`,
+  );
+  return 0;
+}
+
+async function runBatchFetchJobResume(
+  command: Extract<ParsedCommand, { kind: "fetch-resume" }>,
+  deps: CliDependencies,
+) {
+  const store = await BatchFetchJobStore.open(command.jobDir);
+  try {
+    const state = store.state;
+    if (state.status === "completed") {
+      await assertPathMissing(state.output_dir);
+      const output = await store.finalize();
+      deps.stdout.write(
+        command.json
+          ? `${JSON.stringify(output, null, 2)}\n`
+          : `${formatBatchFetchHuman(output, state.output_dir)}\n`,
+      );
+      return output.stats.fetched === 0 && output.stats.failed > 0 ? 1 : 0;
+    }
+    await assertPathMissing(state.output_dir);
+    const config = loadConfig(deps.env, deps.credentialStore);
+    const client = withFetchCache(
+      deps.fetchClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl }),
+      command.cacheTtl,
+      command.fresh,
+      deps,
+    );
+    return await runBatchFetchJob(
+      store,
+      {
+        input: state.input,
+        requests: pendingBatchFetchRequests(state),
+        failures: [],
+      },
+      client,
+      deps,
+      command.json,
+    );
+  } finally {
+    await store.release().catch(() => undefined);
+  }
 }
 
 async function runFetchRetry(
@@ -1225,6 +1455,10 @@ export async function runCli(
         return await runSearch(command, deps);
       case "fetch":
         return await runFetch(command, deps);
+      case "fetch-status":
+        return await runBatchFetchJobStatus(command, deps);
+      case "fetch-resume":
+        return await runBatchFetchJobResume(command, deps);
       case "fetch-retry":
         return await runFetchRetry(command, deps);
       case "map":

@@ -8,6 +8,23 @@ export interface BatchFetchOptions {
   now?: () => Date;
 }
 
+export interface BatchFetchPreparedRequest {
+  index: number;
+  url: string;
+}
+
+export interface BatchFetchPreparation {
+  input: number;
+  requests: BatchFetchPreparedRequest[];
+  failures: BatchFetchFailure[];
+}
+
+export interface BatchFetchSettings {
+  concurrency: number;
+  delay_ms: number;
+  max_chars: number;
+}
+
 export interface BatchFetchPage {
   index: number;
   url: string;
@@ -49,11 +66,7 @@ export interface BatchFetchResult extends Record<string, unknown> {
   source: string;
   started_at: string;
   finished_at: string;
-  settings: {
-    concurrency: number;
-    delay_ms: number;
-    max_chars: number;
-  };
+  settings: BatchFetchSettings;
   stats: {
     input: number;
     unique: number;
@@ -70,4 +83,26 @@ export interface BatchFetchResult extends Record<string, unknown> {
 
 export interface BatchFetchOutputResult extends BatchFetchResult {
   pages: BatchFetchPageIndex[];
+}
+
+export type BatchFetchJobStatus = "running" | "interrupted" | "completed";
+
+export interface BatchFetchJobRequest {
+  index: number;
+  url: string;
+}
+
+export interface BatchFetchJobState {
+  version: 1;
+  status: BatchFetchJobStatus;
+  source: string;
+  output_dir: string;
+  started_at: string;
+  updated_at: string;
+  input: number;
+  settings: BatchFetchSettings;
+  requests: BatchFetchJobRequest[];
+  pages: BatchFetchPageSummary[];
+  failures: BatchFetchFailure[];
+  last_error?: string;
 }

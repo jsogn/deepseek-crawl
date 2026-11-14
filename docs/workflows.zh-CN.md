@@ -61,6 +61,29 @@ deepseek-crawl fetch \
 
 全部页面失败时仍会发布诊断报告，但命令退出码为 `1`。
 
+### 可恢复 Batch Job
+
+大型 Batch 使用本地 Job 目录保存每一页检查点：
+
+```bash
+deepseek-crawl fetch \
+  --input .deepseek-crawl/map-docs.json \
+  --output-dir .deepseek-crawl/pages-docs \
+  --job-dir .deepseek-crawl/jobs/docs
+
+deepseek-crawl fetch status .deepseek-crawl/jobs/docs --json
+deepseek-crawl fetch resume .deepseek-crawl/jobs/docs
+```
+
+初始命令要求 Job 目录和最终输出目录都不存在。Job 保存原始 source、输出目录、
+并发、延迟、最大字符数和规范化 URL。成功页面和失败项逐项 checkpoint。
+
+中断后恢复只请求既不在成功页中、也不在失败项中的 URL。已经失败的页面不会在
+`resume` 中自动重试；完成 final output 后使用 Batch Retry 重试这些页面。
+
+`fetch status` 不读取 API Key，可安全用于查看进度。`fetch resume` 使用创建 Job
+时固定的范围与设置；可额外指定运行时 `--cache-ttl` / `--fresh`。
+
 ### 缓存
 
 缓存默认关闭。重复研究相同页面时显式设置 TTL：

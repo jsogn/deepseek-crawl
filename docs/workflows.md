@@ -40,6 +40,30 @@ The output directory contains `fetch.json` and stable `pages/*.md` paths. Partia
 failure preserves successful pages. If every page fails, the diagnostic report is
 still published and the command exits with code `1`.
 
+### Resumable Batch jobs
+
+Use a local job directory for a large batch:
+
+```bash
+deepseek-crawl fetch \
+  --input .deepseek-crawl/map-docs.json \
+  --output-dir .deepseek-crawl/pages-docs \
+  --job-dir .deepseek-crawl/jobs/docs
+
+deepseek-crawl fetch status .deepseek-crawl/jobs/docs --json
+deepseek-crawl fetch resume .deepseek-crawl/jobs/docs
+```
+
+The initial command requires both the job directory and final output directory to
+be absent. The job stores its source, output directory, concurrency, delay,
+maximum character limit, and normalized URLs. Successful pages and failures are
+checkpointed individually.
+
+Resume requests only URLs that are neither successful pages nor recorded failures.
+It does not automatically retry previously failed pages; use Batch Retry after the
+final report is published. `fetch status` reads no API key. `fetch resume` reuses
+the job's fixed settings and may accept runtime `--cache-ttl` / `--fresh`.
+
 ### Discover with Map, then read
 
 ```bash

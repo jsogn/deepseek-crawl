@@ -26,6 +26,7 @@ export type ParsedCommand =
       url?: string;
       input?: string;
       outputDir?: string;
+      jobDir?: string;
       maxChars?: number;
       concurrency?: number;
       delayMs?: number;
@@ -41,6 +42,14 @@ export type ParsedCommand =
       maxChars?: number;
       concurrency: number;
       delayMs: number;
+      cacheTtl?: number;
+      fresh?: boolean;
+      json: boolean;
+    }
+  | { kind: "fetch-status"; jobDir: string; json: boolean }
+  | {
+      kind: "fetch-resume";
+      jobDir: string;
       cacheTtl?: number;
       fresh?: boolean;
       json: boolean;
@@ -263,6 +272,47 @@ export function parseCli(argv: string[]): ParsedCommand {
         return result;
       }
       case "fetch": {
+        if (args[0] === "status") {
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: true,
+            strict: true,
+            options: {
+              json: { type: "boolean" },
+              help: { type: "boolean", short: "h" },
+            },
+          });
+          if (parsed.values.help) {
+            return { kind: "help", command: "fetch" };
+          }
+          return {
+            kind: "fetch-status",
+            jobDir: exactPositional(parsed.positionals, "job-dir"),
+            json: parsed.values.json ?? false,
+          };
+        }
+        if (args[0] === "resume") {
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: true,
+            strict: true,
+            options: {
+              "cache-ttl": { type: "string" },
+              fresh: { type: "boolean" },
+              json: { type: "boolean" },
+              help: { type: "boolean", short: "h" },
+            },
+          });
+          if (parsed.values.help) {
+            return { kind: "help", command: "fetch" };
+          }
+          return {
+            kind: "fetch-resume",
+            jobDir: exactPositional(parsed.positionals, "job-dir"),
+            ...parseCacheOptions(parsed.values["cache-ttl"], parsed.values.fresh),
+            json: parsed.values.json ?? false,
+          };
+        }
         const parsed = parseArgs({
           args,
           allowPositionals: true,
@@ -274,6 +324,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             input: { type: "string" },
             "retry-failed": { type: "string" },
             "output-dir": { type: "string" },
+            "job-dir": { type: "string" },
             concurrency: { type: "string" },
             "delay-ms": { type: "string" },
             json: { type: "boolean" },
@@ -288,7 +339,14 @@ export function parseCli(argv: string[]): ParsedCommand {
         const input = parsed.values.input?.trim();
         const outputDir = parsed.values["output-dir"]?.trim();
         const retryFailed = parsed.values["retry-failed"]?.trim();
+        const jobDir = parsed.values["job-dir"]?.trim();
+        if (parsed.values["job-dir"] !== undefined && !jobDir) {
+          throw new CliUsageError("job-dir requires a directory path.");
+        }
         if (retryFailed !== undefined) {
+          if (jobDir) {
+            throw new CliUsageError("--job-dir cannot be used with --retry-failed.");
+          }
           if (!retryFailed) {
             throw new CliUsageError("retry-failed requires a report path.");
           }
@@ -337,6 +395,9 @@ export function parseCli(argv: string[]): ParsedCommand {
           }
           result.input = input;
           result.outputDir = outputDir;
+          if (jobDir) {
+            result.jobDir = jobDir;
+          }
           result.concurrency =
             parsed.values.concurrency === undefined
               ? 3
@@ -346,6 +407,9 @@ export function parseCli(argv: string[]): ParsedCommand {
               ? 250
               : parseInteger(parsed.values["delay-ms"], "delay-ms", 0, 5000);
         } else {
+          if (jobDir) {
+            throw new CliUsageError("--job-dir requires --input.");
+          }
           result.url = exactPositional(parsed.positionals, "url");
           if (outputDir !== undefined) {
             throw new CliUsageError("--output-dir requires --input.");

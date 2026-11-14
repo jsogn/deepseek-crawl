@@ -150,6 +150,10 @@ deepseek-crawl fetch \
   --json
 ```
 
+For a large or interruption-prone batch, add `--job-dir`. Inspect progress with
+`fetch status <job-dir> --json` and continue unfinished URLs with
+`fetch resume <job-dir> --json`.
+
 The input can be Map JSON, a JSON URL array, objects containing `url`, or a
 newline-separated list. Use `--input -` for stdin. Read `fetch.json` first and
 then only the page files relevant to the task.

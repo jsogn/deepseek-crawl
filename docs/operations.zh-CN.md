@@ -49,6 +49,12 @@ MCP 不写本地文件。结构化正文有总长度上限，页面正文始终�
 deepseek-crawl cache clear --json
 ```
 
+## 本地 Batch Job
+
+`fetch --job-dir` 会在本机私有目录保存可恢复状态和页面文件。目录权限为 `0700`，
+状态和页面文件权限为 `0600`。Job 包含源 URL 和已读取页面正文；不再需要时应删除
+该目录。Batch Job 的 status 和 resume 只在 CLI 提供，MCP 不写本地 Job 状态。
+
 ## 硬限制
 
 | 范围                     | 硬限制                 |

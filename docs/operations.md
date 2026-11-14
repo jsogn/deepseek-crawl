@@ -48,6 +48,14 @@ Directories use mode `0700`; files use `0600`.
 deepseek-crawl cache clear --json
 ```
 
+## Local Batch jobs
+
+`fetch --job-dir` keeps resumable state and page files in a local private
+directory. Directories use mode `0700`; state and page files use `0600`. The job
+contains source URLs and fetched page bodies, so remove it when the run is no
+longer needed. Batch Job status and resume are CLI-only; MCP does not write local
+job state.
+
 ## Hard limits
 
 | Area                         | Hard limit                    |

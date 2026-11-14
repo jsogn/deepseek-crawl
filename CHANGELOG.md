@@ -6,6 +6,8 @@
 
 - Add `deepseek-crawl balance [--json] [-o <path>]` for non-billable
   account-balance and availability checks.
+- Add resumable Batch Fetch jobs with `--job-dir`, `fetch status`, and
+  `fetch resume`.
 
 ### Changed
 

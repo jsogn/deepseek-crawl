@@ -236,6 +236,21 @@ deepseek-crawl fetch \
 `--input` accepts Map JSON, URL arrays, object arrays with `url`, and line-based
 URL text. See the workflow guide for every input form, caching, and retry.
 
+Enable local checkpoints for a large batch:
+
+```bash
+deepseek-crawl fetch \
+  --input .deepseek-crawl/map-docs.json \
+  --output-dir .deepseek-crawl/pages-docs \
+  --job-dir .deepseek-crawl/jobs/docs
+
+deepseek-crawl fetch status .deepseek-crawl/jobs/docs --json
+deepseek-crawl fetch resume .deepseek-crawl/jobs/docs
+```
+
+Resume requests only unfinished URLs and does not reread successful pages. The
+final `fetch.json` and page directory are published atomically after completion.
+
 ### Map
 
 ```bash

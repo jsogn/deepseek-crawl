@@ -307,6 +307,15 @@ try {
   if (!setupHelp.includes("--agent")) {
     throw new Error("Installed Skill setup command is missing expected help output.");
   }
+  const fetchHelp = (await runOk(process.execPath, [binary, "fetch", "--help"], consumerRoot))
+    .stdout;
+  if (
+    !fetchHelp.includes("--job-dir <dir>") ||
+    !fetchHelp.includes("fetch resume <job-dir>") ||
+    !fetchHelp.includes("fetch status <job-dir>")
+  ) {
+    throw new Error("Installed Batch Fetch job commands are missing expected help output.");
+  }
 
   probe = await startProbeServer();
   const initChecks = await verifyPackagedInit(binary, consumerRoot, temporaryRoot, probe);
@@ -314,6 +323,7 @@ try {
   console.log(`Installed ${packageJson.name}@${packageJson.version} from its package tarball.`);
   console.log(`Installed CLI version: ${version}`);
   console.log("Installed Skill setup command is available.");
+  console.log("Installed Batch Fetch job commands are available.");
   console.log("Verified packaged init with environment credentials and a copied Skill.");
   console.log("Verified packaged init conflict handling with --force.");
   console.log("Verified packaged init JSON failure without a billable request.");

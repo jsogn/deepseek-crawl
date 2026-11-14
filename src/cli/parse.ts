@@ -155,6 +155,10 @@ export type ParsedCommand =
       port?: number;
       providerMode?: GatewayProviderMode;
       creditsCooldownSeconds?: number;
+      maxConcurrentRequests?: number;
+      maxProviderRequests?: number;
+      maxCrawlJobs?: number;
+      maxRetainedCrawlJobs?: number;
     }
   | { kind: "gateway-status"; json: boolean }
   | { kind: "gateway-url"; port?: number }
@@ -1040,6 +1044,10 @@ export function parseCli(argv: string[]): ParsedCommand {
             port: { type: "string" },
             "provider-mode": { type: "string" },
             "credits-cooldown": { type: "string" },
+            "max-concurrent-requests": { type: "string" },
+            "max-provider-requests": { type: "string" },
+            "max-crawl-jobs": { type: "string" },
+            "max-retained-crawl-jobs": { type: "string" },
             remote: { type: "boolean" },
             "allow-remote": { type: "boolean" },
             help: { type: "boolean", short: "h" },
@@ -1061,6 +1069,37 @@ export function parseCli(argv: string[]): ParsedCommand {
           parsed.values["credits-cooldown"] === undefined
             ? undefined
             : parseInteger(parsed.values["credits-cooldown"], "credits cooldown", 0, 3_600);
+        const maxConcurrentRequests =
+          parsed.values["max-concurrent-requests"] === undefined
+            ? undefined
+            : parseInteger(
+                parsed.values["max-concurrent-requests"],
+                "max concurrent requests",
+                1,
+                1_000,
+              );
+        const maxProviderRequests =
+          parsed.values["max-provider-requests"] === undefined
+            ? undefined
+            : parseInteger(
+                parsed.values["max-provider-requests"],
+                "max provider requests",
+                1,
+                1_000,
+              );
+        const maxCrawlJobs =
+          parsed.values["max-crawl-jobs"] === undefined
+            ? undefined
+            : parseInteger(parsed.values["max-crawl-jobs"], "max crawl jobs", 1, 1_000);
+        const maxRetainedCrawlJobs =
+          parsed.values["max-retained-crawl-jobs"] === undefined
+            ? undefined
+            : parseInteger(
+                parsed.values["max-retained-crawl-jobs"],
+                "max retained crawl jobs",
+                1,
+                1_000,
+              );
         return {
           kind: "gateway",
           remote: parsed.values.remote ?? parsed.values["allow-remote"] ?? false,
@@ -1068,6 +1107,10 @@ export function parseCli(argv: string[]): ParsedCommand {
           ...(port === undefined ? {} : { port }),
           ...(providerMode === undefined ? {} : { providerMode }),
           ...(creditsCooldownSeconds === undefined ? {} : { creditsCooldownSeconds }),
+          ...(maxConcurrentRequests === undefined ? {} : { maxConcurrentRequests }),
+          ...(maxProviderRequests === undefined ? {} : { maxProviderRequests }),
+          ...(maxCrawlJobs === undefined ? {} : { maxCrawlJobs }),
+          ...(maxRetainedCrawlJobs === undefined ? {} : { maxRetainedCrawlJobs }),
         };
       }
       default:

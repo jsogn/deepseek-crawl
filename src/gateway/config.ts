@@ -12,6 +12,11 @@ const DEFAULT_REQUEST_BODY_LIMIT = 8 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_CREDITS_COOLDOWN_MS = 60_000;
 const MAX_CREDITS_COOLDOWN_MS = 3_600_000;
+const DEFAULT_MAX_CONCURRENT_REQUESTS = 100;
+const DEFAULT_MAX_CONCURRENT_PROVIDER_REQUESTS = 100;
+const DEFAULT_MAX_ACTIVE_CRAWL_JOBS = 10;
+const DEFAULT_MAX_RETAINED_CRAWL_JOBS = 100;
+const MAX_CAPACITY = 1_000;
 export type GatewayProviderMode = "firecrawl-first" | "deepseek-first" | "no-fallback";
 const DEFAULT_PROVIDER_MODE: GatewayProviderMode = "firecrawl-first";
 const PROVIDER_MODES = new Set<GatewayProviderMode>([
@@ -33,6 +38,9 @@ export interface GatewayConfig {
   authFailureWindowMs?: number;
   authBlockMs?: number;
   maxConcurrentRequests?: number;
+  maxConcurrentProviderRequests?: number;
+  maxActiveCrawlJobs?: number;
+  maxRetainedCrawlJobs?: number;
   headersTimeoutMs?: number;
   requestTimeoutMs?: number;
   keepAliveTimeoutMs?: number;
@@ -48,6 +56,10 @@ export interface GatewayConfigInput {
   allowRemote?: boolean;
   providerMode?: GatewayProviderMode;
   creditsCooldownMs?: number;
+  maxConcurrentRequests?: number;
+  maxConcurrentProviderRequests?: number;
+  maxActiveCrawlJobs?: number;
+  maxRetainedCrawlJobs?: number;
   env?: NodeJS.ProcessEnv;
   credentialStores?: Partial<Record<CredentialName, CredentialStore>>;
 }
@@ -157,6 +169,22 @@ function validateCreditsCooldown(value: number): number {
   return value;
 }
 
+function parseCapacity(value: string | number | undefined, name: string, fallback: number): number {
+  if (value === undefined || (typeof value === "string" && value.trim() === "")) {
+    return fallback;
+  }
+  const parsed =
+    typeof value === "number"
+      ? value
+      : /^\d+$/.test(value.trim())
+        ? Number(value.trim())
+        : Number.NaN;
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > MAX_CAPACITY) {
+    throw new Error(`${name} must be an integer from 1 to ${MAX_CAPACITY}.`);
+  }
+  return parsed;
+}
+
 const CREDENTIAL_ENV: Record<CredentialName, string> = {
   deepseek: "DEEPSEEK_API_KEY",
   firecrawl: "FIRECRAWL_API_KEY",
@@ -187,6 +215,26 @@ export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConf
     options.creditsCooldownMs ??
       parseCreditsCooldown(env.DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS),
   );
+  const maxConcurrentRequests = parseCapacity(
+    options.maxConcurrentRequests ?? env.DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS,
+    "Gateway maximum concurrent requests",
+    DEFAULT_MAX_CONCURRENT_REQUESTS,
+  );
+  const maxConcurrentProviderRequests = parseCapacity(
+    options.maxConcurrentProviderRequests ?? env.DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS,
+    "Gateway maximum concurrent provider requests",
+    DEFAULT_MAX_CONCURRENT_PROVIDER_REQUESTS,
+  );
+  const maxActiveCrawlJobs = parseCapacity(
+    options.maxActiveCrawlJobs ?? env.DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS,
+    "Gateway maximum active Crawl jobs",
+    DEFAULT_MAX_ACTIVE_CRAWL_JOBS,
+  );
+  const maxRetainedCrawlJobs = parseCapacity(
+    options.maxRetainedCrawlJobs ?? env.DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS,
+    "Gateway maximum retained Crawl jobs",
+    DEFAULT_MAX_RETAINED_CRAWL_JOBS,
+  );
   const remote = options.remote ?? options.allowRemote ?? false;
   const host = validateHost(options.host?.trim() || (remote ? "0.0.0.0" : DEFAULT_HOST), remote);
   const gatewayApiKey = resolveCredential(env, "gateway", options.credentialStores);
@@ -202,6 +250,10 @@ export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConf
     autoPort: !remote && options.port === undefined,
     providerMode,
     creditsCooldownMs,
+    maxConcurrentRequests,
+    maxConcurrentProviderRequests,
+    maxActiveCrawlJobs,
+    maxRetainedCrawlJobs,
     ...(gatewayApiKey === undefined ? {} : { gatewayApiKey }),
     ...(firecrawlApiKey === undefined ? {} : { firecrawlApiKey }),
     upstreamUrl: parseUpstreamUrl(env.FIRECRAWL_UPSTREAM_URL),

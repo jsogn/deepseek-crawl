@@ -70,6 +70,10 @@ store，只显示掩码提示。
 范围为 0–3600 秒，默认 60 秒。设为 0 时每次请求都会重新尝试 Firecrawl；其他
 Provider 模式忽略该配置。
 
+Gateway 分别限制 HTTP 请求、在途 Provider 请求、运行中 Crawl jobs 和保留 jobs。
+即使客户端不再轮询，过期 Crawl jobs 也会被周期清理。Provider 限制同时作用于前台
+fallback 请求和后台 Crawl jobs。
+
 远程模式要求已配置 `gateway` Token；客户端把它作为 Firecrawl SDK `apiKey`。
 网关认证后剥离这个 Authorization，并使用自己的 Firecrawl Provider 凭据调上游。
 不要把网关 Token 配置成 Firecrawl upstream Key。上游响应采用流式传输；网关关闭
@@ -134,30 +138,33 @@ deepseek-crawl cache clear --json
 
 ## 硬限制
 
-| 范围                     | 硬限制                 |
-| ------------------------ | ---------------------- |
-| DeepSeek Fetch 响应体    | 8 MiB                  |
-| CLI Batch 输入文件/报告  | 8 MiB                  |
-| Batch Fetch URL 数       | 10,000                 |
-| Fetch Cache TTL          | 31,536,000 秒          |
-| Fetch Cache 单文件       | 16 MiB                 |
-| Crawl 单页内容           | 1,000,000 Unicode 字符 |
-| CLI Crawl URL 发现       | 10,000                 |
-| MCP Crawl URL 发现       | 2,000                  |
-| MCP Crawl 结构化正文总计 | 100,000 Unicode 字符   |
-| Sitemap 文档数           | 10                     |
-| Map 候选 URL             | 10,000                 |
-| Sitemap 响应体           | 5 MiB                  |
-| Sitemap 请求超时         | 15 秒                  |
-| Sitemap 重定向           | 3 次，仅同源           |
-| Gateway 入站请求体       | 8 MiB                  |
-| Gateway 上游请求超时     | 120 秒                 |
-| DeepSeek Crawl job 保留  | 24 小时，仅当前进程    |
-| Gateway 并发请求         | 100                    |
-| 认证失败窗口             | 60 秒内 5 次           |
-| 认证失败锁定             | 60 秒，按来源地址      |
-| Gateway Header timeout   | 15 秒                  |
-| Gateway Keep-alive       | 5 秒                   |
+| 范围                      | 硬限制                 |
+| ------------------------- | ---------------------- |
+| DeepSeek Fetch 响应体     | 8 MiB                  |
+| CLI Batch 输入文件/报告   | 8 MiB                  |
+| Batch Fetch URL 数        | 10,000                 |
+| Fetch Cache TTL           | 31,536,000 秒          |
+| Fetch Cache 单文件        | 16 MiB                 |
+| Crawl 单页内容            | 1,000,000 Unicode 字符 |
+| CLI Crawl URL 发现        | 10,000                 |
+| MCP Crawl URL 发现        | 2,000                  |
+| MCP Crawl 结构化正文总计  | 100,000 Unicode 字符   |
+| Sitemap 文档数            | 10                     |
+| Map 候选 URL              | 10,000                 |
+| Sitemap 响应体            | 5 MiB                  |
+| Sitemap 请求超时          | 15 秒                  |
+| Sitemap 重定向            | 3 次，仅同源           |
+| Gateway 入站请求体        | 8 MiB                  |
+| Gateway 上游请求超时      | 120 秒                 |
+| DeepSeek Crawl job 保留   | 24 小时，仅当前进程    |
+| Gateway HTTP 请求         | 100，可配置            |
+| Gateway Provider 请求     | 100，可配置            |
+| 运行中 Gateway Crawl jobs | 10，可配置             |
+| 保留 Gateway Crawl jobs   | 100，可配置            |
+| 认证失败窗口              | 60 秒内 5 次           |
+| 认证失败锁定              | 60 秒，按来源地址      |
+| Gateway Header timeout    | 15 秒                  |
+| Gateway Keep-alive        | 5 秒                   |
 
 CLI Crawl 最多 100 页，MCP Crawl 最多 20 页。两者的 depth 和 concurrency 硬上限
 分别为 5。
@@ -197,6 +204,10 @@ CLI Map 和 Crawl 直接请求目标站点的 Sitemap，仅接受公网 HTTP(S) 
 | `FIRECRAWL_UPSTREAM_URL`                    | `https://api.firecrawl.dev` | Gateway 的 Firecrawl 上游 |
 | `DEEPSEEK_GATEWAY_PROVIDER_MODE`            | `firecrawl-first`           | Provider 选择策略         |
 | `DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` | `60`                        | Firecrawl 402 熔断秒数    |
+| `DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS`  | `100`                       | 并发 HTTP 请求            |
+| `DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS`    | `100`                       | 并发 Provider 请求        |
+| `DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS`           | `10`                        | 运行中 Crawl jobs         |
+| `DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS`  | `100`                       | 保留 Crawl jobs           |
 | `GATEWAY_API_KEY`                           | 无                          | 远程网关 Bearer Token     |
 
 环境变量优先于本地 credential store。非 loopback 的 DeepSeek base URL 必须使用

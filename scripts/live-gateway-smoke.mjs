@@ -265,6 +265,10 @@ async function startSmokeGateway({ firecrawlApiKey, deepseekClient }) {
     env,
     providerMode: "firecrawl-first",
     creditsCooldownMs: 60_000,
+    maxConcurrentRequests: 100,
+    maxConcurrentProviderRequests: 100,
+    maxActiveCrawlJobs: 10,
+    maxRetainedCrawlJobs: 100,
     credentialStores: {
       firecrawl: staticStore(firecrawlApiKey),
       gateway: staticStore(GATEWAY_TOKEN),

@@ -142,6 +142,8 @@ Defaults:
 - Upstream: `FIRECRAWL_UPSTREAM_URL` or `https://api.firecrawl.dev`
 - Provider mode: `firecrawl-first`, `deepseek-first`, or `no-fallback`
 - Firecrawl 402 cooldown: 60 seconds by default, configurable from 0–3600
+- Capacity: 100 HTTP requests, 100 Provider requests, 10 active Crawl jobs, and
+  100 retained Crawl jobs by default
 
 Use `auth set firecrawl` to make Firecrawl-first local mode available; otherwise
 common routes use DeepSeek. Remote mode requires `auth set gateway`, or the
@@ -191,8 +193,8 @@ for `deepseek`, `firecrawl`, and `gateway_auth`. Instance JSON uses
 `started_at`, `provider_mode`, and `credits_cooldown_seconds`.
 
 `GET /healthz` is unauthenticated and returns only status, version, PID,
-local/remote mode, provider mode, and credits cooldown. It never returns
-provider keys or user content.
+local/remote mode, provider mode, credits cooldown, and capacity limits. It never
+returns provider keys or user content.
 
 Every response includes `x-request-id`. CLI request logs are one JSON object on
 stderr with normalized route, status, duration, provider, and fallback reason.

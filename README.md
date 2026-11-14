@@ -331,6 +331,21 @@ Firecrawl，Firecrawl `402` 会原样返回而不会切换 Provider。
 `firecrawl-first` 收到 402 后默认冷却 60 秒；`--credits-cooldown 0` 表示每次都
 重新尝试 Firecrawl。
 
+Gateway 默认限制 HTTP 并发 `100`、Provider 并发 `100`、运行中 Crawl jobs `10`，
+并最多保留 `100` 个 Crawl jobs。高级部署可调整：
+
+```bash
+deepseek-crawl gateway \
+  --max-concurrent-requests 200 \
+  --max-provider-requests 50 \
+  --max-crawl-jobs 5 \
+  --max-retained-crawl-jobs 50
+```
+
+对应环境变量为 `DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS`、
+`DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS`、`DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS` 和
+`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS`，可用于容器和 systemd。
+
 其他终端或脚本可以发现当前实际地址：
 
 ```bash

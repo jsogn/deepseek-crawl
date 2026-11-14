@@ -8,6 +8,10 @@ gateway_token="smoke-gateway-token"
 deepseek_token="smoke-deepseek-token"
 provider_mode="no-fallback"
 credits_cooldown_seconds="0"
+max_concurrent_requests="7"
+max_provider_requests="5"
+max_crawl_jobs="3"
+max_retained_crawl_jobs="9"
 platform="${DOCKER_SMOKE_PLATFORM:-}"
 
 cleanup() {
@@ -34,6 +38,10 @@ run_args=(
   --env "DEEPSEEK_API_KEY=$deepseek_token"
   --env "DEEPSEEK_GATEWAY_PROVIDER_MODE=$provider_mode"
   --env "DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS=$credits_cooldown_seconds"
+  --env "DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS=$max_concurrent_requests"
+  --env "DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS=$max_provider_requests"
+  --env "DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS=$max_crawl_jobs"
+  --env "DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS=$max_retained_crawl_jobs"
 )
 if [[ -n "$platform" ]]; then
   run_args+=(--platform "$platform")
@@ -114,6 +122,22 @@ case "$health_response" in
     exit 1
     ;;
 esac
+case "$health_response" in
+  *'"max_concurrent_requests":7'*'"max_concurrent_provider_requests":5'*) ;;
+  *)
+    printf 'Docker gateway did not expose the configured HTTP/provider capacity: %s\n' \
+      "$health_response" >&2
+    exit 1
+    ;;
+esac
+case "$health_response" in
+  *'"max_active_crawl_jobs":3'*'"max_retained_crawl_jobs":9'*) ;;
+  *)
+    printf 'Docker gateway did not expose the configured Crawl capacity: %s\n' \
+      "$health_response" >&2
+    exit 1
+    ;;
+esac
 
 container_uid="$(docker exec "$container_name" id -u)"
 if [[ "$container_uid" == "0" ]]; then
@@ -135,5 +159,7 @@ if [[ "$exit_code" != "0" ]]; then
   exit 1
 fi
 
-printf 'Docker gateway smoke passed: health=%s, uid=%s, provider=%s, cooldown=%ss, exit=%s\n' \
-  "$container_health" "$container_uid" "$provider_mode" "$credits_cooldown_seconds" "$exit_code"
+printf 'Docker gateway smoke passed: health=%s, uid=%s, provider=%s, cooldown=%ss, http=%s, provider_requests=%s, crawl_jobs=%s, retained_jobs=%s, exit=%s\n' \
+  "$container_health" "$container_uid" "$provider_mode" "$credits_cooldown_seconds" \
+  "$max_concurrent_requests" "$max_provider_requests" "$max_crawl_jobs" \
+  "$max_retained_crawl_jobs" "$exit_code"

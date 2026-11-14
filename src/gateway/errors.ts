@@ -22,3 +22,22 @@ export class GatewayInvalidRequestError extends Error {
     this.name = "GatewayInvalidRequestError";
   }
 }
+
+export class GatewayCapacityError extends Error {
+  readonly code: string;
+  readonly statusCode: number;
+  readonly retryAfterSeconds?: number;
+
+  constructor(
+    message: string,
+    options: { code: string; statusCode: number; retryAfterSeconds?: number },
+  ) {
+    super(message);
+    this.name = "GatewayCapacityError";
+    this.code = options.code;
+    this.statusCode = options.statusCode;
+    if (options.retryAfterSeconds !== undefined) {
+      this.retryAfterSeconds = options.retryAfterSeconds;
+    }
+  }
+}

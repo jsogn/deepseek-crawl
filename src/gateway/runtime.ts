@@ -15,6 +15,10 @@ export interface GatewayRuntimeState {
   startedAt: string;
   providerMode?: GatewayProviderMode;
   creditsCooldownSeconds?: number;
+  maxConcurrentRequests?: number;
+  maxConcurrentProviderRequests?: number;
+  maxActiveCrawlJobs?: number;
+  maxRetainedCrawlJobs?: number;
 }
 
 interface ListedRuntimeState {
@@ -114,6 +118,14 @@ function processExists(pid: number): boolean {
 interface GatewayRuntimeHealth {
   providerMode?: GatewayProviderMode;
   creditsCooldownSeconds?: number;
+  maxConcurrentRequests?: number;
+  maxConcurrentProviderRequests?: number;
+  maxActiveCrawlJobs?: number;
+  maxRetainedCrawlJobs?: number;
+}
+
+function capacity(value: unknown): number | undefined {
+  return Number.isSafeInteger(value) && (value as number) >= 1 ? (value as number) : undefined;
 }
 
 async function healthy(
@@ -136,6 +148,10 @@ async function healthy(
       pid?: unknown;
       provider_mode?: unknown;
       credits_cooldown_seconds?: unknown;
+      max_concurrent_requests?: unknown;
+      max_concurrent_provider_requests?: unknown;
+      max_active_crawl_jobs?: unknown;
+      max_retained_crawl_jobs?: unknown;
     };
     if (body.status !== "ok" || body.pid !== state.pid) {
       return undefined;
@@ -150,9 +166,17 @@ async function healthy(
       (body.credits_cooldown_seconds as number) >= 0
         ? (body.credits_cooldown_seconds as number)
         : undefined;
+    const maxConcurrentRequests = capacity(body.max_concurrent_requests);
+    const maxConcurrentProviderRequests = capacity(body.max_concurrent_provider_requests);
+    const maxActiveCrawlJobs = capacity(body.max_active_crawl_jobs);
+    const maxRetainedCrawlJobs = capacity(body.max_retained_crawl_jobs);
     return {
       ...(providerMode === undefined ? {} : { providerMode }),
       ...(creditsCooldownSeconds === undefined ? {} : { creditsCooldownSeconds }),
+      ...(maxConcurrentRequests === undefined ? {} : { maxConcurrentRequests }),
+      ...(maxConcurrentProviderRequests === undefined ? {} : { maxConcurrentProviderRequests }),
+      ...(maxActiveCrawlJobs === undefined ? {} : { maxActiveCrawlJobs }),
+      ...(maxRetainedCrawlJobs === undefined ? {} : { maxRetainedCrawlJobs }),
     };
   } catch {
     return undefined;

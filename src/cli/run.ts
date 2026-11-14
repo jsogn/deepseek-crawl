@@ -328,6 +328,14 @@ Options:
                       firecrawl-first (default), deepseek-first, or no-fallback
   --credits-cooldown <seconds>
                       Firecrawl 402 cooldown, 0–3600 (default: 60)
+  --max-concurrent-requests <1..1000>
+                      Concurrent HTTP requests (default: 100)
+  --max-provider-requests <1..1000>
+                      Concurrent Provider requests (default: 100)
+  --max-crawl-jobs <1..1000>
+                      Concurrent Crawl jobs (default: 10)
+  --max-retained-crawl-jobs <1..1000>
+                      Retained Crawl jobs (default: 100)
   --remote            Enable authenticated remote mode (fixed port 8787)
 
 Subcommands:
@@ -476,6 +484,16 @@ async function runGateway(
     ...(command.creditsCooldownSeconds === undefined
       ? {}
       : { creditsCooldownMs: command.creditsCooldownSeconds * 1000 }),
+    ...(command.maxConcurrentRequests === undefined
+      ? {}
+      : { maxConcurrentRequests: command.maxConcurrentRequests }),
+    ...(command.maxProviderRequests === undefined
+      ? {}
+      : { maxConcurrentProviderRequests: command.maxProviderRequests }),
+    ...(command.maxCrawlJobs === undefined ? {} : { maxActiveCrawlJobs: command.maxCrawlJobs }),
+    ...(command.maxRetainedCrawlJobs === undefined
+      ? {}
+      : { maxRetainedCrawlJobs: command.maxRetainedCrawlJobs }),
     env: deps.env,
     ...(deps.credentialStores === undefined ? {} : { credentialStores: deps.credentialStores }),
   });
@@ -499,6 +517,9 @@ async function runGateway(
   deps.stdout.write(`Provider mode: ${config.providerMode}\n`);
   deps.stdout.write(
     `Firecrawl credits cooldown: ${(config.creditsCooldownMs ?? 60_000) / 1000} seconds\n`,
+  );
+  deps.stdout.write(
+    `Capacity: http=${config.maxConcurrentRequests ?? 100}, provider=${config.maxConcurrentProviderRequests ?? 100}, crawl_jobs=${config.maxActiveCrawlJobs ?? 10}, retained_jobs=${config.maxRetainedCrawlJobs ?? 100}\n`,
   );
   deps.stdout.write(
     command.remote
@@ -567,6 +588,10 @@ async function runGatewayStatus(
       started_at: state.startedAt,
       provider_mode: state.providerMode ?? null,
       credits_cooldown_seconds: state.creditsCooldownSeconds ?? null,
+      max_concurrent_requests: state.maxConcurrentRequests ?? null,
+      max_concurrent_provider_requests: state.maxConcurrentProviderRequests ?? null,
+      max_active_crawl_jobs: state.maxActiveCrawlJobs ?? null,
+      max_retained_crawl_jobs: state.maxRetainedCrawlJobs ?? null,
     })),
     credentials,
   };
@@ -578,7 +603,7 @@ async function runGatewayStatus(
         ? ["Gateway is not running."]
         : running.map(
             (state) =>
-              `${state.mode}  ${state.url}  pid=${state.pid}  provider=${state.providerMode ?? "unknown"}  cooldown=${state.creditsCooldownSeconds === undefined ? "unknown" : `${state.creditsCooldownSeconds}s`}  started=${state.startedAt}`,
+              `${state.mode}  ${state.url}  pid=${state.pid}  provider=${state.providerMode ?? "unknown"}  cooldown=${state.creditsCooldownSeconds === undefined ? "unknown" : `${state.creditsCooldownSeconds}s`}  http=${state.maxConcurrentRequests ?? "unknown"}  provider_requests=${state.maxConcurrentProviderRequests ?? "unknown"}  crawl_jobs=${state.maxActiveCrawlJobs ?? "unknown"}  retained_jobs=${state.maxRetainedCrawlJobs ?? "unknown"}  started=${state.startedAt}`,
           );
     lines.push(
       "",

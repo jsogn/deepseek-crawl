@@ -69,6 +69,11 @@ policy:
 exhausted-credit cooldown from 0–3600 seconds. The default is 60 seconds; zero
 retries Firecrawl on every request. Other provider modes ignore this value.
 
+Gateway capacity is independently bounded for HTTP requests, in-flight Provider
+requests, running Crawl jobs, and retained jobs. Expired Crawl jobs are swept
+periodically even when clients never poll them again. Provider limits apply to
+both foreground fallback requests and background Crawl jobs.
+
 Remote mode requires a stored `gateway` token. Clients supply it as the Firecrawl
 SDK `apiKey`; the gateway strips it and uses its own Firecrawl provider
 credential upstream. Never configure the gateway token as the Firecrawl upstream
@@ -167,7 +172,10 @@ job state.
 | Gateway inbound request body  | 8 MiB                         |
 | Gateway upstream timeout      | 120 seconds                   |
 | DeepSeek Crawl job retention  | 24 hours, process-local       |
-| Gateway concurrent requests   | 100                           |
+| Gateway HTTP requests         | 100, configurable             |
+| Gateway Provider requests     | 100, configurable             |
+| Active Gateway Crawl jobs     | 10, configurable              |
+| Retained Gateway Crawl jobs   | 100, configurable             |
 | Authentication failure window | 5 failures in 60 seconds      |
 | Authentication lockout        | 60 seconds, by source address |
 | Gateway header timeout        | 15 seconds                    |
@@ -214,6 +222,10 @@ CLI Map and Crawl request Sitemaps directly and accept only public HTTP(S) targe
 | `FIRECRAWL_UPSTREAM_URL`                    | `https://api.firecrawl.dev` | Gateway Firecrawl upstream        |
 | `DEEPSEEK_GATEWAY_PROVIDER_MODE`            | `firecrawl-first`           | Provider selection policy         |
 | `DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` | `60`                        | Firecrawl 402 cooldown seconds    |
+| `DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS`  | `100`                       | Concurrent HTTP requests          |
+| `DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS`    | `100`                       | Concurrent Provider requests      |
+| `DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS`           | `10`                        | Running Crawl jobs                |
+| `DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS`  | `100`                       | Retained Crawl jobs               |
 | `GATEWAY_API_KEY`                           | none                        | Remote gateway Bearer token       |
 
 Environment variables override the local credential store. Non-loopback DeepSeek

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add configurable HTTP, Provider, active Crawl job, and retained Crawl job
+  capacity limits plus periodic expired-job cleanup.
+
 ## 0.13.0 - 2026-11-14
 
 ### Added

@@ -105,6 +105,14 @@ describe("package documentation", () => {
       "DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS",
       "--provider-mode",
       "--credits-cooldown",
+      "DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS",
+      "DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS",
+      "DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS",
+      "DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS",
+      "--max-concurrent-requests",
+      "--max-provider-requests",
+      "--max-crawl-jobs",
+      "--max-retained-crawl-jobs",
       "GATEWAY_API_KEY",
       "Firecrawl-compatible",
       "gateway url",
@@ -195,6 +203,10 @@ describe("deployment assets", () => {
       "FIRECRAWL_API_KEY",
       "DEEPSEEK_GATEWAY_PROVIDER_MODE",
       "DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS",
+      "DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS",
+      "DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS",
+      "DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS",
+      "DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS",
     ]) {
       expect(environmentExample).toContain(`${key}=`);
     }
@@ -205,6 +217,10 @@ describe("deployment assets", () => {
     expect(smokeScript).toContain('docker exec "$container_name" id -u');
     expect(smokeScript).toContain('provider_mode="no-fallback"');
     expect(smokeScript).toContain('credits_cooldown_seconds="0"');
+    expect(smokeScript).toContain('max_concurrent_requests="7"');
+    expect(smokeScript).toContain('max_provider_requests="5"');
+    expect(smokeScript).toContain('max_crawl_jobs="3"');
+    expect(smokeScript).toContain('max_retained_crawl_jobs="9"');
     expect(smokeScript).toContain('"provider_mode":"no-fallback"');
     expect(smokeScript).toContain('"credits_cooldown_seconds":0');
   });

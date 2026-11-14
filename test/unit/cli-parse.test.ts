@@ -412,6 +412,26 @@ describe("parseCli", () => {
       remote: false,
       creditsCooldownSeconds: 120,
     });
+    expect(
+      parseCli([
+        "gateway",
+        "--max-concurrent-requests",
+        "200",
+        "--max-provider-requests",
+        "50",
+        "--max-crawl-jobs",
+        "5",
+        "--max-retained-crawl-jobs",
+        "20",
+      ]),
+    ).toEqual({
+      kind: "gateway",
+      remote: false,
+      maxConcurrentRequests: 200,
+      maxProviderRequests: 50,
+      maxCrawlJobs: 5,
+      maxRetainedCrawlJobs: 20,
+    });
     expect(parseCli(["gateway", "status", "--json"])).toEqual({
       kind: "gateway-status",
       json: true,
@@ -646,6 +666,10 @@ describe("parseCli", () => {
     [["gateway", "--provider-mode", "sometimes"], /provider mode/i],
     [["gateway", "--credits-cooldown", "-1"], /cooldown/i],
     [["gateway", "--credits-cooldown", "3601"], /cooldown/i],
+    [["gateway", "--max-concurrent-requests", "0"], /concurrent/i],
+    [["gateway", "--max-provider-requests", "1001"], /provider/i],
+    [["gateway", "--max-crawl-jobs", "0"], /crawl/i],
+    [["gateway", "--max-retained-crawl-jobs", "1001"], /retained/i],
     [["gateway", "url", "--port", "0"], /port/i],
     [["gateway", "status", "--port", "8787"], /unknown option/i],
     [["gateway", "url", "extra"], /argument/i],

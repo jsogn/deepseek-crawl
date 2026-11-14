@@ -20,10 +20,12 @@ import { AuthFailureLimiter } from "./auth-limiter.js";
 import type { GatewayConfig } from "./config.js";
 import { CrawlJobManager } from "./crawl-jobs.js";
 import {
+  GatewayCapacityError,
   GatewayInvalidRequestError,
   GatewayNotFoundError,
   UnsupportedFallbackFeatureError,
 } from "./errors.js";
+import { LimitedDeepSeekGateway, ProviderRequestLimiter } from "./provider-request-limiter.js";
 import {
   type GatewayLogger,
   type GatewayRequestLog,
@@ -209,6 +211,21 @@ async function executeFallback(
 }
 
 function fallbackError(response: ServerResponse, error: unknown): void {
+  if (error instanceof GatewayCapacityError) {
+    sendJson(
+      response,
+      error.statusCode,
+      {
+        success: false,
+        error: error.message,
+        code: error.code,
+      },
+      error.retryAfterSeconds === undefined
+        ? {}
+        : { "retry-after": String(error.retryAfterSeconds) },
+    );
+    return;
+  }
   if (error instanceof UnsupportedFallbackFeatureError) {
     sendJson(response, 400, {
       success: false,
@@ -303,6 +320,7 @@ export function createGatewayHandler(
   dependencies: GatewayHandlerDependencies,
 ): (request: IncomingMessage, response: ServerResponse) => Promise<void> {
   let deepseekClient = dependencies.deepseekClient;
+  let limitedDeepSeekClient: DeepSeekGateway | undefined;
   let sitemapReader = dependencies.sitemapReader;
   const crawlJobs = dependencies.crawlJobs ?? new CrawlJobManager();
   let firecrawlExhaustedUntil = 0;
@@ -322,9 +340,12 @@ export function createGatewayHandler(
   });
   let activeRequests = 0;
   const maxConcurrentRequests = dependencies.config.maxConcurrentRequests ?? 100;
+  const providerLimiter = new ProviderRequestLimiter(
+    dependencies.config.maxConcurrentProviderRequests ?? 100,
+  );
   const logger = dependencies.logger;
 
-  const resolveDeepSeekClient = (): DeepSeekGateway => {
+  const resolveRawDeepSeekClient = (): DeepSeekGateway => {
     if (!deepseekClient) {
       deepseekClient = new DeepSeekClient({
         ...loadConfig(dependencies.env),
@@ -332,6 +353,13 @@ export function createGatewayHandler(
       });
     }
     return deepseekClient;
+  };
+
+  const resolveDeepSeekClient = (): DeepSeekGateway => {
+    if (!limitedDeepSeekClient) {
+      limitedDeepSeekClient = new LimitedDeepSeekGateway(resolveRawDeepSeekClient, providerLimiter);
+    }
+    return limitedDeepSeekClient;
   };
 
   const resolveSitemapReader = async (): Promise<MapSitemapReader> => {
@@ -388,6 +416,11 @@ export function createGatewayHandler(
           mode: dependencies.config.allowRemote ? "remote" : "local",
           provider_mode: dependencies.config.providerMode ?? "firecrawl-first",
           credits_cooldown_seconds: (dependencies.config.creditsCooldownMs ?? 60_000) / 1000,
+          max_concurrent_requests: dependencies.config.maxConcurrentRequests ?? 100,
+          max_concurrent_provider_requests:
+            dependencies.config.maxConcurrentProviderRequests ?? 100,
+          max_active_crawl_jobs: dependencies.config.maxActiveCrawlJobs ?? 10,
+          max_retained_crawl_jobs: dependencies.config.maxRetainedCrawlJobs ?? 100,
         },
         { "cache-control": "no-store" },
       );

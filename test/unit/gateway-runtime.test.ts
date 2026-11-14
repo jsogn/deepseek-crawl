@@ -42,6 +42,10 @@ describe("gateway runtime state", () => {
         pid: process.pid,
         provider_mode: "no-fallback",
         credits_cooldown_seconds: 120,
+        max_concurrent_requests: 200,
+        max_concurrent_provider_requests: 50,
+        max_active_crawl_jobs: 5,
+        max_retained_crawl_jobs: 20,
       }),
     );
 
@@ -51,6 +55,10 @@ describe("gateway runtime state", () => {
           ...active,
           providerMode: "no-fallback",
           creditsCooldownSeconds: 120,
+          maxConcurrentRequests: 200,
+          maxConcurrentProviderRequests: 50,
+          maxActiveCrawlJobs: 5,
+          maxRetainedCrawlJobs: 20,
         },
       ],
       stale: 1,

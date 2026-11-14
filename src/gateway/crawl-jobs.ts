@@ -4,9 +4,11 @@ import { executeCrawl } from "../application/crawl.js";
 import type { MapSitemapReader } from "../application/map.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { errorMessage } from "../error-message.js";
-import { UnsupportedFallbackFeatureError } from "./errors.js";
+import { GatewayCapacityError, UnsupportedFallbackFeatureError } from "./errors.js";
 
 const DEFAULT_JOB_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_MAX_RUNNING_JOBS = 10;
+const DEFAULT_MAX_RETAINED_JOBS = 100;
 
 const crawlInputSchema = z
   .object({
@@ -45,6 +47,8 @@ export interface CrawlJobManagerOptions {
   now?: () => Date;
   idFactory?: () => string;
   jobTtlMs?: number;
+  maxRunningJobs?: number;
+  maxRetainedJobs?: number;
 }
 
 export interface FirecrawlCrawlDocument {
@@ -131,11 +135,15 @@ export class CrawlJobManager {
   readonly #now: () => Date;
   readonly #idFactory: () => string;
   readonly #jobTtlMs: number;
+  readonly #maxRunningJobs: number;
+  readonly #maxRetainedJobs: number;
 
   constructor(options: CrawlJobManagerOptions = {}) {
     this.#now = options.now ?? (() => new Date());
     this.#idFactory = options.idFactory ?? (() => `dsc_${randomUUID()}`);
     this.#jobTtlMs = options.jobTtlMs ?? DEFAULT_JOB_TTL_MS;
+    this.#maxRunningJobs = options.maxRunningJobs ?? DEFAULT_MAX_RUNNING_JOBS;
+    this.#maxRetainedJobs = options.maxRetainedJobs ?? DEFAULT_MAX_RETAINED_JOBS;
   }
 
   create(
@@ -160,6 +168,21 @@ export class CrawlJobManager {
       );
     }
     const url = requestUrl(parsed.url);
+    this.sweepExpired();
+    const runningJobs = [...this.#jobs.values()].filter((job) => job.status === "scraping").length;
+    if (runningJobs >= this.#maxRunningJobs) {
+      throw new GatewayCapacityError("Gateway Crawl job limit reached.", {
+        code: "crawl_job_limit_reached",
+        statusCode: 429,
+        retryAfterSeconds: 1,
+      });
+    }
+    if (this.#jobs.size >= this.#maxRetainedJobs) {
+      throw new GatewayCapacityError("Gateway Crawl job storage is full.", {
+        code: "crawl_job_capacity_reached",
+        statusCode: 503,
+      });
+    }
     const generatedId = this.#idFactory();
     const id = generatedId.startsWith("dsc_") ? generatedId : `dsc_${generatedId}`;
     const controller = new AbortController();
@@ -243,6 +266,19 @@ export class CrawlJobManager {
 
   waitForIdle(id: string): Promise<void> {
     return this.#job(id).done;
+  }
+
+  sweepExpired(): number {
+    const now = this.#now().getTime();
+    let removed = 0;
+    for (const [id, job] of this.#jobs) {
+      if (now >= job.expiresAt) {
+        job.controller.abort(new Error("Crawl job expired."));
+        this.#jobs.delete(id);
+        removed += 1;
+      }
+    }
+    return removed;
   }
 
   status(id: string): FirecrawlCrawlStatus | undefined {

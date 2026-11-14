@@ -132,6 +132,10 @@ describe("gateway discovery commands", () => {
         pid: process.pid,
         provider_mode: "deepseek-first",
         credits_cooldown_seconds: 0,
+        max_concurrent_requests: 200,
+        max_concurrent_provider_requests: 50,
+        max_active_crawl_jobs: 5,
+        max_retained_crawl_jobs: 20,
       })) as typeof fetch;
 
     expect(await runCli(["gateway", "status", "--json"], environment.deps)).toBe(0);
@@ -140,6 +144,10 @@ describe("gateway discovery commands", () => {
         {
           provider_mode: "deepseek-first",
           credits_cooldown_seconds: 0,
+          max_concurrent_requests: 200,
+          max_concurrent_provider_requests: 50,
+          max_active_crawl_jobs: 5,
+          max_retained_crawl_jobs: 20,
         },
       ],
     });
@@ -149,6 +157,10 @@ describe("gateway discovery commands", () => {
     expect(await runCli(["gateway", "status"], human.deps)).toBe(0);
     expect(human.stdout.value()).toContain("provider=deepseek-first");
     expect(human.stdout.value()).toContain("cooldown=0s");
+    expect(human.stdout.value()).toContain("http=200");
+    expect(human.stdout.value()).toContain("provider_requests=50");
+    expect(human.stdout.value()).toContain("crawl_jobs=5");
+    expect(human.stdout.value()).toContain("retained_jobs=20");
   });
 
   it("prints provider readiness in human-readable status when stopped", async () => {

@@ -20,6 +20,10 @@ describe("loadGatewayConfig", () => {
       autoPort: true,
       providerMode: "firecrawl-first",
       creditsCooldownMs: 60_000,
+      maxConcurrentRequests: 100,
+      maxConcurrentProviderRequests: 100,
+      maxActiveCrawlJobs: 10,
+      maxRetainedCrawlJobs: 100,
       upstreamUrl: new URL("https://api.firecrawl.dev/"),
       requestBodyLimit: 8 * 1024 * 1024,
       timeoutMs: 120_000,
@@ -148,6 +152,39 @@ describe("loadGatewayConfig", () => {
         credentialStores: {},
       }),
     ).toThrow(/cooldown/i);
+  });
+
+  it("configures gateway concurrency capacity", () => {
+    expect(
+      loadGatewayConfig({
+        env: {
+          DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS: "200",
+          DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS: "50",
+          DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS: "5",
+          DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS: "20",
+        },
+        credentialStores: {},
+      }),
+    ).toMatchObject({
+      maxConcurrentRequests: 200,
+      maxConcurrentProviderRequests: 50,
+      maxActiveCrawlJobs: 5,
+      maxRetainedCrawlJobs: 20,
+    });
+  });
+
+  it.each([
+    "DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS",
+    "DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS",
+    "DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS",
+    "DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS",
+  ])("rejects invalid capacity %s", (name) => {
+    expect(() =>
+      loadGatewayConfig({
+        env: { [name]: "0" },
+        credentialStores: {},
+      }),
+    ).toThrow(/capacity|concurrent|job/i);
   });
 
   it("does not use FIRECRAWL_API_URL as the gateway upstream", () => {

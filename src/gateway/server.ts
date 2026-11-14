@@ -89,7 +89,12 @@ function serverUrl(server: Server, fallbackHost: string): URL {
 }
 
 export async function startGatewayServer(options: GatewayServerOptions): Promise<GatewayServer> {
-  const crawlJobs = options.crawlJobs ?? new CrawlJobManager();
+  const crawlJobs =
+    options.crawlJobs ??
+    new CrawlJobManager({
+      maxRunningJobs: options.config.maxActiveCrawlJobs ?? 10,
+      maxRetainedJobs: options.config.maxRetainedCrawlJobs ?? 100,
+    });
   const server = createServer(
     createGatewayHandler({
       config: options.config,
@@ -129,6 +134,8 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
     );
   });
   await listenGateway(server, options.config);
+  const jobSweeper = setInterval(() => crawlJobs.sweepExpired(), 60_000);
+  jobSweeper.unref();
   const url = serverUrl(server, options.config.host);
   let runtimeStatePath: string | undefined;
   if (options.runtimeState) {
@@ -141,6 +148,7 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
         startedAt: (options.runtimeState.now ?? (() => new Date()))().toISOString(),
       });
     } catch (error) {
+      clearInterval(jobSweeper);
       await new Promise<void>((resolve) => server.close(() => resolve()));
       throw error;
     }
@@ -171,6 +179,7 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
             });
           }
         } finally {
+          clearInterval(jobSweeper);
           if (runtimeStatePath) {
             await removeGatewayRuntimeState(runtimeStatePath);
           }

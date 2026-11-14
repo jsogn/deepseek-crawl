@@ -36,6 +36,10 @@ describe("Firecrawl-compatible gateway", () => {
         gatewayApiKey: "gateway-token",
         providerMode: "deepseek-first",
         creditsCooldownMs: 0,
+        maxConcurrentRequests: 7,
+        maxConcurrentProviderRequests: 5,
+        maxActiveCrawlJobs: 3,
+        maxRetainedCrawlJobs: 9,
       },
       env: {
         GATEWAY_API_KEY: "gateway-token",
@@ -57,6 +61,10 @@ describe("Firecrawl-compatible gateway", () => {
       mode: "local",
       provider_mode: "deepseek-first",
       credits_cooldown_seconds: 0,
+      max_concurrent_requests: 7,
+      max_concurrent_provider_requests: 5,
+      max_active_crawl_jobs: 3,
+      max_retained_crawl_jobs: 9,
     });
     const serialized = JSON.stringify(health);
     expect(serialized).not.toContain("gateway-token");
@@ -322,6 +330,114 @@ describe("Firecrawl-compatible gateway", () => {
       error: "No-fallback mode requires a Firecrawl credential.",
       code: "firecrawl_credential_required",
     });
+  });
+
+  it("returns 429 when the active Crawl job limit is reached", async () => {
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        providerMode: "deepseek-first",
+        maxActiveCrawlJobs: 1,
+      },
+      env: {},
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        fetch(_input, signal) {
+          return new Promise((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+          });
+        },
+      },
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+    servers.push(server);
+
+    const first = await fetch(new URL("/v2/crawl", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com/",
+        limit: 1,
+        maxDiscoveryDepth: 0,
+        sitemap: "skip",
+      }),
+    });
+    expect(first.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const second = await fetch(new URL("/v2/crawl", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com/",
+        limit: 1,
+        maxDiscoveryDepth: 0,
+        sitemap: "skip",
+      }),
+    });
+    expect(second.status).toBe(429);
+    expect(second.headers.get("retry-after")).toBe("1");
+    expect(await second.json()).toEqual({
+      success: false,
+      error: "Gateway Crawl job limit reached.",
+      code: "crawl_job_limit_reached",
+    });
+  });
+
+  it("caps fallback provider requests across concurrent HTTP requests", async () => {
+    let active = 0;
+    let maxActive = 0;
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        providerMode: "deepseek-first",
+        maxConcurrentProviderRequests: 2,
+      },
+      env: {},
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          await blocked;
+          active -= 1;
+          return { title: "Example", content: "# Example" };
+        },
+      },
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+    servers.push(server);
+
+    const requests = Array.from({ length: 5 }, () =>
+      fetch(new URL("/v2/scrape", server.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+      }),
+    );
+    const deadline = Date.now() + 2_000;
+    while (active < 2 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(active).toBe(2);
+    expect(maxActive).toBe(2);
+
+    release();
+    const responses = await Promise.all(requests);
+    expect(responses.every((response) => response.status === 200)).toBe(true);
+    expect(maxActive).toBe(2);
   });
 
   it.each([

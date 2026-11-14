@@ -353,6 +353,23 @@ common routes on Firecrawl and passes Firecrawl `402` responses through.
 In `firecrawl-first` mode, a 402 starts a 60-second cooldown by default.
 `--credits-cooldown 0` retries Firecrawl on every request.
 
+The gateway defaults to `100` concurrent HTTP requests, `100` concurrent
+Provider requests, `10` running Crawl jobs, and `100` retained Crawl jobs.
+Advanced deployments can tune these limits:
+
+```bash
+deepseek-crawl gateway \
+  --max-concurrent-requests 200 \
+  --max-provider-requests 50 \
+  --max-crawl-jobs 5 \
+  --max-retained-crawl-jobs 50
+```
+
+The corresponding `DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS`,
+`DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS`, `DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS`, and
+`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS` variables are available for containers
+and systemd.
+
 Other terminals and scripts can discover the selected endpoint:
 
 ```bash

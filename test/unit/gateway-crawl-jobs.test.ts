@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DeepSeekGateway } from "../../src/deepseek/gateway.js";
 import { CrawlJobManager } from "../../src/gateway/crawl-jobs.js";
+import { GatewayCapacityError } from "../../src/gateway/errors.js";
 
 function gateway(): DeepSeekGateway {
   return {
@@ -133,6 +134,96 @@ describe("CrawlJobManager", () => {
     current = new Date("2026-11-15T00:00:00.001Z");
     expect(manager.status("dsc_expire")).toBeUndefined();
     expect(manager.errors("dsc_expire")).toBeUndefined();
+  });
+
+  it("sweeps expired jobs without waiting for client access", async () => {
+    let current = new Date("2026-11-14T00:00:00.000Z");
+    const manager = new CrawlJobManager({
+      now: () => current,
+      idFactory: () => "dsc_sweep",
+    });
+    manager.create(
+      {
+        url: "https://example.com/",
+        limit: 1,
+        maxDiscoveryDepth: 0,
+        sitemap: "skip",
+      },
+      gateway(),
+      reader,
+    );
+    await manager.waitForIdle("dsc_sweep");
+
+    current = new Date("2026-11-15T00:00:00.001Z");
+    expect(manager.sweepExpired()).toBe(1);
+    expect(manager.status("dsc_sweep")).toBeUndefined();
+  });
+
+  it("limits running crawl jobs without counting completed jobs", async () => {
+    const manager = new CrawlJobManager({
+      idFactory: (() => {
+        let index = 0;
+        return () => `dsc_running_${++index}`;
+      })(),
+      maxRunningJobs: 1,
+    });
+    let release!: () => void;
+    const blockingClient: DeepSeekGateway = {
+      async search() {
+        throw new Error("Unexpected Search call.");
+      },
+      fetch() {
+        return new Promise((resolve) => {
+          release = () => resolve({ title: "Example", content: "# Example" });
+        });
+      },
+    };
+
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      blockingClient,
+      reader,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(() =>
+      manager.create(
+        { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+        gateway(),
+        reader,
+      ),
+    ).toThrow(GatewayCapacityError);
+
+    release();
+    await manager.waitForIdle("dsc_running_1");
+    expect(() =>
+      manager.create(
+        { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+        gateway(),
+        reader,
+      ),
+    ).not.toThrow();
+  });
+
+  it("limits retained crawl jobs", async () => {
+    let index = 0;
+    const manager = new CrawlJobManager({
+      idFactory: () => `dsc_retained_${++index}`,
+      maxRetainedJobs: 1,
+    });
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      gateway(),
+      reader,
+    );
+    await manager.waitForIdle("dsc_retained_1");
+
+    expect(() =>
+      manager.create(
+        { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+        gateway(),
+        reader,
+      ),
+    ).toThrow(GatewayCapacityError);
   });
 
   it("clamps Crawl controls to the existing DeepSeek engine limits", async () => {

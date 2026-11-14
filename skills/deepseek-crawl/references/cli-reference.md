@@ -164,6 +164,9 @@ the local exhausted-credit cooldown is active, or no Firecrawl credential is
 available. `429`, authentication errors, invalid requests, and `5xx` are returned
 without provider switching.
 
+Firecrawl connection failures and timeouts before a response return
+`502 upstream_unavailable`; the gateway does not switch providers.
+
 Only DeepSeek-equivalent common options are supported on fallback. Markdown is
 the supported Scrape/Search/Crawl output format; browser actions, screenshots,
 structured Extract, external-link Crawl, and subdomain Crawl are rejected.

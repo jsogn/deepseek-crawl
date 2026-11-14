@@ -81,6 +81,11 @@ configured. `429`, `401/403`, invalid requests, and `5xx` retain Firecrawl
 behavior. Advanced Firecrawl capabilities return a structured error instead of
 pretending a DeepSeek fallback succeeded.
 
+If Firecrawl cannot be reached or times out before returning a response, the
+gateway returns `502 upstream_unavailable` without switching providers. This
+keeps temporary Firecrawl outages from silently changing the provider or result
+shape.
+
 DeepSeek Crawl jobs live only in the current gateway process and expire after 24
 hours. Restarting the gateway does not restore them. One gateway process can
 serve multiple local Firecrawl clients.

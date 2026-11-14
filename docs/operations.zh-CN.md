@@ -76,6 +76,9 @@ DeepSeek fallback 覆盖 `POST /v2/search`、`POST /v2/scrape`、`POST /v2/map`�
 DeepSeek。`429`、`401/403`、无效请求和 `5xx` 保持 Firecrawl 行为。高级
 Firecrawl 功能没有 DeepSeek 等价能力时返回结构化错误，不会伪造成功。
 
+如果 Firecrawl 在返回响应前连接失败或超时，网关返回 `502 upstream_unavailable`，
+不会切换 Provider。这样临时上游故障不会静默改变 Provider 或响应结构。
+
 DeepSeek Crawl job 只保存在当前网关进程内存中，24 小时后过期；网关重启会使这些
 job 丢失。一个网关进程可以服务本机多个 Firecrawl 客户端。
 

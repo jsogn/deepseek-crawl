@@ -30,7 +30,13 @@ describe("package executable", () => {
   it("publishes the bundled Agent Skill", async () => {
     const packageJson = JSON.parse(
       await readFile(new URL("../../package.json", import.meta.url), "utf8"),
-    ) as { files?: string[]; description?: string; private?: boolean; license?: string };
+    ) as {
+      files?: string[];
+      description?: string;
+      private?: boolean;
+      license?: string;
+      scripts?: Record<string, string>;
+    };
     expect(packageJson.files).toContain("skills");
     expect(packageJson.files).toContain("README.en.md");
     expect(packageJson.files).toContain("LICENSE");
@@ -39,6 +45,7 @@ describe("package executable", () => {
     expect(packageJson.description).toMatch(/optional Firecrawl-compatible gateway/i);
     expect(packageJson.private).not.toBe(true);
     expect(packageJson.license).toBe("MIT");
+    expect(packageJson.scripts?.["smoke:docker"]).toBe("bash scripts/smoke-docker-gateway.sh");
   });
 });
 
@@ -119,17 +126,28 @@ describe("deployment assets", () => {
       expect(guidance).toContain("install -m 0600 .env.example .env");
       expect(guidance).toContain("docker compose config --quiet");
       expect(guidance).toContain("docker compose up -d --build");
+      expect(guidance).toContain("npm run smoke:docker");
       expect(guidance).toContain("SIGTERM");
     }
   });
 
   it("hardens container and service shutdown", async () => {
-    const [dockerfile, compose, service, environmentExample, dockerignore] = await Promise.all([
+    const [
+      dockerfile,
+      compose,
+      service,
+      environmentExample,
+      dockerignore,
+      ciWorkflow,
+      smokeScript,
+    ] = await Promise.all([
       readProjectFile("Dockerfile"),
       readProjectFile("docker-compose.yml"),
       readProjectFile("deploy/deepseek-crawl-gateway.service"),
       readProjectFile(".env.example"),
       readProjectFile(".dockerignore"),
+      readProjectFile(".github/workflows/ci.yml"),
+      readProjectFile("scripts/smoke-docker-gateway.sh"),
     ]);
 
     expect(dockerfile).toMatch(/^USER node$/m);
@@ -162,5 +180,8 @@ describe("deployment assets", () => {
     }
     expect(dockerignore.split(/\r?\n/)).toContain(".env");
     expect(dockerignore.split(/\r?\n/)).toContain("!.env.example");
+    expect(ciWorkflow).toContain("npm run smoke:docker");
+    expect(smokeScript).toContain("docker stop --timeout 30");
+    expect(smokeScript).toContain('docker exec "$container_name" id -u');
   });
 });

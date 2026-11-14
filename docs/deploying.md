@@ -52,6 +52,13 @@ Docker health:
 curl --fail --silent http://127.0.0.1:8787/healthz
 ```
 
+From a source checkout, maintainers can verify the full container lifecycle
+without paid provider requests:
+
+```bash
+npm run smoke:docker
+```
+
 Stop:
 
 ```bash

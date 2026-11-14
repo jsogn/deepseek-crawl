@@ -151,6 +151,45 @@ describe("Firecrawl SDK against the gateway", () => {
     );
   });
 
+  it("surfaces Firecrawl authentication errors through the official SDK without fallback", async () => {
+    const upstream = await startMockUpstream(() => ({
+      status: 401,
+      body: {
+        success: false,
+        error: "Invalid API key.",
+        code: "unauthorized",
+      },
+    }));
+    const gateway = await startGatewayServer({
+      config: testConfig(upstream.url),
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      fetchImpl: fetch,
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search fallback.");
+        },
+        async fetch() {
+          throw new Error("Unexpected Fetch fallback.");
+        },
+      },
+    });
+    servers.push(gateway);
+    const client = new Firecrawl({
+      apiKey: "fc-test",
+      apiUrl: gateway.url.href.replace(/\/$/, ""),
+    });
+
+    await expect(
+      client.scrape("https://example.com/", {
+        formats: ["markdown"],
+      }),
+    ).rejects.toMatchObject({
+      status: 401,
+      code: "unauthorized",
+    });
+    expect(upstream.requests).toHaveLength(1);
+  });
+
   it("uses the official SDK unchanged when Firecrawl credits require a DeepSeek fallback", async () => {
     const upstream = await startMockUpstream(() => ({
       status: 402,

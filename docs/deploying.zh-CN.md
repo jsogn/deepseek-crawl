@@ -50,6 +50,12 @@ Compose 示例会：
 curl --fail --silent http://127.0.0.1:8787/healthz
 ```
 
+在源码仓库中可以用下面的命令验证完整的容器生命周期，不会产生 Provider 计费请求：
+
+```bash
+npm run smoke:docker
+```
+
 停止：
 
 ```bash

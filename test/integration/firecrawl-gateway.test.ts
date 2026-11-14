@@ -192,6 +192,92 @@ describe("Firecrawl-compatible gateway", () => {
     });
   });
 
+  it.each([
+    {
+      label: "authentication errors",
+      status: 401,
+      body: { success: false, error: "Invalid API key.", code: "unauthorized" },
+    },
+    {
+      label: "rate limits",
+      status: 429,
+      body: { success: false, error: "Too many requests.", code: "rate_limited" },
+    },
+    {
+      label: "server errors",
+      status: 503,
+      body: {
+        success: false,
+        error: "Service unavailable.",
+        code: "service_unavailable",
+      },
+    },
+  ])("passes Firecrawl $label through without invoking DeepSeek", async ({ status, body }) => {
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      deepseekClient: {
+        async search() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Fetch call.");
+        },
+      },
+      fetchImpl: async () => Response.json(body, { status }),
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+    });
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual(body);
+    expect(deepSeekCalls).toBe(0);
+  });
+
+  it("returns 502 for Firecrawl transport failures without invoking DeepSeek", async () => {
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      deepseekClient: {
+        async search() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Fetch call.");
+        },
+      },
+      fetchImpl: async () => {
+        throw new Error("Firecrawl network unavailable.");
+      },
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+    });
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      success: false,
+      error: "Firecrawl upstream request failed.",
+      code: "upstream_unavailable",
+    });
+    expect(deepSeekCalls).toBe(0);
+  });
+
   it("falls back to DeepSeek when Firecrawl reports exhausted credits", async () => {
     let deepSeekCalls = 0;
     const deepseekClient: DeepSeekGateway = {

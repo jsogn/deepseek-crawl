@@ -8,6 +8,7 @@ coverage
 dist
 docs
 node_modules
+scripts
 skills
 test
 *.log

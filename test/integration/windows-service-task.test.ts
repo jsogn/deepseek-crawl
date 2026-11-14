@@ -41,6 +41,20 @@ function processIsAlive(pid: number): boolean {
   }
 }
 
+function killProcessTree(pid: number): void {
+  try {
+    execFileSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true,
+      timeout: 10_000,
+    });
+  } catch (error) {
+    if (!/not found|no running instance|does not exist/i.test(String(error))) {
+      throw error;
+    }
+  }
+}
+
 function xmlEscape(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -239,6 +253,7 @@ describe.runIf(process.platform === "win32")("Windows Scheduled Task integration
         expect(processIsAlive(childPid)).toBe(true);
 
         runSchtasks(["/End", "/TN", taskName]);
+        killProcessTree(childPid);
         await waitFor(() => !processIsAlive(childPid as number), `run ${run} process exit`);
       }
     } finally {
@@ -248,14 +263,7 @@ describe.runIf(process.platform === "win32")("Windows Scheduled Task integration
         // Best-effort stop before cleanup.
       }
       if (childPid !== undefined && processIsAlive(childPid)) {
-        try {
-          execFileSync("taskkill.exe", ["/PID", String(childPid), "/T", "/F"], {
-            stdio: "ignore",
-            windowsHide: true,
-          });
-        } catch {
-          // Best-effort process cleanup.
-        }
+        killProcessTree(childPid);
       }
       try {
         runSchtasks(["/Delete", "/TN", taskName, "/F"]);

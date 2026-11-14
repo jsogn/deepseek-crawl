@@ -486,13 +486,50 @@ async function serviceRuntimeInfo(context: GatewayServiceContext): Promise<Servi
   };
 }
 
-async function stopService(context: GatewayServiceContext): Promise<void> {
+async function windowsListenerPid(
+  context: GatewayServiceContext,
+  port: number | undefined,
+): Promise<number | undefined> {
+  if (port === undefined) {
+    return undefined;
+  }
+  const result = await (await commandRunner(context))("powershell.exe", [
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    `$connection = Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -eq $connection) { exit 1 }; [Console]::Out.Write($connection.OwningProcess)`,
+  ]);
+  if (result.exitCode !== 0) {
+    return undefined;
+  }
+  const pid = Number(result.stdout.trim());
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined;
+}
+
+async function windowsProcessIsAlive(
+  context: GatewayServiceContext,
+  pid: number,
+): Promise<boolean> {
+  const result = await (await commandRunner(context))("powershell.exe", [
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    `if (Get-Process -Id ${pid} -ErrorAction SilentlyContinue) { [Console]::Out.Write('1') } else { exit 1 }`,
+  ]);
+  return result.exitCode === 0;
+}
+
+async function stopService(
+  context: GatewayServiceContext,
+  port?: number,
+): Promise<number | undefined> {
   const runner = await commandRunner(context);
   if (context.platform === "win32") {
     const info = await serviceRuntimeInfo(context);
     if (!info.exists) {
-      return;
+      return undefined;
     }
+    const pid = await windowsListenerPid(context, port);
     const disabled = await runner("schtasks", ["/Change", "/TN", WINDOWS_TASK_NAME, "/DISABLE"]);
     if (disabled.exitCode !== 0 && !/not found|does not exist/i.test(disabled.stderr)) {
       throw new Error(disabled.stderr.trim() || "Could not disable the Gateway task.");
@@ -501,7 +538,16 @@ async function stopService(context: GatewayServiceContext): Promise<void> {
     if (ended.exitCode !== 0 && !/not running|not found|does not exist/i.test(ended.stderr)) {
       throw new Error(ended.stderr.trim() || "Could not stop the Gateway task.");
     }
-    return;
+    if (pid !== undefined) {
+      const killed = await runner("taskkill.exe", ["/PID", String(pid), "/T", "/F"]);
+      if (
+        killed.exitCode !== 0 &&
+        !/not found|no running instance|does not exist/i.test(killed.stderr)
+      ) {
+        throw new Error(killed.stderr.trim() || "Could not stop the Gateway process tree.");
+      }
+    }
+    return pid;
   }
 
   const result = await runner("launchctl", ["bootout", launchctlTarget(context)]);
@@ -511,12 +557,21 @@ async function stopService(context: GatewayServiceContext): Promise<void> {
   ) {
     throw new Error(result.stderr.trim() || "Could not stop the Gateway service.");
   }
+  return undefined;
 }
 
-async function waitForStopped(context: GatewayServiceContext): Promise<void> {
+async function waitForStopped(context: GatewayServiceContext, processId?: number): Promise<void> {
   const delay = context.wait ?? wait;
   const deadline = Date.now() + STOP_TIMEOUT_MS;
   while (Date.now() < deadline) {
+    if (
+      context.platform === "win32" &&
+      processId !== undefined &&
+      (await windowsProcessIsAlive(context, processId))
+    ) {
+      await delay(STOP_POLL_MS);
+      continue;
+    }
     const info = await serviceRuntimeInfo(context);
     if (!info.exists || !info.running) {
       return;
@@ -526,9 +581,9 @@ async function waitForStopped(context: GatewayServiceContext): Promise<void> {
   throw new Error("Gateway service did not stop.");
 }
 
-async function bootoutAndWait(context: GatewayServiceContext): Promise<void> {
-  await stopService(context);
-  await waitForStopped(context);
+async function bootoutAndWait(context: GatewayServiceContext, port?: number): Promise<void> {
+  const processId = await stopService(context, port);
+  await waitForStopped(context, processId);
 }
 
 async function startService(
@@ -629,16 +684,17 @@ async function startFromState(
   context: GatewayServiceContext,
   paths: GatewayServicePaths,
   state: GatewayServiceState,
+  previousPort?: number,
 ): Promise<GatewayServiceStatus> {
   state.desiredRunning = true;
   await writeServiceFiles(context, paths, state);
-  await bootoutAndWait(context);
+  await bootoutAndWait(context, previousPort ?? state.port);
   await startService(context, paths);
   try {
     await waitForHealthy(context, state.port, state.providerMode);
     await setFirecrawlApiUrl(paths.firecrawlCredentialsPath, localGatewayUrl(state.port));
   } catch (error) {
-    await bootoutAndWait(context).catch(() => undefined);
+    await bootoutAndWait(context, state.port).catch(() => undefined);
     await restoreFirecrawlApiUrl(paths.firecrawlCredentialsPath, state.originalFirecrawlApiUrl);
     throw error;
   }
@@ -770,9 +826,9 @@ export async function installGatewayService(
   };
   await writeServiceFiles(context, paths, state);
   try {
-    return await startFromState(context, paths, state);
+    return await startFromState(context, paths, state, existing?.port);
   } catch (error) {
-    await bootoutAndWait(context).catch(() => undefined);
+    await bootoutAndWait(context, state.port).catch(() => undefined);
     await restoreFirecrawlApiUrl(
       paths.firecrawlCredentialsPath,
       state.originalFirecrawlApiUrl,
@@ -811,7 +867,7 @@ export async function stopGatewayService(
     return getGatewayServiceStatus(context);
   }
   try {
-    await bootoutAndWait(context);
+    await bootoutAndWait(context, state.port);
   } finally {
     await restoreFirecrawlApiUrl(paths.firecrawlCredentialsPath, state.originalFirecrawlApiUrl);
   }
@@ -829,7 +885,7 @@ export async function uninstallGatewayService(
   const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const state = await readServiceState(paths.statePath);
   try {
-    await bootoutAndWait(context);
+    await bootoutAndWait(context, state?.port);
     await deleteRegisteredService(context);
   } finally {
     if (state) {

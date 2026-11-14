@@ -72,6 +72,8 @@ class FakeWindowsScheduler {
   registered = false;
   enabled = false;
   running = false;
+  childAlive = false;
+  readonly childPid = 5151;
   readonly calls: string[][] = [];
 
   readonly run: GatewayCommandRunner = async (command, args) => {
@@ -84,6 +86,17 @@ class FakeWindowsScheduler {
       };
     }
     if (command === "powershell.exe") {
+      const script = args.at(-1) ?? "";
+      if (script.includes("Get-NetTCPConnection")) {
+        return this.childAlive
+          ? { exitCode: 0, stdout: String(this.childPid), stderr: "" }
+          : { exitCode: 1, stdout: "", stderr: "" };
+      }
+      if (script.includes("Get-Process")) {
+        return this.childAlive
+          ? { exitCode: 0, stdout: "1", stderr: "" }
+          : { exitCode: 1, stdout: "", stderr: "" };
+      }
       if (!this.registered) {
         return { exitCode: 1, stdout: "", stderr: "Task not found." };
       }
@@ -91,6 +104,10 @@ class FakeWindowsScheduler {
       return { exitCode: 0, stdout: state, stderr: "" };
     }
     if (command !== "schtasks") {
+      if (command === "taskkill.exe") {
+        this.childAlive = false;
+        return { exitCode: 0, stdout: "", stderr: "" };
+      }
       throw new Error(`Unexpected command: ${command}`);
     }
     const action = args[0]?.toLowerCase();
@@ -105,6 +122,7 @@ class FakeWindowsScheduler {
     }
     if (action === "/run") {
       this.running = true;
+      this.childAlive = true;
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     if (action === "/end") {
@@ -115,6 +133,7 @@ class FakeWindowsScheduler {
       this.registered = false;
       this.enabled = false;
       this.running = false;
+      this.childAlive = false;
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     throw new Error(`Unexpected schtasks arguments: ${args.join(" ")}`);
@@ -390,6 +409,15 @@ describe("managed Windows Gateway service", () => {
     expect(JSON.parse(await readFile(paths.firecrawlCredentialsPath, "utf8")).apiUrl).toBe(
       CLOUD_API_URL,
     );
+    expect(
+      scheduler.calls.some(
+        (call) =>
+          call[0] === "taskkill.exe" &&
+          call.includes(String(scheduler.childPid)) &&
+          call.includes("/T") &&
+          call.includes("/F"),
+      ),
+    ).toBe(true);
 
     const started = await startGatewayService(context);
     expect(started).toMatchObject({

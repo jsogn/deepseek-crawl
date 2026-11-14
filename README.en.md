@@ -236,7 +236,8 @@ deepseek-crawl fetch \
 `--input` accepts Map JSON, URL arrays, object arrays with `url`, and line-based
 URL text. See the workflow guide for every input form, caching, and retry.
 
-Enable local checkpoints for a large batch:
+Enable local checkpoints for a large batch. The job directory and final output
+directory must be absent and must not contain each other:
 
 ```bash
 deepseek-crawl fetch \

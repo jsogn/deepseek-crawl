@@ -221,7 +221,8 @@ deepseek-crawl fetch \
 `--input` 支持 Map JSON、URL 数组、包含 `url` 字段的对象数组和逐行 URL 文本。
 完整输入格式、缓存和失败重试见下方工作流指南。
 
-大规模 Batch 可启用本地 Job 检查点：
+大规模 Batch 可启用本地 Job 检查点。Job 目录和最终输出目录必须不存在且不能
+互相嵌套：
 
 ```bash
 deepseek-crawl fetch \

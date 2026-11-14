@@ -54,10 +54,11 @@ deepseek-crawl fetch status .deepseek-crawl/jobs/docs --json
 deepseek-crawl fetch resume .deepseek-crawl/jobs/docs
 ```
 
-The initial command requires both the job directory and final output directory to
-be absent. The job stores its source, output directory, concurrency, delay,
-maximum character limit, and normalized URLs. Successful pages and failures are
-checkpointed individually.
+The initial command requires both directories to be absent and disjoint; they may
+not be equal or contain each other. The job stores its source, output directory,
+concurrency, delay, maximum character limit, and normalized URLs. Successful
+pages and failures use an append-only journal, compacted into a full state
+snapshot on interruption or completion.
 
 Resume requests only URLs that are neither successful pages nor recorded failures.
 It does not automatically retry previously failed pages; use Batch Retry after the

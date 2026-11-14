@@ -122,6 +122,76 @@ describe("Batch Fetch job CLI", () => {
     });
   });
 
+  it("does not skip a valid request when an invalid failure shares its index", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-batch-job-cli-"));
+    const input = join(root, "urls.txt");
+    const jobDir = join(root, "job");
+    const output = join(root, "final");
+    await writeFile(
+      input,
+      "file:///etc/passwd\nhttps://example.com/a\nhttps://example.com/b\n",
+      "utf8",
+    );
+    const controller = new AbortController();
+    const first = await runCli(
+      [
+        "fetch",
+        "--input",
+        input,
+        "--output-dir",
+        output,
+        "--job-dir",
+        jobDir,
+        "--concurrency",
+        "1",
+        "--delay-ms",
+        "0",
+      ],
+      {
+        ...dependencies(vi.fn() as unknown as typeof fetch).deps,
+        fetchClient: {
+          search: vi.fn(),
+          fetch: (async ({ url }: { url: string }) => {
+            controller.abort(new Error("interrupted"));
+            throw new Error(`interrupted:${url}`);
+          }) as unknown as DeepSeekGateway["fetch"],
+        },
+        signal: controller.signal,
+      },
+    );
+    expect(first).toBe(130);
+
+    const statusDependencies = dependencies(vi.fn() as unknown as typeof fetch, {});
+    expect(await runCli(["fetch", "status", jobDir, "--json"], statusDependencies.deps)).toBe(0);
+    expect(JSON.parse(statusDependencies.stdout.value())).toMatchObject({
+      pending: 2,
+      failures: 1,
+    });
+
+    const resumedFetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content: "body",
+    }));
+    expect(
+      await runCli(["fetch", "resume", jobDir, "--json"], {
+        ...dependencies(vi.fn() as unknown as typeof fetch).deps,
+        fetchClient: {
+          search: vi.fn(),
+          fetch: resumedFetch as unknown as DeepSeekGateway["fetch"],
+        },
+      }),
+    ).toBe(0);
+
+    expect(resumedFetch.mock.calls.map(([request]) => request.url)).toEqual([
+      "https://example.com/a",
+      "https://example.com/b",
+    ]);
+    expect(JSON.parse(await readFile(join(output, "fetch.json"), "utf8"))).toMatchObject({
+      stats: { input: 3, unique: 2, fetched: 2, failed: 1 },
+      pages: [{ url: "https://example.com/a" }, { url: "https://example.com/b" }],
+    });
+  });
+
   it("publishes a completed job with recorded failures", async () => {
     const root = await mkdtemp(join(tmpdir(), "deepseek-batch-job-cli-"));
     const input = join(root, "urls.txt");
@@ -255,4 +325,42 @@ describe("Batch Fetch job CLI", () => {
     await expect(lstat(jobDir)).rejects.toMatchObject({ code: "ENOENT" });
     expect(stderr.value()).toContain("already exists");
   });
+
+  it.each(["same", "job-inside-output", "output-inside-job"])(
+    "rejects overlapping job and output paths: %s",
+    async (layout) => {
+      const root = await mkdtemp(join(tmpdir(), "deepseek-batch-job-cli-"));
+      const input = join(root, "urls.txt");
+      const base = join(root, "paths");
+      const jobDir =
+        layout === "output-inside-job"
+          ? base
+          : layout === "job-inside-output"
+            ? join(base, "job")
+            : base;
+      const output =
+        layout === "job-inside-output"
+          ? base
+          : layout === "output-inside-job"
+            ? join(base, "output")
+            : base;
+      await writeFile(input, "https://example.com/a\n", "utf8");
+      const fetchPage = vi.fn();
+      const { deps, stderr } = dependencies(vi.fn() as unknown as typeof fetch);
+
+      expect(
+        await runCli(["fetch", "--input", input, "--output-dir", output, "--job-dir", jobDir], {
+          ...deps,
+          fetchClient: {
+            search: vi.fn(),
+            fetch: fetchPage as unknown as DeepSeekGateway["fetch"],
+          },
+        }),
+      ).toBe(2);
+
+      expect(fetchPage).not.toHaveBeenCalled();
+      await expect(lstat(jobDir)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(stderr.value()).toMatch(/job-dir.*output-dir|overlap|separate/i);
+    },
+  );
 });

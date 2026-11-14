@@ -1,16 +1,18 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { acquireWriterLock, releaseWriterLock, writeJsonAtomic } from "../crawl/persistence.js";
 import { errorMessage } from "../error-message.js";
-import { assertPathMissing } from "../output/files.js";
+import { assertPathMissing, writeFileAtomic } from "../output/files.js";
 import { pageRelativePath, renderPageMarkdown } from "../output/page.js";
 import { createStagedDirectoryOutput } from "../output/publication.js";
 import { summarizeBatchFetchPage } from "./summary.js";
 import type {
+  BatchFetchFailure,
   BatchFetchJobState,
   BatchFetchOutputResult,
   BatchFetchPage,
+  BatchFetchPageSummary,
   BatchFetchResult,
 } from "./types.js";
 
@@ -72,6 +74,99 @@ const stateSchema = z.object({
   last_error: z.string().optional(),
 });
 
+const journalRecordSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("page"),
+    at: z.string(),
+    page: pageSchema,
+  }),
+  z.object({
+    type: z.literal("failure"),
+    at: z.string(),
+    failure: failureSchema,
+  }),
+]);
+
+type JournalRecord =
+  | { type: "page"; at: string; page: BatchFetchPageSummary }
+  | { type: "failure"; at: string; failure: BatchFetchFailure };
+
+function journalPath(directory: string): string {
+  return join(directory, "journal.jsonl");
+}
+
+function failureKey(failure: { index?: number | undefined; url: string }): string {
+  return `${failure.index ?? ""}\0${failure.url}`;
+}
+
+function applyJournalRecords(
+  state: BatchFetchJobState,
+  records: JournalRecord[],
+): BatchFetchJobState {
+  const pages = new Map(state.pages.map((page) => [page.index, page] as const));
+  const failures = new Map(
+    state.failures.map((failure) => [failureKey(failure), failure] as const),
+  );
+  let updatedAt = state.updated_at;
+  for (const record of records) {
+    updatedAt = record.at;
+    if (record.type === "page") {
+      pages.set(record.page.index, record.page);
+    } else {
+      failures.set(failureKey(record.failure), record.failure);
+    }
+  }
+  return {
+    ...state,
+    pages: [...pages.values()].sort(byIndex),
+    failures: [...failures.values()].sort(byIndex),
+    updated_at: updatedAt,
+  };
+}
+
+function normalizeState(state: BatchFetchJobState): BatchFetchJobState {
+  return {
+    ...state,
+    pages: [...new Map(state.pages.map((page) => [page.index, page])).values()].sort(byIndex),
+    failures: [
+      ...new Map(state.failures.map((failure) => [failureKey(failure), failure] as const)).values(),
+    ].sort(byIndex),
+  };
+}
+
+async function readJournalRecords(directory: string): Promise<JournalRecord[]> {
+  let text: string;
+  try {
+    text = await readFile(journalPath(directory), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+  if (!text.trim()) {
+    return [];
+  }
+  const lines = text.split(/\r?\n/);
+  const records: JournalRecord[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]?.trim();
+    if (!line) {
+      continue;
+    }
+    try {
+      records.push(journalRecordSchema.parse(JSON.parse(line)) as JournalRecord);
+    } catch (error) {
+      const isFinalPartialRecord = index === lines.length - 1 && !text.endsWith("\n");
+      if (isFinalPartialRecord) {
+        break;
+      }
+      throw new Error("Invalid Batch Fetch job journal.", { cause: error });
+    }
+  }
+  return records;
+}
+
 export async function readBatchFetchJobState(directory: string): Promise<BatchFetchJobState> {
   const parsed = stateSchema.safeParse(
     JSON.parse(await readFile(join(resolve(directory), "job.json"), "utf8")) as unknown,
@@ -79,7 +174,8 @@ export async function readBatchFetchJobState(directory: string): Promise<BatchFe
   if (!parsed.success) {
     throw new Error("Invalid or incompatible Batch Fetch job state.", { cause: parsed.error });
   }
-  return parsed.data as BatchFetchJobState;
+  const records = await readJournalRecords(resolve(directory));
+  return applyJournalRecords(parsed.data as BatchFetchJobState, records);
 }
 
 function byIndex(left: { index?: number }, right: { index?: number }): number {
@@ -110,11 +206,15 @@ export class BatchFetchJobStore {
   #now: () => Date;
   #released = false;
   #writes: Promise<void> = Promise.resolve();
+  #pageIndexes: Set<number>;
+  #failureKeys: Set<string>;
 
   private constructor(directory: string, state: BatchFetchJobState, now: () => Date) {
     this.directory = directory;
     this.#state = state;
     this.#now = now;
+    this.#pageIndexes = new Set(state.pages.map((page) => page.index));
+    this.#failureKeys = new Set(state.failures.map(failureKey));
   }
 
   static async create(
@@ -130,6 +230,7 @@ export class BatchFetchJobStore {
     try {
       await acquireWriterLock(target);
       await writeJsonAtomic(join(target, "job.json"), state);
+      await writeFileAtomic(journalPath(target), "", { mode: 0o600 });
       return new BatchFetchJobStore(target, state, now);
     } catch (error) {
       await releaseWriterLock(target).catch(() => undefined);
@@ -155,37 +256,42 @@ export class BatchFetchJobStore {
     return this.#enqueue(async () => {
       this.#assertActive();
       const relativePath = pageRelativePath(page);
-      try {
-        await writeFile(join(this.directory, relativePath), renderPageMarkdown(page), {
-          encoding: "utf8",
-          mode: 0o600,
-          flag: "wx",
-        });
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-          throw error;
-        }
-      }
+      await writeFileAtomic(join(this.directory, relativePath), renderPageMarkdown(page), {
+        mode: 0o600,
+      });
       const summary = summarizeBatchFetchPage(page);
-      const pages = [
-        ...this.#state.pages.filter((item) => item.index !== page.index),
-        summary,
-      ].sort(byIndex);
-      await this.#checkpoint({ ...this.#state, pages, updated_at: this.#now().toISOString() });
+      await this.#append({
+        type: "page",
+        at: this.#now().toISOString(),
+        page: summary,
+      });
+      const existing = this.#pageIndexes.has(page.index)
+        ? this.#state.pages.findIndex((item) => item.index === page.index)
+        : -1;
+      if (existing === -1) {
+        this.#state.pages.push(summary);
+      } else {
+        this.#state.pages[existing] = summary;
+      }
+      this.#pageIndexes.add(page.index);
     });
   }
 
   recordFailure(failure: BatchFetchJobState["failures"][number]): Promise<void> {
     return this.#enqueue(async () => {
       this.#assertActive();
-      const alreadyRecorded = this.#state.failures.some(
-        (item) => item.index === failure.index && item.url === failure.url,
-      );
+      const key = failureKey(failure);
+      const alreadyRecorded = this.#failureKeys.has(key);
       if (alreadyRecorded) {
         return;
       }
-      const failures = [...this.#state.failures, failure].sort(byIndex);
-      await this.#checkpoint({ ...this.#state, failures, updated_at: this.#now().toISOString() });
+      await this.#append({
+        type: "failure",
+        at: this.#now().toISOString(),
+        failure,
+      });
+      this.#state.failures.push(failure);
+      this.#failureKeys.add(key);
     });
   }
 
@@ -267,8 +373,20 @@ export class BatchFetchJobStore {
   }
 
   async #checkpoint(state: BatchFetchJobState): Promise<void> {
-    await writeJsonAtomic(join(this.directory, "job.json"), state);
-    this.#state = state;
+    const normalized = normalizeState(state);
+    await writeJsonAtomic(join(this.directory, "job.json"), normalized);
+    await writeFileAtomic(journalPath(this.directory), "", { mode: 0o600 });
+    this.#state = normalized;
+    this.#pageIndexes = new Set(normalized.pages.map((page) => page.index));
+    this.#failureKeys = new Set(normalized.failures.map(failureKey));
+  }
+
+  async #append(record: JournalRecord): Promise<void> {
+    await appendFile(journalPath(this.directory), `${JSON.stringify(record)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    this.#state.updated_at = record.at;
   }
 
   #assertActive(): void {

@@ -75,8 +75,9 @@ deepseek-crawl fetch status .deepseek-crawl/jobs/docs --json
 deepseek-crawl fetch resume .deepseek-crawl/jobs/docs
 ```
 
-初始命令要求 Job 目录和最终输出目录都不存在。Job 保存原始 source、输出目录、
-并发、延迟、最大字符数和规范化 URL。成功页面和失败项逐项 checkpoint。
+初始命令要求 Job 目录和最终输出目录都不存在，且两者不能是同一目录或互相嵌套。
+Job 保存原始 source、输出目录、并发、延迟、最大字符数和规范化 URL。成功页面
+和失败项写入 append-only journal；中断或完成时压缩为完整状态快照。
 
 中断后恢复只请求既不在成功页中、也不在失败项中的 URL。已经失败的页面不会在
 `resume` 中自动重试；完成 final output 后使用 Batch Retry 重试这些页面。

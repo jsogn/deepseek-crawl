@@ -1,6 +1,6 @@
 import { lstat, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import {
@@ -470,6 +470,22 @@ function batchFetchExitCode(result: BatchFetchResult): number {
   return result.stats.fetched === 0 && result.stats.failed > 0 ? 1 : 0;
 }
 
+function pathContains(parent: string, child: string): boolean {
+  const childRelative = relative(parent, child);
+  return (
+    childRelative === "" ||
+    (childRelative !== ".." && !childRelative.startsWith(`..${sep}`) && !isAbsolute(childRelative))
+  );
+}
+
+function assertDisjointBatchJobPaths(jobDirectory: string, outputDirectory: string): void {
+  if (pathContains(jobDirectory, outputDirectory) || pathContains(outputDirectory, jobDirectory)) {
+    throw new CliUsageError(
+      "--job-dir and --output-dir must be separate directories that do not contain each other.",
+    );
+  }
+}
+
 async function runBatchFetchJob(
   store: BatchFetchJobStore,
   prepared: BatchFetchPreparation,
@@ -524,8 +540,10 @@ async function runNewBatchFetchJob(
   source: string,
   deps: CliDependencies,
 ): Promise<number> {
-  const prepared = prepareBatchFetch(inputText);
+  const jobDirectory = resolve(command.jobDir ?? "");
   const outputDirectory = resolve(command.outputDir ?? "");
+  assertDisjointBatchJobPaths(jobDirectory, outputDirectory);
+  const prepared = prepareBatchFetch(inputText);
   await assertPathMissing(outputDirectory);
   const timestamp = new Date().toISOString();
   const state: BatchFetchJobState = {
@@ -545,7 +563,7 @@ async function runNewBatchFetchJob(
     pages: [],
     failures: prepared.failures,
   };
-  const store = await BatchFetchJobStore.create(command.jobDir ?? "", state);
+  const store = await BatchFetchJobStore.create(jobDirectory, state);
   try {
     return await runBatchFetchJob(
       store,
@@ -564,11 +582,11 @@ async function runNewBatchFetchJob(
 }
 
 function pendingBatchFetchRequests(state: BatchFetchJobState) {
-  const completed = new Set([
-    ...state.pages.map((page) => page.index),
-    ...state.failures.flatMap((failure) => (failure.index === undefined ? [] : [failure.index])),
+  const completedUrls = new Set([
+    ...state.pages.map((page) => page.url),
+    ...state.failures.map((failure) => failure.url),
   ]);
-  return state.requests.filter((request) => !completed.has(request.index));
+  return state.requests.filter((request) => !completedUrls.has(request.url));
 }
 
 function batchFetchJobStatus(jobDir: string, state: BatchFetchJobState) {
@@ -622,11 +640,14 @@ async function runBatchFetchJobResume(
   command: Extract<ParsedCommand, { kind: "fetch-resume" }>,
   deps: CliDependencies,
 ) {
-  const store = await BatchFetchJobStore.open(command.jobDir);
+  const jobDirectory = resolve(command.jobDir);
+  const store = await BatchFetchJobStore.open(jobDirectory);
   try {
     const state = store.state;
+    const outputDirectory = resolve(state.output_dir);
+    assertDisjointBatchJobPaths(jobDirectory, outputDirectory);
     if (state.status === "completed") {
-      await assertPathMissing(state.output_dir);
+      await assertPathMissing(outputDirectory);
       const output = await store.finalize();
       deps.stdout.write(
         command.json
@@ -635,7 +656,7 @@ async function runBatchFetchJobResume(
       );
       return output.stats.fetched === 0 && output.stats.failed > 0 ? 1 : 0;
     }
-    await assertPathMissing(state.output_dir);
+    await assertPathMissing(outputDirectory);
     const config = loadConfig(deps.env, deps.credentialStore);
     const client = withFetchCache(
       deps.fetchClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl }),

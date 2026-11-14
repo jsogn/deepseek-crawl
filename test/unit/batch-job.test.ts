@@ -1,4 +1,4 @@
-import { lstat, mkdtemp, readFile } from "node:fs/promises";
+import { appendFile, lstat, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -101,6 +101,83 @@ describe("BatchFetchJobStore", () => {
       pages: [{ index: 1, path: "pages/0001-a.md" }],
     });
     await store.release();
+  });
+
+  it("replaces an uncheckpointed page file atomically when recovery refetches it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-batch-job-"));
+    const directory = join(root, "job");
+    const store = await BatchFetchJobStore.create(directory, initialState());
+    const oldPage = page();
+    await writeFile(
+      join(directory, pageRelativePath(oldPage)),
+      "old partial page without state checkpoint",
+      "utf8",
+    );
+    const recoveredPage = {
+      ...oldPage,
+      title: "Recovered",
+      content: "# Recovered",
+      contentHash: contentHash("# Recovered"),
+      contentOriginalLength: 11,
+    };
+
+    await store.recordPage(recoveredPage);
+
+    const written = await readFile(join(directory, pageRelativePath(recoveredPage)), "utf8");
+    expect(written).toContain("# Recovered");
+    expect(written).not.toContain("old partial page");
+    expect(store.state.pages[0]?.content_hash).toBe(contentHash("# Recovered"));
+    expect((await lstat(join(directory, pageRelativePath(recoveredPage)))).mode & 0o777).toBe(
+      0o600,
+    );
+    await store.release();
+  });
+
+  it("replays per-item journal records after abrupt termination", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-batch-job-"));
+    const directory = join(root, "job");
+    const store = await BatchFetchJobStore.create(
+      directory,
+      initialState(),
+      () => new Date(updatedAt),
+    );
+    await store.recordPage(page());
+    await store.recordFailure({
+      index: 2,
+      url: "https://example.com/b",
+      kind: "timeout",
+      message: "timed out",
+    });
+    await store.release();
+
+    const compacted = JSON.parse(await readFile(join(directory, "job.json"), "utf8"));
+    expect(compacted).toMatchObject({ pages: [], failures: [] });
+    expect(
+      (await readFile(join(directory, "journal.jsonl"), "utf8")).trim().split("\n"),
+    ).toHaveLength(2);
+
+    const reopened = await BatchFetchJobStore.open(directory);
+    expect(reopened.state).toMatchObject({
+      status: "running",
+      pages: [{ index: 1, url: "https://example.com/a" }],
+      failures: [{ index: 2, url: "https://example.com/b", kind: "timeout" }],
+    });
+    await reopened.release();
+  });
+
+  it("ignores only a trailing partial journal record", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-batch-job-"));
+    const directory = join(root, "job");
+    const store = await BatchFetchJobStore.create(directory, initialState());
+    await store.recordPage(page());
+    await appendFile(join(directory, "journal.jsonl"), '{"type":"page","at":', "utf8");
+    await store.release();
+
+    const reopened = await BatchFetchJobStore.open(directory);
+    expect(reopened.state.pages).toEqual([
+      expect.objectContaining({ index: 1, url: "https://example.com/a" }),
+    ]);
+    await reopened.release();
   });
 
   it("holds one writer and rejects incompatible state versions", async () => {

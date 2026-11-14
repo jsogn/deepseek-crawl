@@ -193,12 +193,13 @@ Defaults:
 - delay: `250 ms`
 - max chars: `0`
 
-With `--job-dir`, the initial command requires an absent job directory and an
-absent final output directory. The job persists normalized URLs, settings,
-successful page summaries, and failures after each item. `resume` runs only
-pending URLs and publishes the final output atomically after all pending URLs are
-attempted. Recorded failures are not retried by `resume`; use Batch Retry after
-the final report exists. `status` does not require credentials.
+With `--job-dir`, the initial command requires absent, disjoint job and final
+output directories. The job persists normalized URLs and settings, appends each
+successful page or failure to a recovery journal, and compacts state on
+interruption or completion. `resume` runs only pending normalized URLs and
+publishes the final output atomically after all pending URLs are attempted.
+Recorded failures are not retried by `resume`; use Batch Retry after the final
+report exists. `status` does not require credentials.
 
 Input formats:
 

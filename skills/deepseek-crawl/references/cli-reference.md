@@ -188,10 +188,11 @@ export FIRECRAWL_API_URL="$(deepseek-crawl gateway url)"
 exist, pass `--port`. `gateway status --json` lists all healthy instances and
 removes stale PID/state entries. It also reports nonsecret credential readiness
 for `deepseek`, `firecrawl`, and `gateway_auth`. Instance JSON uses
-`started_at`.
+`started_at`, `provider_mode`, and `credits_cooldown_seconds`.
 
-`GET /healthz` is unauthenticated and returns only status, version, PID, and
-local/remote mode. It never returns provider keys or user content.
+`GET /healthz` is unauthenticated and returns only status, version, PID,
+local/remote mode, provider mode, and credits cooldown. It never returns
+provider keys or user content.
 
 Every response includes `x-request-id`. CLI request logs are one JSON object on
 stderr with normalized route, status, duration, provider, and fallback reason.

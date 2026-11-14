@@ -565,6 +565,8 @@ async function runGatewayStatus(
       url: state.url,
       mode: state.mode,
       started_at: state.startedAt,
+      provider_mode: state.providerMode ?? null,
+      credits_cooldown_seconds: state.creditsCooldownSeconds ?? null,
     })),
     credentials,
   };
@@ -575,7 +577,8 @@ async function runGatewayStatus(
       running.length === 0
         ? ["Gateway is not running."]
         : running.map(
-            (state) => `${state.mode}  ${state.url}  pid=${state.pid}  started=${state.startedAt}`,
+            (state) =>
+              `${state.mode}  ${state.url}  pid=${state.pid}  provider=${state.providerMode ?? "unknown"}  cooldown=${state.creditsCooldownSeconds === undefined ? "unknown" : `${state.creditsCooldownSeconds}s`}  started=${state.startedAt}`,
           );
     lines.push(
       "",

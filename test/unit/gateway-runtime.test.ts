@@ -37,10 +37,24 @@ describe("gateway runtime state", () => {
     expect(await listGatewayRuntimeStates(directory)).toHaveLength(2);
 
     const pruned = await pruneGatewayRuntimeStates(directory, async () =>
-      Response.json({ status: "ok", pid: process.pid }),
+      Response.json({
+        status: "ok",
+        pid: process.pid,
+        provider_mode: "no-fallback",
+        credits_cooldown_seconds: 120,
+      }),
     );
 
-    expect(pruned).toEqual({ running: [active], stale: 1 });
+    expect(pruned).toEqual({
+      running: [
+        {
+          ...active,
+          providerMode: "no-fallback",
+          creditsCooldownSeconds: 120,
+        },
+      ],
+      stale: 1,
+    });
     expect(await listGatewayRuntimeStates(directory)).toEqual([active]);
     expect(await readdir(directory)).toHaveLength(1);
   });

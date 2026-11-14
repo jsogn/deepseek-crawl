@@ -116,6 +116,41 @@ describe("gateway discovery commands", () => {
     expect(await listGatewayRuntimeStates(directory)).toHaveLength(1);
   });
 
+  it("reports provider mode and cooldown from a running gateway", async () => {
+    const directory = await runtimeDirectory();
+    await writeGatewayRuntimeState(directory, {
+      version: 1,
+      pid: process.pid,
+      url: "http://127.0.0.1:8787/",
+      mode: "local",
+      startedAt: "2026-11-14T00:00:00.000Z",
+    });
+    const environment = dependencies(directory);
+    environment.deps.fetchImpl = (async () =>
+      Response.json({
+        status: "ok",
+        pid: process.pid,
+        provider_mode: "deepseek-first",
+        credits_cooldown_seconds: 0,
+      })) as typeof fetch;
+
+    expect(await runCli(["gateway", "status", "--json"], environment.deps)).toBe(0);
+    expect(JSON.parse(environment.stdout.value())).toMatchObject({
+      instances: [
+        {
+          provider_mode: "deepseek-first",
+          credits_cooldown_seconds: 0,
+        },
+      ],
+    });
+
+    const human = dependencies(directory);
+    human.deps.fetchImpl = environment.deps.fetchImpl;
+    expect(await runCli(["gateway", "status"], human.deps)).toBe(0);
+    expect(human.stdout.value()).toContain("provider=deepseek-first");
+    expect(human.stdout.value()).toContain("cooldown=0s");
+  });
+
   it("prints provider readiness in human-readable status when stopped", async () => {
     const directory = await runtimeDirectory();
     const { deps, stdout } = dependencies(directory, {

@@ -34,6 +34,8 @@ describe("Firecrawl-compatible gateway", () => {
       config: {
         ...testConfig(),
         gatewayApiKey: "gateway-token",
+        providerMode: "deepseek-first",
+        creditsCooldownMs: 0,
       },
       env: {
         GATEWAY_API_KEY: "gateway-token",
@@ -48,11 +50,17 @@ describe("Firecrawl-compatible gateway", () => {
     const response = await fetch(new URL("/healthz", server.url));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
+    const health = await response.json();
+    expect(health).toMatchObject({
       status: "ok",
       pid: process.pid,
       mode: "local",
+      provider_mode: "deepseek-first",
+      credits_cooldown_seconds: 0,
     });
+    const serialized = JSON.stringify(health);
+    expect(serialized).not.toContain("gateway-token");
+    expect(serialized).not.toContain("fc-secret");
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 

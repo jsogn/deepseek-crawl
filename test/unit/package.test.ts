@@ -109,6 +109,8 @@ describe("package documentation", () => {
       "Firecrawl-compatible",
       "gateway url",
       "gateway status",
+      "provider_mode",
+      "credits_cooldown_seconds",
       "/healthz",
     ]) {
       expect(allDocumentation).toContain(text);

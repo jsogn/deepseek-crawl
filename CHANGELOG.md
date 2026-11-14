@@ -17,6 +17,8 @@
   through `--provider-mode` and `DEEPSEEK_GATEWAY_PROVIDER_MODE`.
 - Add configurable Firecrawl `402` cooldowns through `--credits-cooldown` and
   `DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS`.
+- Expose provider mode and credits cooldown through `/healthz` and
+  `gateway status`.
 - Add `gateway url`, `gateway status`, `/healthz`, and multi-instance runtime
   discovery with stale-state cleanup.
 - Forward common Firecrawl requests to the Firecrawl upstream while preserving

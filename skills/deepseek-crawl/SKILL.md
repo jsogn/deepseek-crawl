@@ -65,7 +65,7 @@ Point the Firecrawl client at the URL printed by the command. Local mode starts
 at `8787` and automatically chooses the next available port when occupied.
 Use `deepseek-crawl gateway url` from another terminal or script; use
 `gateway status --json` to list instances, prune stale runtime state, and inspect
-DeepSeek/Firecrawl/gateway-auth readiness.
+DeepSeek/Firecrawl/gateway-auth readiness plus provider mode and cooldown.
 
 Provider mode defaults to `firecrawl-first`. Use `deepseek-first` or
 `no-fallback` when the deployment must not switch providers automatically.

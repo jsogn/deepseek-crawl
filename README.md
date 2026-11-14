@@ -342,7 +342,9 @@ deepseek-crawl gateway status --json
 `gateway url --port 8788`。运行状态只保存 PID、URL、启动时间和模式，不保存
 Provider Key。`gateway status` 会通过 `/healthz` 验证进程并清理陈旧状态。
 `gateway status` 同时显示 DeepSeek、Firecrawl 和远程网关认证是否已配置及来源，
-可以替代连续执行多个 `auth status`。
+以及每个实例的 Provider mode 和 cooldown，可以替代连续执行多个 `auth status`。
+JSON 实例包含 `provider_mode` 和 `credits_cooldown_seconds`，这些值也会出现在
+公开的非敏感 `/healthz` 响应中。
 
 客户端通常只需要 Firecrawl API 地址：
 

@@ -386,6 +386,8 @@ export function createGatewayHandler(
           version: packageVersion,
           pid: process.pid,
           mode: dependencies.config.allowRemote ? "remote" : "local",
+          provider_mode: dependencies.config.providerMode ?? "firecrawl-first",
+          credits_cooldown_seconds: (dependencies.config.creditsCooldownMs ?? 60_000) / 1000,
         },
         { "cache-control": "no-store" },
       );

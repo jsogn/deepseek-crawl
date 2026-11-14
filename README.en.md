@@ -365,7 +365,10 @@ instances require `gateway url --port 8788`. Runtime state stores only PID, URL,
 start time, and mode, never provider keys. `gateway status` verifies `/healthz`
 and prunes stale state.
 It also reports DeepSeek, Firecrawl, and remote gateway-auth readiness and
-source, replacing separate credential checks.
+source, plus each instance's provider mode and cooldown, replacing separate
+credential checks.
+Instance JSON includes `provider_mode` and `credits_cooldown_seconds`; the same
+nonsecret values are available from `/healthz`.
 
 The client usually only needs the gateway URL:
 

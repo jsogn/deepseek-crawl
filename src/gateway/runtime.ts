@@ -3,6 +3,7 @@ import type { Dirent } from "node:fs";
 import { chmod, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { resolveCacheDirectory } from "../cache/paths.js";
+import type { GatewayProviderMode } from "./config.js";
 
 const RUNTIME_VERSION = 1;
 
@@ -12,6 +13,8 @@ export interface GatewayRuntimeState {
   url: string;
   mode: "local" | "remote";
   startedAt: string;
+  providerMode?: GatewayProviderMode;
+  creditsCooldownSeconds?: number;
 }
 
 interface ListedRuntimeState {
@@ -108,9 +111,17 @@ function processExists(pid: number): boolean {
   }
 }
 
-async function healthy(state: GatewayRuntimeState, fetchImpl: typeof fetch): Promise<boolean> {
+interface GatewayRuntimeHealth {
+  providerMode?: GatewayProviderMode;
+  creditsCooldownSeconds?: number;
+}
+
+async function healthy(
+  state: GatewayRuntimeState,
+  fetchImpl: typeof fetch,
+): Promise<GatewayRuntimeHealth | undefined> {
   if (!processExists(state.pid)) {
-    return false;
+    return undefined;
   }
   const base = state.url.endsWith("/") ? state.url : `${state.url}/`;
   try {
@@ -118,12 +129,33 @@ async function healthy(state: GatewayRuntimeState, fetchImpl: typeof fetch): Pro
       signal: AbortSignal.timeout(750),
     });
     if (!response.ok) {
-      return false;
+      return undefined;
     }
-    const body = (await response.json()) as { status?: unknown; pid?: unknown };
-    return body.status === "ok" && body.pid === state.pid;
+    const body = (await response.json()) as {
+      status?: unknown;
+      pid?: unknown;
+      provider_mode?: unknown;
+      credits_cooldown_seconds?: unknown;
+    };
+    if (body.status !== "ok" || body.pid !== state.pid) {
+      return undefined;
+    }
+    const providerMode = ["firecrawl-first", "deepseek-first", "no-fallback"].includes(
+      String(body.provider_mode),
+    )
+      ? (body.provider_mode as GatewayProviderMode)
+      : undefined;
+    const creditsCooldownSeconds =
+      Number.isSafeInteger(body.credits_cooldown_seconds) &&
+      (body.credits_cooldown_seconds as number) >= 0
+        ? (body.credits_cooldown_seconds as number)
+        : undefined;
+    return {
+      ...(providerMode === undefined ? {} : { providerMode }),
+      ...(creditsCooldownSeconds === undefined ? {} : { creditsCooldownSeconds }),
+    };
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -169,8 +201,9 @@ export async function pruneGatewayRuntimeStates(
   const running: GatewayRuntimeState[] = [];
   let stale = 0;
   for (const entry of entries) {
-    if (await healthy(entry.state, fetchImpl)) {
-      running.push(entry.state);
+    const health = await healthy(entry.state, fetchImpl);
+    if (health) {
+      running.push({ ...entry.state, ...health });
     } else {
       stale += 1;
       await rm(entry.path, { force: true });

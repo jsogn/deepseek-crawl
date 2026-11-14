@@ -75,6 +75,7 @@ Optional environment:
 - `DEEPSEEK_TIMEOUT_MS`
 - `DEEPSEEK_MAX_RETRIES`
 - `DEEPSEEK_CACHE_DIR`
+- `FIRECRAWL_API_KEY` and `FIRECRAWL_UPSTREAM_URL` for the optional gateway
 
 ## Balance
 
@@ -109,6 +110,58 @@ Human output lists each currency with total, granted, and topped-up balances.
 Balances are sorted by currency. `available` reflects DeepSeek's
 `is_available` field. Use this command when a user or workflow explicitly asks
 to route by DeepSeek availability; it does not choose a provider.
+
+## Firecrawl-Compatible Gateway
+
+```text
+deepseek-crawl gateway
+  [--host <host>]
+  [--port <1..65535>]
+  [--allow-remote]
+```
+
+Starts a Firecrawl v2-compatible HTTP service. It is not started by ordinary CLI
+or MCP commands.
+
+Defaults:
+
+- Host: `127.0.0.1`
+- Port: `8787`
+- Upstream: `FIRECRAWL_UPSTREAM_URL` or `https://api.firecrawl.dev`
+
+The gateway supports these common routes:
+
+```text
+POST   /v2/search
+POST   /v2/scrape
+POST   /v2/map
+POST   /v2/crawl
+GET    /v2/crawl/:id
+GET    /v2/crawl/:id/errors
+DELETE /v2/crawl/:id
+```
+
+It first uses Firecrawl and switches to DeepSeek when Firecrawl returns `402`,
+the local exhausted-credit cooldown is active, or no Firecrawl credential is
+available. `429`, authentication errors, invalid requests, and `5xx` are returned
+without provider switching.
+
+Only DeepSeek-equivalent common options are supported on fallback. Markdown is
+the supported Scrape/Search/Crawl output format; browser actions, screenshots,
+structured Extract, external-link Crawl, and subdomain Crawl are rejected.
+DeepSeek Crawl IDs use the `dsc_` prefix and remain process-local for 24 hours.
+Firecrawl-owned Crawl IDs continue to use the Firecrawl upstream.
+
+Client setup:
+
+```bash
+export FIRECRAWL_API_URL=http://127.0.0.1:8787
+```
+
+The gateway process does not read `FIRECRAWL_API_URL`. Set
+`FIRECRAWL_UPSTREAM_URL` only when the Firecrawl upstream is not
+`https://api.firecrawl.dev`. Use `--allow-remote` only when intentionally
+exposing the gateway beyond loopback.
 
 ## Escalation
 
@@ -596,6 +649,9 @@ but not duplicate page bodies.
 | Sitemap documents   | 10                    |
 | Sitemap response    | 5 MiB                 |
 | Sitemap redirects   | 3, same-origin        |
+| Gateway request     | 8 MiB                 |
+| Gateway timeout     | 120 seconds           |
+| Gateway Crawl job   | 24 hours, in process  |
 
 ## Exit and Cancellation
 
@@ -604,6 +660,8 @@ but not duplicate page bodies.
 - `1`: runtime, configuration, network, or output failure.
 - `2`: CLI usage error.
 - `130`: SIGINT cancellation after cleanup.
+
+`SIGINT` stops a running gateway and closes its listener.
 
 ## Common Setup Failures
 

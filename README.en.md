@@ -5,16 +5,18 @@
 **CLI-first** web search, page reading, URL mapping, and bounded crawling for AI
 agents, backed by DeepSeek's official Search and Fetch APIs.
 
-Current release: `0.12.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
-[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.12.0)
+Current release: `0.13.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
+[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.13.0)
 
 ```text
 Agent → deepseek-crawl CLI → DeepSeek APIs → files/JSON → Agent
 ```
 
-It replaces the common Firecrawl Search, Scrape, Map, and Crawl capabilities. It
-is **not** a Firecrawl API or SDK compatibility layer. MCP is optional; ordinary
-Agent use should prefer the CLI plus the bundled Skill.
+It replaces the common Firecrawl Search, Scrape, Map, and Crawl capabilities.
+The ordinary CLI and MCP use only DeepSeek. The package also includes an optional
+Firecrawl-compatible gateway for existing Firecrawl v2 clients that should switch
+to DeepSeek after Firecrawl credits are exhausted.
+MCP is optional; ordinary Agent use should prefer the CLI plus the bundled Skill.
 
 ## Core principles
 
@@ -56,7 +58,7 @@ deepseek-crawl --version
 The version command should print the current release, for example:
 
 ```text
-0.12.0
+0.13.0
 ```
 
 If global npm lacks write permission, do not use `sudo npm install -g`. Use your
@@ -300,6 +302,55 @@ failed-item retry:
 | Scope Crawl with `--include-paths` / `--exclude-paths` | Crawl workflow guide              |
 | Deduplicate with `--ignore-query-parameters`           | Crawl workflow guide              |
 
+## Optional Firecrawl-compatible gateway
+
+The ordinary CLI and MCP do not start an HTTP service. To connect an existing
+Firecrawl v2 client, start the gateway included in the same npm package:
+
+```bash
+export FIRECRAWL_API_KEY=fc-...
+export DEEPSEEK_API_KEY=sk-...
+deepseek-crawl gateway --port 8787
+```
+
+Point the client at the gateway root:
+
+```bash
+export FIRECRAWL_API_URL=http://127.0.0.1:8787
+```
+
+The Node SDK can set the same root URL directly. Do not append `/v2` to `apiUrl`:
+
+```js
+import { Firecrawl } from "firecrawl";
+
+const firecrawl = new Firecrawl({
+  apiKey: process.env.FIRECRAWL_API_KEY,
+  apiUrl: "http://127.0.0.1:8787",
+});
+```
+
+`POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`, and `POST /v2/crawl`
+prefer Firecrawl. Firecrawl `402` responses, or a missing Firecrawl credential,
+switch to DeepSeek. Crawl also exposes Firecrawl-compatible job status, errors,
+and cancellation. `429`, authentication failures, invalid requests, and server
+errors remain transparent and do not silently switch providers.
+
+The gateway process reads only `FIRECRAWL_UPSTREAM_URL` for its Firecrawl
+upstream; it defaults to `https://api.firecrawl.dev`. `FIRECRAWL_API_URL` is the
+client-facing gateway URL and is never used as the gateway upstream, preventing a
+proxy loop.
+
+Advanced Firecrawl capabilities pass through while credits are available. They
+never pretend to succeed when a DeepSeek fallback does not provide equivalent
+behavior. DeepSeek Crawl jobs remain in the current gateway process and expire
+after 24 hours. The default listener is `127.0.0.1`; a public listener requires
+the explicit `--allow-remote` flag.
+
+Offline compatibility tests use the official `firecrawl` Node SDK to cover
+Search, Scrape, Map, Crawl, fallback, and structured errors without calling paid
+APIs.
+
 ## Agent integration
 
 `deepseek-crawl init` installs the default Skill as part of onboarding. Use the
@@ -351,19 +402,21 @@ reserved for clients that cannot execute the CLI and exposes `deepseek_search`,
   limits same-origin redirects.
 - There is no JavaScript rendering, login, browser interaction, or server-side
   structured Extract.
+- The Firecrawl-compatible gateway covers common operations only; advanced
+  Firecrawl capabilities are not replaced by DeepSeek.
 - Cached page bodies stay local; run `deepseek-crawl cache clear --json` on shared
   machines.
 - Map and Crawl are bounded discovery tools, not complete site inventories.
 
 Full limits, MCP differences, environment variables, and privacy details:
 
-[Operations, Safety, and MCP](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.md)
+[Operations, safety, MCP, and gateway](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.md)
 
 ## Documentation
 
 - [Complete CLI reference](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/references/cli-reference.md)
 - [Batch and Crawl workflows](https://github.com/jsogn/deepseek-crawl/blob/main/docs/workflows.md)
-- [Operations, safety, and MCP](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.md)
+- [Operations, safety, MCP, and gateway](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.md)
 - [Agent Skill routing and contract](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/SKILL.md)
 - [Changelog](https://github.com/jsogn/deepseek-crawl/blob/main/CHANGELOG.md)
 - [Release process](https://github.com/jsogn/deepseek-crawl/blob/main/docs/releasing.md)

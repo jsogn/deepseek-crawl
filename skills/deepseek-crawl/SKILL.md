@@ -1,7 +1,7 @@
 ---
 
 name: deepseek-crawl
-description: Use when the user or workflow selects DeepSeek's official Search and Fetch APIs through the deepseek-crawl CLI for live web search, reading a known URL, mapping a site, bounded same-origin crawling, or scheduled page-change checks. Do not use for local files, browser interaction, login, or Firecrawl API compatibility.
+description: Use when the user or workflow selects DeepSeek's official Search and Fetch APIs through the deepseek-crawl CLI for live web search, reading a known URL, mapping a site, bounded same-origin crawling, or scheduled page-change checks. Do not use for local files, browser interaction, login, or full Firecrawl API compatibility; the optional Firecrawl-compatible gateway is documented separately.
 allowed-tools:
 
 - Bash(deepseek-crawl *)
@@ -46,6 +46,23 @@ into the chat or pass it as an argument.
 If the CLI is installed but this Skill is unavailable in a new Agent session,
 run `deepseek-crawl setup skills` to install it into the common
 `.agents/skills` directory.
+
+## Optional Firecrawl-Compatible Gateway
+
+Only start the gateway when the user explicitly wants an existing Firecrawl v2
+client to keep working without changing its API calls:
+
+```bash
+deepseek-crawl gateway --port 8787
+```
+
+Point the Firecrawl client at `http://127.0.0.1:8787`. The gateway prefers its
+Firecrawl upstream and falls back to DeepSeek for common Search, Scrape, Map, and
+Crawl operations after Firecrawl reports exhausted credits. It never starts
+automatically and is separate from ordinary CLI and MCP requests.
+
+Do not claim full Advanced Firecrawl compatibility. The gateway does not replace
+the normal CLI operation selection in this Skill.
 
 ## Choose the Narrowest Operation
 

@@ -5,15 +5,17 @@
 面向 AI Agent 的 **CLI-first** 网页搜索、页面读取、URL Map 和受限 Crawl 工具，
 底层使用 DeepSeek 官方 Search 与 Fetch API。
 
-当前版本：`0.12.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
-[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.12.0)
+当前版本：`0.13.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
+[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.13.0)
 
 ```text
 Agent → deepseek-crawl CLI → DeepSeek API → 文件/JSON → Agent
 ```
 
-它用于替代 Firecrawl 的常见 Search、Scrape、Map 和 Crawl 能力，**不是**
-Firecrawl API 或 SDK 兼容层。MCP 为可选接口；日常 Agent 使用优先选择 CLI + Skill。
+它用于替代 Firecrawl 的常见 Search、Scrape、Map 和 Crawl 能力。普通 CLI 和
+MCP 只调用 DeepSeek；包内另有可选的 Firecrawl-compatible 网关，用于兼容现有
+Firecrawl v2 客户端并在额度耗尽时切换到 DeepSeek。
+MCP 为可选接口；日常 Agent 使用优先选择 CLI + Skill。
 
 ## 核心原则
 
@@ -50,7 +52,7 @@ deepseek-crawl --version
 版本命令应输出当前发布版本，例如：
 
 ```text
-0.12.0
+0.13.0
 ```
 
 如果全局 npm 没有写权限，不要直接使用 `sudo npm install -g`。应使用自带的
@@ -281,6 +283,51 @@ CLI 默认合并 Sitemap 和 Markdown 发现，并限制在种子页的 exact or
 | 使用 `--include-paths` / `--exclude-paths` 控制范围 | Crawl 工作流指南                  |
 | 使用 `--ignore-query-parameters` 去重               | Crawl 工作流指南                  |
 
+## Firecrawl-compatible 网关（可选）
+
+普通 CLI 和 MCP 不启动 HTTP 服务。需要让现有 Firecrawl v2 客户端直接连接时，
+启动同一 npm 包内置的兼容网关：
+
+```bash
+export FIRECRAWL_API_KEY=fc-...
+export DEEPSEEK_API_KEY=sk-...
+deepseek-crawl gateway --port 8787
+```
+
+然后把客户端的 Firecrawl API 地址改为：
+
+```bash
+export FIRECRAWL_API_URL=http://127.0.0.1:8787
+```
+
+Node SDK 也可以直接设置根地址；不要在 `apiUrl` 末尾添加 `/v2`：
+
+```js
+import { Firecrawl } from "firecrawl";
+
+const firecrawl = new Firecrawl({
+  apiKey: process.env.FIRECRAWL_API_KEY,
+  apiUrl: "http://127.0.0.1:8787",
+});
+```
+
+常用路由 `POST /v2/search`、`POST /v2/scrape`、`POST /v2/map` 和
+`POST /v2/crawl` 会优先调用 Firecrawl。Firecrawl 返回 `402`、或未配置
+Firecrawl 凭据时，网关使用 DeepSeek；Crawl 还会提供兼容的 job status、errors
+和取消接口。`429`、认证错误、无效请求和服务端错误保持 Firecrawl 响应，不会
+静默切换。
+
+网关进程只读取 `FIRECRAWL_UPSTREAM_URL` 作为 Firecrawl 上游地址，默认
+`https://api.firecrawl.dev`。`FIRECRAWL_API_URL` 是客户端地址，不会被网关用作
+上游，以免代理自身形成循环。
+
+高级 Firecrawl 能力在有额度时可透传；没有 DeepSeek 等价能力时不会伪装成功。
+DeepSeek Crawl job 只保存在当前网关进程内，24 小时后过期。默认只监听
+`127.0.0.1`；监听公网地址必须显式添加 `--allow-remote`。
+
+离线兼容测试使用官方 `firecrawl` Node SDK，覆盖 Search、Scrape、Map、Crawl、
+fallback 和结构化错误，不访问真实付费 API。
+
 ## Agent 集成
 
 `deepseek-crawl init` 会一并完成默认 Skill 安装。以下命令用于只安装或重新配置
@@ -327,18 +374,20 @@ CLI 的客户端，提供 `deepseek_search`、`deepseek_fetch`、`deepseek_map` 
 - 本实现不读取也不执行 `robots.txt`；必须确认站点授权和使用条款。
 - Sitemap 只允许公网 HTTP(S)，会验证 DNS、阻止 DNS rebinding，并限制同源重定向。
 - 不提供 JavaScript 渲染、登录、浏览器交互或服务端结构化 Extract。
+- Firecrawl-compatible 网关只兼容常用接口；高级 Firecrawl 功能不能用 DeepSeek
+  替代。
 - 缓存正文保存在本机；共享设备上使用 `deepseek-crawl cache clear --json` 清理。
 - Map 和 Crawl 是有界发现，不保证完整站点覆盖。
 
 完整限制、MCP 差异、环境变量和隐私说明：
 
-[运行限制、安全与 MCP](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.zh-CN.md)
+[运行限制、安全、MCP 与网关](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.zh-CN.md)
 
 ## 文档地图
 
 - [CLI 完整参考](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/references/cli-reference.md)
 - [批量读取与 Crawl 工作流](https://github.com/jsogn/deepseek-crawl/blob/main/docs/workflows.zh-CN.md)
-- [运行限制、安全与 MCP](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.zh-CN.md)
+- [运行限制、安全、MCP 与网关](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.zh-CN.md)
 - [Agent Skill 路由与契约](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/SKILL.md)
 - [变更记录](https://github.com/jsogn/deepseek-crawl/blob/main/CHANGELOG.md)
 - [发布流程](https://github.com/jsogn/deepseek-crawl/blob/main/docs/releasing.md)

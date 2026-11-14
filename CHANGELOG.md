@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.13.0 - 2026-11-14
+
+### Added
+
+- Add the optional `deepseek-crawl gateway` mode for Firecrawl v2-compatible
+  Search, Scrape, Map, and asynchronous Crawl clients.
+- Forward common Firecrawl requests to the Firecrawl upstream while preserving
+  method, request body, authentication, status, and JSON response behavior.
+- Fall back to DeepSeek Search, Fetch, Map, and Crawl when Firecrawl reports
+  exhausted credits or no Firecrawl credential is configured.
+- Expose local DeepSeek-backed Crawl jobs through Firecrawl job status, errors,
+  expiration, and cancellation routes.
+
+### Security
+
+- Bind the gateway to loopback by default and require `--allow-remote` for a
+  non-loopback listener.
+- Keep the Firecrawl upstream origin pinned independently of client request
+  targets.
+- Limit inbound gateway request bodies to 8 MiB and never log credentials.
+
+### Testing
+
+- Verify the gateway against the official `firecrawl` 4.54.0 Node SDK for
+  Search, Scrape, Map, Crawl, fallback, and structured error behavior.
+
 ## 0.12.0 - 2026-11-14
 
 ### Added

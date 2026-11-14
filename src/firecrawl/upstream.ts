@@ -33,6 +33,7 @@ export interface FirecrawlUpstreamRequest {
   path: string;
   headers: Headers;
   body?: Uint8Array;
+  signal?: AbortSignal;
 }
 
 export interface FirecrawlUpstreamDependencies {
@@ -86,7 +87,9 @@ export async function requestFirecrawlUpstream(
     method: input.method,
     headers: upstreamHeaders(input.headers, dependencies.env, dependencies.config.firecrawlApiKey),
     redirect: "manual",
-    signal: AbortSignal.timeout(dependencies.config.timeoutMs),
+    signal: input.signal
+      ? AbortSignal.any([input.signal, AbortSignal.timeout(dependencies.config.timeoutMs)])
+      : AbortSignal.timeout(dependencies.config.timeoutMs),
   };
   if (input.body !== undefined) {
     init.body = input.body;

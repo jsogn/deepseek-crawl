@@ -46,6 +46,7 @@ describe("gateway runtime state", () => {
         max_concurrent_provider_requests: 50,
         max_active_crawl_jobs: 5,
         max_retained_crawl_jobs: 20,
+        max_retained_crawl_bytes: 1048576,
       }),
     );
 
@@ -59,6 +60,7 @@ describe("gateway runtime state", () => {
           maxConcurrentProviderRequests: 50,
           maxActiveCrawlJobs: 5,
           maxRetainedCrawlJobs: 20,
+          maxRetainedCrawlBytes: 1_048_576,
         },
       ],
       stale: 1,

@@ -142,8 +142,8 @@ Defaults:
 - Upstream: `FIRECRAWL_UPSTREAM_URL` or `https://api.firecrawl.dev`
 - Provider mode: `firecrawl-first`, `deepseek-first`, or `no-fallback`
 - Firecrawl 402 cooldown: 60 seconds by default, configurable from 0–3600
-- Capacity: 100 HTTP requests, 100 Provider requests, 10 active Crawl jobs, and
-  100 retained Crawl jobs by default
+- Capacity: 100 HTTP requests, 100 Provider requests, 10 active Crawl jobs,
+  100 retained Crawl jobs, and 256 MiB of retained Crawl documents by default
 
 Use `auth set firecrawl` to make Firecrawl-first local mode available; otherwise
 common routes use DeepSeek. Remote mode requires `auth set gateway`, or the
@@ -195,6 +195,12 @@ for `deepseek`, `firecrawl`, and `gateway_auth`. Instance JSON uses
 `GET /healthz` is unauthenticated and returns only status, version, PID,
 local/remote mode, provider mode, credits cooldown, and capacity limits. It never
 returns provider keys or user content.
+
+Use `--max-retained-crawl-bytes <bytes>` or
+`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES` to tune the retained document budget.
+The oldest terminal Crawl job is evicted first when task-count or byte capacity
+is full. An active job that would exceed the global byte budget fails without
+retaining that page.
 
 Every response includes `x-request-id`. CLI request logs are one JSON object on
 stderr with normalized route, status, duration, provider, and fallback reason.

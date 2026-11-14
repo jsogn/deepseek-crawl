@@ -12,10 +12,14 @@ const DEFAULT_REQUEST_BODY_LIMIT = 8 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_CREDITS_COOLDOWN_MS = 60_000;
 const MAX_CREDITS_COOLDOWN_MS = 3_600_000;
-const DEFAULT_MAX_CONCURRENT_REQUESTS = 100;
-const DEFAULT_MAX_CONCURRENT_PROVIDER_REQUESTS = 100;
-const DEFAULT_MAX_ACTIVE_CRAWL_JOBS = 10;
-const DEFAULT_MAX_RETAINED_CRAWL_JOBS = 100;
+export const GATEWAY_CAPACITY_DEFAULTS = {
+  maxConcurrentRequests: 100,
+  maxConcurrentProviderRequests: 100,
+  maxActiveCrawlJobs: 10,
+  maxRetainedCrawlJobs: 100,
+  maxRetainedCrawlBytes: 256 * 1024 * 1024,
+} as const;
+export const MAX_RETAINED_CRAWL_BYTES = 16 * 1024 * 1024 * 1024;
 const MAX_CAPACITY = 1_000;
 export type GatewayProviderMode = "firecrawl-first" | "deepseek-first" | "no-fallback";
 const DEFAULT_PROVIDER_MODE: GatewayProviderMode = "firecrawl-first";
@@ -41,6 +45,7 @@ export interface GatewayConfig {
   maxConcurrentProviderRequests?: number;
   maxActiveCrawlJobs?: number;
   maxRetainedCrawlJobs?: number;
+  maxRetainedCrawlBytes?: number;
   headersTimeoutMs?: number;
   requestTimeoutMs?: number;
   keepAliveTimeoutMs?: number;
@@ -60,6 +65,7 @@ export interface GatewayConfigInput {
   maxConcurrentProviderRequests?: number;
   maxActiveCrawlJobs?: number;
   maxRetainedCrawlJobs?: number;
+  maxRetainedCrawlBytes?: number;
   env?: NodeJS.ProcessEnv;
   credentialStores?: Partial<Record<CredentialName, CredentialStore>>;
 }
@@ -185,6 +191,24 @@ function parseCapacity(value: string | number | undefined, name: string, fallbac
   return parsed;
 }
 
+function parseByteLimit(value: string | number | undefined): number {
+  if (value === undefined || (typeof value === "string" && value.trim() === "")) {
+    return GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlBytes;
+  }
+  const parsed =
+    typeof value === "number"
+      ? value
+      : /^\d+$/.test(value.trim())
+        ? Number(value.trim())
+        : Number.NaN;
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > MAX_RETAINED_CRAWL_BYTES) {
+    throw new Error(
+      `Gateway retained Crawl byte capacity must be an integer from 1 to ${MAX_RETAINED_CRAWL_BYTES}.`,
+    );
+  }
+  return parsed;
+}
+
 const CREDENTIAL_ENV: Record<CredentialName, string> = {
   deepseek: "DEEPSEEK_API_KEY",
   firecrawl: "FIRECRAWL_API_KEY",
@@ -218,22 +242,25 @@ export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConf
   const maxConcurrentRequests = parseCapacity(
     options.maxConcurrentRequests ?? env.DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS,
     "Gateway maximum concurrent requests",
-    DEFAULT_MAX_CONCURRENT_REQUESTS,
+    GATEWAY_CAPACITY_DEFAULTS.maxConcurrentRequests,
   );
   const maxConcurrentProviderRequests = parseCapacity(
     options.maxConcurrentProviderRequests ?? env.DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS,
     "Gateway maximum concurrent provider requests",
-    DEFAULT_MAX_CONCURRENT_PROVIDER_REQUESTS,
+    GATEWAY_CAPACITY_DEFAULTS.maxConcurrentProviderRequests,
   );
   const maxActiveCrawlJobs = parseCapacity(
     options.maxActiveCrawlJobs ?? env.DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS,
     "Gateway maximum active Crawl jobs",
-    DEFAULT_MAX_ACTIVE_CRAWL_JOBS,
+    GATEWAY_CAPACITY_DEFAULTS.maxActiveCrawlJobs,
   );
   const maxRetainedCrawlJobs = parseCapacity(
     options.maxRetainedCrawlJobs ?? env.DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS,
     "Gateway maximum retained Crawl jobs",
-    DEFAULT_MAX_RETAINED_CRAWL_JOBS,
+    GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlJobs,
+  );
+  const maxRetainedCrawlBytes = parseByteLimit(
+    options.maxRetainedCrawlBytes ?? env.DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES,
   );
   const remote = options.remote ?? options.allowRemote ?? false;
   const host = validateHost(options.host?.trim() || (remote ? "0.0.0.0" : DEFAULT_HOST), remote);
@@ -254,6 +281,7 @@ export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConf
     maxConcurrentProviderRequests,
     maxActiveCrawlJobs,
     maxRetainedCrawlJobs,
+    maxRetainedCrawlBytes,
     ...(gatewayApiKey === undefined ? {} : { gatewayApiKey }),
     ...(firecrawlApiKey === undefined ? {} : { firecrawlApiKey }),
     upstreamUrl: parseUpstreamUrl(env.FIRECRAWL_UPSTREAM_URL),

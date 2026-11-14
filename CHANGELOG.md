@@ -5,7 +5,16 @@
 ### Added
 
 - Add configurable HTTP, Provider, active Crawl job, and retained Crawl job
-  capacity limits plus periodic expired-job cleanup.
+  capacity limits, a retained Crawl document byte budget, and periodic expired-job
+  cleanup.
+- Evict the oldest terminal Crawl job before rejecting retained capacity.
+
+### Fixed
+
+- Cancel queued and in-flight foreground DeepSeek fallback calls when an HTTP
+  client disconnects.
+- Prevent retained Crawl jobs from exhausting process memory for 24 hours and
+  fail jobs cleanly when their next page would exceed the global byte budget.
 
 ## 0.13.0 - 2026-11-14
 

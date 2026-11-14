@@ -12,6 +12,7 @@ max_concurrent_requests="7"
 max_provider_requests="5"
 max_crawl_jobs="3"
 max_retained_crawl_jobs="9"
+max_retained_crawl_bytes="12345678"
 platform="${DOCKER_SMOKE_PLATFORM:-}"
 
 cleanup() {
@@ -42,6 +43,7 @@ run_args=(
   --env "DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS=$max_provider_requests"
   --env "DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS=$max_crawl_jobs"
   --env "DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS=$max_retained_crawl_jobs"
+  --env "DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES=$max_retained_crawl_bytes"
 )
 if [[ -n "$platform" ]]; then
   run_args+=(--platform "$platform")
@@ -131,7 +133,7 @@ case "$health_response" in
     ;;
 esac
 case "$health_response" in
-  *'"max_active_crawl_jobs":3'*'"max_retained_crawl_jobs":9'*) ;;
+  *'"max_active_crawl_jobs":3'*'"max_retained_crawl_jobs":9'*'"max_retained_crawl_bytes":12345678'*) ;;
   *)
     printf 'Docker gateway did not expose the configured Crawl capacity: %s\n' \
       "$health_response" >&2
@@ -159,7 +161,7 @@ if [[ "$exit_code" != "0" ]]; then
   exit 1
 fi
 
-printf 'Docker gateway smoke passed: health=%s, uid=%s, provider=%s, cooldown=%ss, http=%s, provider_requests=%s, crawl_jobs=%s, retained_jobs=%s, exit=%s\n' \
+printf 'Docker gateway smoke passed: health=%s, uid=%s, provider=%s, cooldown=%ss, http=%s, provider_requests=%s, crawl_jobs=%s, retained_jobs=%s, retained_bytes=%s, exit=%s\n' \
   "$container_health" "$container_uid" "$provider_mode" "$credits_cooldown_seconds" \
   "$max_concurrent_requests" "$max_provider_requests" "$max_crawl_jobs" \
-  "$max_retained_crawl_jobs" "$exit_code"
+  "$max_retained_crawl_jobs" "$max_retained_crawl_bytes" "$exit_code"

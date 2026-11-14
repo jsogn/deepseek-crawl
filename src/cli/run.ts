@@ -57,7 +57,7 @@ import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekBalanceGateway, DeepSeekGateway } from "../deepseek/gateway.js";
 import { errorMessage as genericErrorMessage } from "../error-message.js";
-import { loadGatewayConfig } from "../gateway/config.js";
+import { GATEWAY_CAPACITY_DEFAULTS, loadGatewayConfig } from "../gateway/config.js";
 import { pruneGatewayRuntimeStates, resolveGatewayRuntimeDirectory } from "../gateway/runtime.js";
 import { startGatewayServer } from "../gateway/server.js";
 import { createBatchFetchOutputWriter, formatBatchFetchHuman } from "../output/batch.js";
@@ -336,6 +336,8 @@ Options:
                       Concurrent Crawl jobs (default: 10)
   --max-retained-crawl-jobs <1..1000>
                       Retained Crawl jobs (default: 100)
+  --max-retained-crawl-bytes <bytes>
+                      Retained Crawl data (default: 256 MiB)
   --remote            Enable authenticated remote mode (fixed port 8787)
 
 Subcommands:
@@ -494,6 +496,9 @@ async function runGateway(
     ...(command.maxRetainedCrawlJobs === undefined
       ? {}
       : { maxRetainedCrawlJobs: command.maxRetainedCrawlJobs }),
+    ...(command.maxRetainedCrawlBytes === undefined
+      ? {}
+      : { maxRetainedCrawlBytes: command.maxRetainedCrawlBytes }),
     env: deps.env,
     ...(deps.credentialStores === undefined ? {} : { credentialStores: deps.credentialStores }),
   });
@@ -519,7 +524,7 @@ async function runGateway(
     `Firecrawl credits cooldown: ${(config.creditsCooldownMs ?? 60_000) / 1000} seconds\n`,
   );
   deps.stdout.write(
-    `Capacity: http=${config.maxConcurrentRequests ?? 100}, provider=${config.maxConcurrentProviderRequests ?? 100}, crawl_jobs=${config.maxActiveCrawlJobs ?? 10}, retained_jobs=${config.maxRetainedCrawlJobs ?? 100}\n`,
+    `Capacity: http=${config.maxConcurrentRequests ?? GATEWAY_CAPACITY_DEFAULTS.maxConcurrentRequests}, provider=${config.maxConcurrentProviderRequests ?? GATEWAY_CAPACITY_DEFAULTS.maxConcurrentProviderRequests}, crawl_jobs=${config.maxActiveCrawlJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxActiveCrawlJobs}, retained_jobs=${config.maxRetainedCrawlJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlJobs}, retained_bytes=${config.maxRetainedCrawlBytes ?? GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlBytes}\n`,
   );
   deps.stdout.write(
     command.remote
@@ -592,6 +597,7 @@ async function runGatewayStatus(
       max_concurrent_provider_requests: state.maxConcurrentProviderRequests ?? null,
       max_active_crawl_jobs: state.maxActiveCrawlJobs ?? null,
       max_retained_crawl_jobs: state.maxRetainedCrawlJobs ?? null,
+      max_retained_crawl_bytes: state.maxRetainedCrawlBytes ?? null,
     })),
     credentials,
   };
@@ -603,7 +609,7 @@ async function runGatewayStatus(
         ? ["Gateway is not running."]
         : running.map(
             (state) =>
-              `${state.mode}  ${state.url}  pid=${state.pid}  provider=${state.providerMode ?? "unknown"}  cooldown=${state.creditsCooldownSeconds === undefined ? "unknown" : `${state.creditsCooldownSeconds}s`}  http=${state.maxConcurrentRequests ?? "unknown"}  provider_requests=${state.maxConcurrentProviderRequests ?? "unknown"}  crawl_jobs=${state.maxActiveCrawlJobs ?? "unknown"}  retained_jobs=${state.maxRetainedCrawlJobs ?? "unknown"}  started=${state.startedAt}`,
+              `${state.mode}  ${state.url}  pid=${state.pid}  provider=${state.providerMode ?? "unknown"}  cooldown=${state.creditsCooldownSeconds === undefined ? "unknown" : `${state.creditsCooldownSeconds}s`}  http=${state.maxConcurrentRequests ?? "unknown"}  provider_requests=${state.maxConcurrentProviderRequests ?? "unknown"}  crawl_jobs=${state.maxActiveCrawlJobs ?? "unknown"}  retained_jobs=${state.maxRetainedCrawlJobs ?? "unknown"}  retained_bytes=${state.maxRetainedCrawlBytes ?? "unknown"}  started=${state.startedAt}`,
           );
     lines.push(
       "",

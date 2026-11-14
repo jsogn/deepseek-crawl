@@ -4,11 +4,10 @@ import { executeCrawl } from "../application/crawl.js";
 import type { MapSitemapReader } from "../application/map.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { errorMessage } from "../error-message.js";
+import { GATEWAY_CAPACITY_DEFAULTS } from "./config.js";
 import { GatewayCapacityError, UnsupportedFallbackFeatureError } from "./errors.js";
 
 const DEFAULT_JOB_TTL_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_MAX_RUNNING_JOBS = 10;
-const DEFAULT_MAX_RETAINED_JOBS = 100;
 
 const crawlInputSchema = z
   .object({
@@ -49,6 +48,7 @@ export interface CrawlJobManagerOptions {
   jobTtlMs?: number;
   maxRunningJobs?: number;
   maxRetainedJobs?: number;
+  maxRetainedBytes?: number;
 }
 
 export interface FirecrawlCrawlDocument {
@@ -96,6 +96,7 @@ interface CrawlJob {
   errors: FirecrawlCrawlError[];
   controller: AbortController;
   done: Promise<void>;
+  bytes: number;
 }
 
 function requestUrl(value: string): string {
@@ -130,6 +131,10 @@ function formatsAreMarkdownOnly(
   );
 }
 
+function storedDocumentBytes(document: FirecrawlCrawlDocument): number {
+  return Buffer.byteLength(JSON.stringify(document), "utf8");
+}
+
 export class CrawlJobManager {
   readonly #jobs = new Map<string, CrawlJob>();
   readonly #now: () => Date;
@@ -137,13 +142,18 @@ export class CrawlJobManager {
   readonly #jobTtlMs: number;
   readonly #maxRunningJobs: number;
   readonly #maxRetainedJobs: number;
+  readonly #maxRetainedBytes: number;
+  #retainedBytes = 0;
 
   constructor(options: CrawlJobManagerOptions = {}) {
     this.#now = options.now ?? (() => new Date());
     this.#idFactory = options.idFactory ?? (() => `dsc_${randomUUID()}`);
     this.#jobTtlMs = options.jobTtlMs ?? DEFAULT_JOB_TTL_MS;
-    this.#maxRunningJobs = options.maxRunningJobs ?? DEFAULT_MAX_RUNNING_JOBS;
-    this.#maxRetainedJobs = options.maxRetainedJobs ?? DEFAULT_MAX_RETAINED_JOBS;
+    this.#maxRunningJobs = options.maxRunningJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxActiveCrawlJobs;
+    this.#maxRetainedJobs =
+      options.maxRetainedJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlJobs;
+    this.#maxRetainedBytes =
+      options.maxRetainedBytes ?? GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlBytes;
   }
 
   create(
@@ -177,11 +187,18 @@ export class CrawlJobManager {
         retryAfterSeconds: 1,
       });
     }
-    if (this.#jobs.size >= this.#maxRetainedJobs) {
-      throw new GatewayCapacityError("Gateway Crawl job storage is full.", {
-        code: "crawl_job_capacity_reached",
-        statusCode: 503,
-      });
+    while (
+      this.#jobs.size >= this.#maxRetainedJobs ||
+      this.#retainedBytes >= this.#maxRetainedBytes
+    ) {
+      const terminal = [...this.#jobs.values()].find((job) => job.status !== "scraping");
+      if (!terminal) {
+        throw new GatewayCapacityError("Gateway Crawl job storage is full.", {
+          code: "crawl_job_capacity_reached",
+          statusCode: 503,
+        });
+      }
+      this.#deleteJob(terminal.id);
     }
     const generatedId = this.#idFactory();
     const id = generatedId.startsWith("dsc_") ? generatedId : `dsc_${generatedId}`;
@@ -199,6 +216,7 @@ export class CrawlJobManager {
       errors: [],
       controller,
       done: Promise.resolve(),
+      bytes: 0,
     };
     this.#jobs.set(id, job);
 
@@ -220,17 +238,30 @@ export class CrawlJobManager {
         sitemapReader: reader,
       },
       async (page) => {
+        if (job.status !== "scraping" || this.#jobs.get(job.id) !== job) {
+          throw job.controller.signal.reason ?? new Error("Crawl job is no longer active.");
+        }
+        const document: FirecrawlCrawlDocument = {
+          markdown: page.content,
+          metadata: {
+            title: page.title,
+            sourceURL: page.url,
+            url: page.url,
+          },
+        };
+        const bytes = storedDocumentBytes(document);
+        if (this.#retainedBytes + bytes > this.#maxRetainedBytes) {
+          throw new GatewayCapacityError("Gateway Crawl data storage is full.", {
+            code: "crawl_data_capacity_reached",
+            statusCode: 503,
+          });
+        }
         job.data.push({
           index: page.index,
-          document: {
-            markdown: page.content,
-            metadata: {
-              title: page.title,
-              sourceURL: page.url,
-              url: page.url,
-            },
-          },
+          document,
         });
+        job.bytes += bytes;
+        this.#retainedBytes += bytes;
         job.completed += 1;
         job.total = Math.max(job.total, job.completed);
       },
@@ -274,7 +305,7 @@ export class CrawlJobManager {
     for (const [id, job] of this.#jobs) {
       if (now >= job.expiresAt) {
         job.controller.abort(new Error("Crawl job expired."));
-        this.#jobs.delete(id);
+        this.#deleteJob(id);
         removed += 1;
       }
     }
@@ -347,9 +378,19 @@ export class CrawlJobManager {
     }
     if (this.#now().getTime() >= job.expiresAt) {
       job.controller.abort(new Error("Crawl job expired."));
-      this.#jobs.delete(id);
+      this.#deleteJob(id);
       return undefined;
     }
     return job;
+  }
+
+  #deleteJob(id: string): boolean {
+    const job = this.#jobs.get(id);
+    if (!job) {
+      return false;
+    }
+    this.#jobs.delete(id);
+    this.#retainedBytes = Math.max(0, this.#retainedBytes - job.bytes);
+    return true;
   }
 }

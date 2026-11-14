@@ -25,6 +25,7 @@ DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS=100
 DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS=100
 DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS=10
 DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS=100
+DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES=268435456
 ```
 
 Provider 模式默认为 `firecrawl-first`。设为 `deepseek-first` 可让常用路由直接
@@ -37,6 +38,8 @@ Provider 模式默认为 `firecrawl-first`。设为 `deepseek-first` 可让常�
 并发默认有硬上限。若当前网关与其他任务共享 Provider 限流，可降低
 `DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS` 或
 `DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS`。
+保留字节预算限制进程内 Crawl 结果占用的内存；内存受限的部署应降低
+`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES`。
 
 环境文件权限应为 `0600`。不要把 Token 写入镜像、Compose 文件、命令行或仓库。
 

@@ -331,20 +331,24 @@ Firecrawl，Firecrawl `402` 会原样返回而不会切换 Provider。
 `firecrawl-first` 收到 402 后默认冷却 60 秒；`--credits-cooldown 0` 表示每次都
 重新尝试 Firecrawl。
 
-Gateway 默认限制 HTTP 并发 `100`、Provider 并发 `100`、运行中 Crawl jobs `10`，
-并最多保留 `100` 个 Crawl jobs。高级部署可调整：
+Gateway 默认限制 HTTP 并发 `100`、Provider 并发 `100`、运行中 Crawl jobs `10`、
+保留 Crawl jobs `100` 个，以及已保留 Crawl 文档总计 `256 MiB`。高级部署可调整：
 
 ```bash
 deepseek-crawl gateway \
   --max-concurrent-requests 200 \
   --max-provider-requests 50 \
   --max-crawl-jobs 5 \
-  --max-retained-crawl-jobs 50
+  --max-retained-crawl-jobs 50 \
+  --max-retained-crawl-bytes 134217728
 ```
 
 对应环境变量为 `DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS`、
 `DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS`、`DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS` 和
-`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS`，可用于容器和 systemd。
+`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS`、`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES`，
+可用于容器和 systemd。任务数或字节容量满时，网关先淘汰最旧的终态任务；如果容量
+仍被运行中任务占满，新任务返回容量错误。单个运行中任务若会使全局文档预算越界，
+会以失败终态停止且不保留越界页面。
 
 其他终端或脚本可以发现当前实际地址：
 
@@ -359,7 +363,12 @@ Provider Key。`gateway status` 会通过 `/healthz` 验证进程并清理陈旧
 `gateway status` 同时显示 DeepSeek、Firecrawl 和远程网关认证是否已配置及来源，
 以及每个实例的 Provider mode 和 cooldown，可以替代连续执行多个 `auth status`。
 JSON 实例包含 `provider_mode` 和 `credits_cooldown_seconds`，这些值也会出现在
-公开的非敏感 `/healthz` 响应中。
+公开的非敏感 `/healthz` 响应中。容量字段包括 `max_retained_crawl_jobs` 和
+`max_retained_crawl_bytes`。
+
+HTTP 客户端断开时，网关会取消尚未出队以及仍在进行中的 foreground DeepSeek
+fallback 请求，避免消耗无人接收的 Provider 调用。异步 Crawl job 在创建响应完成后
+仍按任务生命周期运行，直到完成、取消或过期。
 
 客户端通常只需要 Firecrawl API 地址：
 

@@ -423,6 +423,8 @@ describe("parseCli", () => {
         "5",
         "--max-retained-crawl-jobs",
         "20",
+        "--max-retained-crawl-bytes",
+        "268435456",
       ]),
     ).toEqual({
       kind: "gateway",
@@ -431,6 +433,7 @@ describe("parseCli", () => {
       maxProviderRequests: 50,
       maxCrawlJobs: 5,
       maxRetainedCrawlJobs: 20,
+      maxRetainedCrawlBytes: 268_435_456,
     });
     expect(parseCli(["gateway", "status", "--json"])).toEqual({
       kind: "gateway-status",
@@ -670,6 +673,7 @@ describe("parseCli", () => {
     [["gateway", "--max-provider-requests", "1001"], /provider/i],
     [["gateway", "--max-crawl-jobs", "0"], /crawl/i],
     [["gateway", "--max-retained-crawl-jobs", "1001"], /retained/i],
+    [["gateway", "--max-retained-crawl-bytes", "0"], /retained/i],
     [["gateway", "url", "--port", "0"], /port/i],
     [["gateway", "status", "--port", "8787"], /unknown option/i],
     [["gateway", "url", "extra"], /argument/i],

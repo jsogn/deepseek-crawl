@@ -1,5 +1,5 @@
 import { mkdtemp } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,6 +40,7 @@ describe("Firecrawl-compatible gateway", () => {
         maxConcurrentProviderRequests: 5,
         maxActiveCrawlJobs: 3,
         maxRetainedCrawlJobs: 9,
+        maxRetainedCrawlBytes: 12_345_678,
       },
       env: {
         GATEWAY_API_KEY: "gateway-token",
@@ -65,6 +66,7 @@ describe("Firecrawl-compatible gateway", () => {
       max_concurrent_provider_requests: 5,
       max_active_crawl_jobs: 3,
       max_retained_crawl_jobs: 9,
+      max_retained_crawl_bytes: 12_345_678,
     });
     const serialized = JSON.stringify(health);
     expect(serialized).not.toContain("gateway-token");
@@ -440,6 +442,89 @@ describe("Firecrawl-compatible gateway", () => {
     expect(maxActive).toBe(2);
   });
 
+  it("cancels queued Provider calls when clients disconnect", async () => {
+    let calls = 0;
+    let firstSignal: AbortSignal | undefined;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let releaseFirst!: () => void;
+    const firstCanFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        providerMode: "deepseek-first",
+        maxConcurrentProviderRequests: 1,
+      },
+      env: {},
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        fetch(_input, signal) {
+          calls += 1;
+          if (calls !== 1) {
+            return Promise.resolve({ title: "Example", content: "# Example" });
+          }
+          firstSignal = signal;
+          markStarted();
+          return new Promise((resolve, reject) => {
+            const abort = () => reject(signal?.reason ?? new Error("Provider call aborted."));
+            if (signal?.aborted) {
+              abort();
+              return;
+            }
+            signal?.addEventListener("abort", abort, { once: true });
+            void firstCanFinish.then(() => {
+              resolve({ title: "Example", content: "# Example" });
+            });
+          });
+        },
+      },
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+    servers.push(server);
+
+    const body = JSON.stringify({ url: "https://example.com/", formats: ["markdown"] });
+    const request = () => {
+      const client = httpRequest({
+        host: "127.0.0.1",
+        port: Number(server.url.port),
+        path: "/v2/scrape",
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(Buffer.byteLength(body)),
+        },
+      });
+      client.once("error", () => undefined);
+      client.end(body);
+      return client;
+    };
+
+    const first = request();
+    await started;
+    const queued = Array.from({ length: 20 }, request);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    for (const client of queued) {
+      client.destroy();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    first.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(firstSignal?.aborted).toBe(true);
+    releaseFirst();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(calls).toBe(1);
+  });
+
   it.each([
     {
       label: "authentication errors",
@@ -647,6 +732,63 @@ describe("Firecrawl-compatible gateway", () => {
       errors: [],
       robotsBlocked: [],
     });
+  });
+
+  it("evicts completed Crawl pages when the configured byte capacity is reused", async () => {
+    const deepseekClient: DeepSeekGateway = {
+      async search() {
+        throw new Error("Unexpected Search call.");
+      },
+      async fetch() {
+        return { title: "Example", content: "# Example" };
+      },
+    };
+    const crawlJobs = new CrawlJobManager({
+      idFactory: (() => {
+        let index = 0;
+        return () => `dsc_bytes_http_${++index}`;
+      })(),
+      maxRetainedBytes: 119,
+    });
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        providerMode: "deepseek-first",
+        maxRetainedCrawlBytes: 119,
+      },
+      env: {},
+      deepseekClient,
+      crawlJobs,
+      sitemapReader: {
+        async read() {
+          return { entries: [], warnings: [], truncated: false };
+        },
+      },
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+    servers.push(server);
+
+    const create = async () =>
+      fetch(new URL("/v2/crawl", server.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: "https://example.com/",
+          limit: 1,
+          maxDiscoveryDepth: 0,
+          sitemap: "skip",
+        }),
+      });
+
+    const first = (await (await create()).json()) as { id: string };
+    await crawlJobs.waitForIdle(first.id);
+    const second = (await (await create()).json()) as { id: string };
+
+    expect((await fetch(new URL(`/v2/crawl/${first.id}`, server.url))).status).toBe(404);
+    await crawlJobs.waitForIdle(second.id);
+    expect((await fetch(new URL(`/v2/crawl/${second.id}`, server.url))).status).toBe(200);
   });
 
   it("cancels a DeepSeek-backed crawl through the Firecrawl delete endpoint", async () => {

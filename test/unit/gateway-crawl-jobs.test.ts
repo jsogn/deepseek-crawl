@@ -204,7 +204,7 @@ describe("CrawlJobManager", () => {
     ).not.toThrow();
   });
 
-  it("limits retained crawl jobs", async () => {
+  it("evicts the oldest terminal crawl job before rejecting retained capacity", async () => {
     let index = 0;
     const manager = new CrawlJobManager({
       idFactory: () => `dsc_retained_${++index}`,
@@ -217,13 +217,235 @@ describe("CrawlJobManager", () => {
     );
     await manager.waitForIdle("dsc_retained_1");
 
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      gateway(),
+      reader,
+    );
+    await manager.waitForIdle("dsc_retained_2");
+
+    expect(manager.status("dsc_retained_1")).toBeUndefined();
+    expect(manager.status("dsc_retained_2")).toMatchObject({
+      status: "completed",
+      completed: 1,
+    });
+  });
+
+  it("fails a crawl without retaining a page that exceeds the byte budget", async () => {
+    const manager = new CrawlJobManager({
+      idFactory: () => "dsc_bytes_fail",
+      maxRetainedBytes: 1,
+    });
+
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      gateway(),
+      reader,
+    );
+    await manager.waitForIdle("dsc_bytes_fail");
+
+    expect(manager.status("dsc_bytes_fail")).toMatchObject({
+      status: "failed",
+      completed: 0,
+      data: [],
+    });
+    expect(manager.errors("dsc_bytes_fail")?.errors).toMatchObject([
+      { error: expect.stringMatching(/storage is full/i) },
+    ]);
+  });
+
+  it("evicts terminal crawl data to recover retained byte capacity", async () => {
+    let index = 0;
+    const manager = new CrawlJobManager({
+      idFactory: () => `dsc_bytes_${++index}`,
+      maxRetainedBytes: 119,
+    });
+
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      gateway(),
+      reader,
+    );
+    await manager.waitForIdle("dsc_bytes_1");
+
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      gateway(),
+      reader,
+    );
+    await manager.waitForIdle("dsc_bytes_2");
+
+    expect(manager.status("dsc_bytes_1")).toBeUndefined();
+    expect(manager.status("dsc_bytes_2")).toMatchObject({
+      status: "completed",
+      completed: 1,
+    });
+  });
+
+  it("releases retained byte capacity when a job expires", async () => {
+    let current = new Date("2026-11-14T00:00:00.000Z");
+    let index = 0;
+    const manager = new CrawlJobManager({
+      now: () => current,
+      idFactory: () => `dsc_bytes_expire_${++index}`,
+      maxRetainedBytes: 119,
+    });
+
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      gateway(),
+      reader,
+    );
+    await manager.waitForIdle("dsc_bytes_expire_1");
+
+    current = new Date("2026-11-15T00:00:00.001Z");
+    expect(manager.sweepExpired()).toBe(1);
+
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      gateway(),
+      reader,
+    );
+    await manager.waitForIdle("dsc_bytes_expire_2");
+
+    expect(manager.status("dsc_bytes_expire_2")).toMatchObject({
+      status: "completed",
+      completed: 1,
+    });
+  });
+
+  it("rejects retained capacity when every job is still active", async () => {
+    const manager = new CrawlJobManager({
+      idFactory: (() => {
+        let index = 0;
+        return () => `dsc_retained_active_${++index}`;
+      })(),
+      maxRunningJobs: 2,
+      maxRetainedJobs: 1,
+    });
+    const client: DeepSeekGateway = {
+      async search() {
+        throw new Error("Unexpected Search call.");
+      },
+      fetch(_input, signal) {
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      },
+    };
+
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      client,
+      reader,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
     expect(() =>
       manager.create(
         { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
-        gateway(),
+        client,
         reader,
       ),
     ).toThrow(GatewayCapacityError);
+
+    manager.cancel("dsc_retained_active_1");
+    await manager.waitForIdle("dsc_retained_active_1");
+  });
+
+  it("does not account pages from a removed job after its Provider call returns", async () => {
+    let calls = 0;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let releaseFirst!: () => void;
+    const firstCanFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let markChildStarted!: () => void;
+    const childStarted = new Promise<void>((resolve) => {
+      markChildStarted = resolve;
+    });
+    let releaseChild!: () => void;
+    const childCanFinish = new Promise<void>((resolve) => {
+      releaseChild = resolve;
+    });
+    const client: DeepSeekGateway = {
+      async search() {
+        throw new Error("Unexpected Search call.");
+      },
+      async fetch(input) {
+        calls += 1;
+        if (calls === 1) {
+          markStarted();
+          await firstCanFinish;
+          return { title: "Example", content: "x" };
+        }
+        if (calls === 2) {
+          return { title: "Example", content: "# Example" };
+        }
+        if (calls === 3) {
+          return { title: "Example", content: "[Child](/child)" };
+        }
+        if (calls === 4 && input.url.endsWith("/child")) {
+          markChildStarted();
+          await childCanFinish;
+          return { title: "Example", content: "child" };
+        }
+        throw new Error(`Unexpected Fetch call: ${input.url}`);
+      },
+    };
+    let index = 0;
+    const manager = new CrawlJobManager({
+      idFactory: () => `dsc_removed_${++index}`,
+      maxRunningJobs: 3,
+      maxRetainedJobs: 1,
+      maxRetainedBytes: 360,
+    });
+
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      client,
+      reader,
+    );
+    await started;
+    manager.cancel("dsc_removed_1");
+
+    manager.create(
+      {
+        url: "https://example.com/",
+        limit: 2,
+        maxDiscoveryDepth: 1,
+        maxConcurrency: 1,
+        sitemap: "skip",
+      },
+      client,
+      reader,
+    );
+    await manager.waitForIdle("dsc_removed_2");
+
+    manager.create(
+      {
+        url: "https://example.com/",
+        limit: 2,
+        maxDiscoveryDepth: 1,
+        maxConcurrency: 1,
+        sitemap: "skip",
+      },
+      client,
+      reader,
+    );
+    await childStarted;
+    releaseFirst();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    releaseChild();
+    await manager.waitForIdle("dsc_removed_3");
+
+    expect(manager.status("dsc_removed_3")).toMatchObject({
+      status: "completed",
+      completed: 2,
+    });
   });
 
   it("clamps Crawl controls to the existing DeepSeek engine limits", async () => {

@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 import type { CrawlSitemapMode } from "../crawl/types.js";
 import type { CredentialName } from "../credentials/store.js";
-import type { GatewayProviderMode } from "../gateway/config.js";
+import { type GatewayProviderMode, MAX_RETAINED_CRAWL_BYTES } from "../gateway/config.js";
 import { parseSkillAgents, type SkillAgent } from "../setup/skills.js";
 
 export class CliUsageError extends Error {
@@ -159,6 +159,7 @@ export type ParsedCommand =
       maxProviderRequests?: number;
       maxCrawlJobs?: number;
       maxRetainedCrawlJobs?: number;
+      maxRetainedCrawlBytes?: number;
     }
   | { kind: "gateway-status"; json: boolean }
   | { kind: "gateway-url"; port?: number }
@@ -1048,6 +1049,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             "max-provider-requests": { type: "string" },
             "max-crawl-jobs": { type: "string" },
             "max-retained-crawl-jobs": { type: "string" },
+            "max-retained-crawl-bytes": { type: "string" },
             remote: { type: "boolean" },
             "allow-remote": { type: "boolean" },
             help: { type: "boolean", short: "h" },
@@ -1100,6 +1102,15 @@ export function parseCli(argv: string[]): ParsedCommand {
                 1,
                 1_000,
               );
+        const maxRetainedCrawlBytes =
+          parsed.values["max-retained-crawl-bytes"] === undefined
+            ? undefined
+            : parseInteger(
+                parsed.values["max-retained-crawl-bytes"],
+                "max retained crawl bytes",
+                1,
+                MAX_RETAINED_CRAWL_BYTES,
+              );
         return {
           kind: "gateway",
           remote: parsed.values.remote ?? parsed.values["allow-remote"] ?? false,
@@ -1111,6 +1122,7 @@ export function parseCli(argv: string[]): ParsedCommand {
           ...(maxProviderRequests === undefined ? {} : { maxProviderRequests }),
           ...(maxCrawlJobs === undefined ? {} : { maxCrawlJobs }),
           ...(maxRetainedCrawlJobs === undefined ? {} : { maxRetainedCrawlJobs }),
+          ...(maxRetainedCrawlBytes === undefined ? {} : { maxRetainedCrawlBytes }),
         };
       }
       default:

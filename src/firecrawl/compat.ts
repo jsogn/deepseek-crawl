@@ -67,6 +67,7 @@ function formatsAreMarkdownOnly(formats: z.infer<typeof formatSchema>[] | undefi
 export async function firecrawlSearchFallback(
   input: unknown,
   client: DeepSeekGateway,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const parsed = searchInputSchema.parse(input);
   if (parsed.sources?.some((source) => sourceType(source) !== "web")) {
@@ -89,6 +90,7 @@ export async function firecrawlSearchFallback(
       need_content: includeMarkdown,
     },
     { maxContentChars: 0 },
+    signal,
   );
 
   return {
@@ -114,6 +116,7 @@ export async function firecrawlSearchFallback(
 export async function firecrawlScrapeFallback(
   input: unknown,
   client: DeepSeekGateway,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const parsed = scrapeInputSchema.parse(input);
   if (!formatsAreMarkdownOnly(parsed.formats)) {
@@ -122,7 +125,7 @@ export async function firecrawlScrapeFallback(
     );
   }
 
-  const response = await executeFetch(client, { url: parsed.url }, { maxChars: 0 });
+  const response = await executeFetch(client, { url: parsed.url }, { maxChars: 0 }, signal);
   return {
     success: true,
     data: {
@@ -140,6 +143,7 @@ export async function firecrawlMapFallback(
   input: unknown,
   client: DeepSeekGateway,
   reader: MapSitemapReader,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const parsed = mapInputSchema.parse(input);
   const result = await executeMap(
@@ -151,6 +155,7 @@ export async function firecrawlMapFallback(
       discoveryLimit: 10_000,
       ...(parsed.search === undefined ? {} : { search: parsed.search }),
     },
+    signal,
   );
   return {
     success: true,

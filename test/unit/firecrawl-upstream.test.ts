@@ -31,4 +31,28 @@ describe("Firecrawl upstream client", () => {
 
     expect(target).toBe("https://api.firecrawl.dev/v2/scrape");
   });
+
+  it("combines the caller abort signal with the upstream timeout", async () => {
+    const controller = new AbortController();
+    let signal: AbortSignal | null | undefined;
+    await requestFirecrawlUpstream(
+      {
+        method: "GET",
+        path: "/v2/search",
+        headers: new Headers(),
+        signal: controller.signal,
+      },
+      {
+        config,
+        env: { FIRECRAWL_API_KEY: "fc-test" },
+        fetchImpl: async (_input, init) => {
+          signal = init?.signal;
+          return Response.json({ success: true });
+        },
+      },
+    );
+
+    controller.abort(new Error("client disconnected"));
+    expect(signal?.aborted).toBe(true);
+  });
 });

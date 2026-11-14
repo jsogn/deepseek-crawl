@@ -354,21 +354,27 @@ In `firecrawl-first` mode, a 402 starts a 60-second cooldown by default.
 `--credits-cooldown 0` retries Firecrawl on every request.
 
 The gateway defaults to `100` concurrent HTTP requests, `100` concurrent
-Provider requests, `10` running Crawl jobs, and `100` retained Crawl jobs.
-Advanced deployments can tune these limits:
+Provider requests, `10` running Crawl jobs, `100` retained Crawl jobs, and
+`256 MiB` of retained Crawl documents. Advanced deployments can tune these
+limits:
 
 ```bash
 deepseek-crawl gateway \
   --max-concurrent-requests 200 \
   --max-provider-requests 50 \
   --max-crawl-jobs 5 \
-  --max-retained-crawl-jobs 50
+  --max-retained-crawl-jobs 50 \
+  --max-retained-crawl-bytes 134217728
 ```
 
 The corresponding `DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS`,
 `DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS`, `DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS`, and
-`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS` variables are available for containers
-and systemd.
+`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS`,
+`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES` variables are available for
+containers and systemd. When either retained capacity is full, the gateway
+evicts the oldest terminal job first. A new job is rejected only when running
+jobs still consume all capacity. A running job that would cross the global
+document budget fails cleanly without retaining the out-of-budget page.
 
 Other terminals and scripts can discover the selected endpoint:
 
@@ -385,7 +391,13 @@ It also reports DeepSeek, Firecrawl, and remote gateway-auth readiness and
 source, plus each instance's provider mode and cooldown, replacing separate
 credential checks.
 Instance JSON includes `provider_mode` and `credits_cooldown_seconds`; the same
-nonsecret values are available from `/healthz`.
+nonsecret values are available from `/healthz`. Capacity fields include
+`max_retained_crawl_jobs` and `max_retained_crawl_bytes`.
+
+When an HTTP client disconnects, the gateway cancels queued and in-flight
+foreground DeepSeek fallback work so unattended Provider calls do not continue.
+After a Crawl-create response finishes, its asynchronous job continues through
+the normal completion, cancellation, or expiration lifecycle.
 
 The client usually only needs the gateway URL:
 

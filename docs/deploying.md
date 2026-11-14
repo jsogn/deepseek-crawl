@@ -26,6 +26,7 @@ DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS=100
 DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS=100
 DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS=10
 DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS=100
+DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES=268435456
 ```
 
 Provider mode defaults to `firecrawl-first`. Set `deepseek-first` to avoid
@@ -38,6 +39,8 @@ The credits cooldown defaults to 60 seconds and only applies in
 Concurrency defaults are intentionally bounded. Lower
 `DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS` or `DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS`
 when one gateway shares Provider rate limits with other workloads.
+The retained byte budget bounds process-local Crawl result memory; lower
+`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES` for memory-constrained hosts.
 
 Keep the environment file private (`0600`). Never put these values in an image,
 Compose file, shell command, or repository.

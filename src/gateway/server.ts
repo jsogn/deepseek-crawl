@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { MapSitemapReader } from "../application/map.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
-import type { GatewayConfig } from "./config.js";
+import { GATEWAY_CAPACITY_DEFAULTS, type GatewayConfig } from "./config.js";
 import { CrawlJobManager } from "./crawl-jobs.js";
 import { createGatewayHandler } from "./handler.js";
 import { removeGatewayRuntimeState, writeGatewayRuntimeState } from "./runtime.js";
@@ -92,8 +92,12 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
   const crawlJobs =
     options.crawlJobs ??
     new CrawlJobManager({
-      maxRunningJobs: options.config.maxActiveCrawlJobs ?? 10,
-      maxRetainedJobs: options.config.maxRetainedCrawlJobs ?? 100,
+      maxRunningJobs:
+        options.config.maxActiveCrawlJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxActiveCrawlJobs,
+      maxRetainedJobs:
+        options.config.maxRetainedCrawlJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlJobs,
+      maxRetainedBytes:
+        options.config.maxRetainedCrawlBytes ?? GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlBytes,
     });
   const server = createServer(
     createGatewayHandler({

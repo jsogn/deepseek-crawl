@@ -136,6 +136,7 @@ describe("gateway discovery commands", () => {
         max_concurrent_provider_requests: 50,
         max_active_crawl_jobs: 5,
         max_retained_crawl_jobs: 20,
+        max_retained_crawl_bytes: 1048576,
       })) as typeof fetch;
 
     expect(await runCli(["gateway", "status", "--json"], environment.deps)).toBe(0);
@@ -148,6 +149,7 @@ describe("gateway discovery commands", () => {
           max_concurrent_provider_requests: 50,
           max_active_crawl_jobs: 5,
           max_retained_crawl_jobs: 20,
+          max_retained_crawl_bytes: 1_048_576,
         },
       ],
     });
@@ -161,6 +163,7 @@ describe("gateway discovery commands", () => {
     expect(human.stdout.value()).toContain("provider_requests=50");
     expect(human.stdout.value()).toContain("crawl_jobs=5");
     expect(human.stdout.value()).toContain("retained_jobs=20");
+    expect(human.stdout.value()).toContain("retained_bytes=1048576");
   });
 
   it("prints provider readiness in human-readable status when stopped", async () => {

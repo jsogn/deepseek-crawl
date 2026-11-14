@@ -24,6 +24,7 @@ describe("loadGatewayConfig", () => {
       maxConcurrentProviderRequests: 100,
       maxActiveCrawlJobs: 10,
       maxRetainedCrawlJobs: 100,
+      maxRetainedCrawlBytes: 256 * 1024 * 1024,
       upstreamUrl: new URL("https://api.firecrawl.dev/"),
       requestBodyLimit: 8 * 1024 * 1024,
       timeoutMs: 120_000,
@@ -162,6 +163,7 @@ describe("loadGatewayConfig", () => {
           DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS: "50",
           DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS: "5",
           DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS: "20",
+          DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES: "1048576",
         },
         credentialStores: {},
       }),
@@ -170,6 +172,7 @@ describe("loadGatewayConfig", () => {
       maxConcurrentProviderRequests: 50,
       maxActiveCrawlJobs: 5,
       maxRetainedCrawlJobs: 20,
+      maxRetainedCrawlBytes: 1_048_576,
     });
   });
 
@@ -178,6 +181,7 @@ describe("loadGatewayConfig", () => {
     "DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS",
     "DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS",
     "DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS",
+    "DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES",
   ])("rejects invalid capacity %s", (name) => {
     expect(() =>
       loadGatewayConfig({

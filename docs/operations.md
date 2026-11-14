@@ -226,11 +226,19 @@ CLI Map and Crawl request Sitemaps directly and accept only public HTTP(S) targe
 | `DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS`    | `100`                       | Concurrent Provider requests      |
 | `DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS`           | `10`                        | Running Crawl jobs                |
 | `DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS`  | `100`                       | Retained Crawl jobs               |
+| `DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES` | `268435456`                 | Retained Crawl document bytes     |
 | `GATEWAY_API_KEY`                           | none                        | Remote gateway Bearer token       |
 
 Environment variables override the local credential store. Non-loopback DeepSeek
 base URLs must use HTTPS. API keys are never accepted as CLI flags or MCP
 arguments.
+
+The retained byte budget counts serialized Crawl documents, including Markdown
+and metadata. When a job-count or byte threshold is reached, the oldest terminal
+job is evicted first. Capacity remains unavailable only while active jobs hold
+it. A running job that would exceed the global byte budget ends in a failed
+state without retaining the rejected page. Expiration and eviction release the
+accounted bytes immediately.
 
 Clients use the `FIRECRAWL_API_URL` printed at startup to reach the gateway. The
 gateway does not read `FIRECRAWL_API_URL`; it reads only

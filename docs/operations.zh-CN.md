@@ -208,10 +208,16 @@ CLI Map 和 Crawl 直接请求目标站点的 Sitemap，仅接受公网 HTTP(S) 
 | `DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS`    | `100`                       | 并发 Provider 请求        |
 | `DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS`           | `10`                        | 运行中 Crawl jobs         |
 | `DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS`  | `100`                       | 保留 Crawl jobs           |
+| `DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES` | `268435456`                 | 保留 Crawl 文档字节       |
 | `GATEWAY_API_KEY`                           | 无                          | 远程网关 Bearer Token     |
 
 环境变量优先于本地 credential store。非 loopback 的 DeepSeek base URL 必须使用
 HTTPS。API Key 不接受 CLI 参数或 MCP 参数。
+
+保留字节预算统计序列化后的 Crawl 文档，包括 Markdown 和 metadata。任务数量或字节
+达到上限时，先淘汰最旧的终态任务；只有运行中任务占满容量时才拒绝新任务。运行中
+任务若会使全局字节预算越界，会进入失败终态且不保留被拒绝的页面。任务过期或被淘汰
+时立即释放对应字节额度。
 
 客户端使用启动输出中的 `FIRECRAWL_API_URL` 指向网关。网关不读取
 `FIRECRAWL_API_URL`，只读取 `FIRECRAWL_UPSTREAM_URL`。

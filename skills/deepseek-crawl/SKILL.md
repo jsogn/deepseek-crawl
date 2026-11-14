@@ -72,7 +72,9 @@ Provider mode defaults to `firecrawl-first`. Use `deepseek-first` or
 The Firecrawl 402 cooldown defaults to 60 seconds; set it to `0` only when every
 request should retry Firecrawl.
 Gateway Provider requests and background Crawl jobs have separate global limits.
-Keep them bounded when one gateway shares Provider rate limits.
+Retained Crawl jobs and serialized result bytes are also bounded. Capacity first
+evicts the oldest terminal job. Keep these limits bounded when one gateway
+shares Provider rate limits or runs on a memory-constrained host.
 
 Remote mode uses fixed port `8787`:
 
@@ -88,6 +90,8 @@ automatically and is separate from ordinary CLI and MCP requests.
 Every gateway response includes `x-request-id`. JSON request logs exclude
 credentials, bodies, query strings, and full target URLs. Authentication
 failures are rate-limited and concurrent requests are bounded.
+Foreground DeepSeek fallback work is cancelled when its HTTP client disconnects;
+completed Crawl-create responses leave their background jobs running normally.
 
 Do not use the SDK WebSocket `Watcher` against this gateway. It intentionally
 returns `426 websocket_not_supported`; use polling or the convenience Crawl

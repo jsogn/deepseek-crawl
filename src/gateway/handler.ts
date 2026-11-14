@@ -17,7 +17,7 @@ import {
 import { requestFirecrawlUpstream, responseHeaders } from "../firecrawl/upstream.js";
 import { packageVersion } from "../version.js";
 import { AuthFailureLimiter } from "./auth-limiter.js";
-import type { GatewayConfig } from "./config.js";
+import { GATEWAY_CAPACITY_DEFAULTS, type GatewayConfig } from "./config.js";
 import { CrawlJobManager } from "./crawl-jobs.js";
 import {
   GatewayCapacityError,
@@ -173,14 +173,15 @@ async function executeFallback(
   client: () => DeepSeekGateway,
   reader: () => Promise<MapSitemapReader>,
   crawlJobs: CrawlJobManager,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   switch (route.kind) {
     case "search":
-      return firecrawlSearchFallback(parseJsonBody(body), client());
+      return firecrawlSearchFallback(parseJsonBody(body), client(), signal);
     case "scrape":
-      return firecrawlScrapeFallback(parseJsonBody(body), client());
+      return firecrawlScrapeFallback(parseJsonBody(body), client(), signal);
     case "map":
-      return firecrawlMapFallback(parseJsonBody(body), client(), await reader());
+      return firecrawlMapFallback(parseJsonBody(body), client(), await reader(), signal);
     case "crawl-create":
       return crawlJobs.create(parseJsonBody(body), client(), await reader());
     case "crawl-status": {
@@ -211,6 +212,9 @@ async function executeFallback(
 }
 
 function fallbackError(response: ServerResponse, error: unknown): void {
+  if (response.destroyed || response.writableEnded) {
+    return;
+  }
   if (error instanceof GatewayCapacityError) {
     sendJson(
       response,
@@ -322,7 +326,17 @@ export function createGatewayHandler(
   let deepseekClient = dependencies.deepseekClient;
   let limitedDeepSeekClient: DeepSeekGateway | undefined;
   let sitemapReader = dependencies.sitemapReader;
-  const crawlJobs = dependencies.crawlJobs ?? new CrawlJobManager();
+  const crawlJobs =
+    dependencies.crawlJobs ??
+    new CrawlJobManager({
+      maxRunningJobs:
+        dependencies.config.maxActiveCrawlJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxActiveCrawlJobs,
+      maxRetainedJobs:
+        dependencies.config.maxRetainedCrawlJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlJobs,
+      maxRetainedBytes:
+        dependencies.config.maxRetainedCrawlBytes ??
+        GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlBytes,
+    });
   let firecrawlExhaustedUntil = 0;
   const creditsCooldownMs = dependencies.config.creditsCooldownMs ?? 60_000;
   const now = dependencies.now ?? Date.now;
@@ -339,9 +353,11 @@ export function createGatewayHandler(
       : { blockMs: dependencies.config.authBlockMs }),
   });
   let activeRequests = 0;
-  const maxConcurrentRequests = dependencies.config.maxConcurrentRequests ?? 100;
+  const maxConcurrentRequests =
+    dependencies.config.maxConcurrentRequests ?? GATEWAY_CAPACITY_DEFAULTS.maxConcurrentRequests;
   const providerLimiter = new ProviderRequestLimiter(
-    dependencies.config.maxConcurrentProviderRequests ?? 100,
+    dependencies.config.maxConcurrentProviderRequests ??
+      GATEWAY_CAPACITY_DEFAULTS.maxConcurrentProviderRequests,
   );
   const logger = dependencies.logger;
 
@@ -416,11 +432,20 @@ export function createGatewayHandler(
           mode: dependencies.config.allowRemote ? "remote" : "local",
           provider_mode: dependencies.config.providerMode ?? "firecrawl-first",
           credits_cooldown_seconds: (dependencies.config.creditsCooldownMs ?? 60_000) / 1000,
-          max_concurrent_requests: dependencies.config.maxConcurrentRequests ?? 100,
+          max_concurrent_requests:
+            dependencies.config.maxConcurrentRequests ??
+            GATEWAY_CAPACITY_DEFAULTS.maxConcurrentRequests,
           max_concurrent_provider_requests:
-            dependencies.config.maxConcurrentProviderRequests ?? 100,
-          max_active_crawl_jobs: dependencies.config.maxActiveCrawlJobs ?? 10,
-          max_retained_crawl_jobs: dependencies.config.maxRetainedCrawlJobs ?? 100,
+            dependencies.config.maxConcurrentProviderRequests ??
+            GATEWAY_CAPACITY_DEFAULTS.maxConcurrentProviderRequests,
+          max_active_crawl_jobs:
+            dependencies.config.maxActiveCrawlJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxActiveCrawlJobs,
+          max_retained_crawl_jobs:
+            dependencies.config.maxRetainedCrawlJobs ??
+            GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlJobs,
+          max_retained_crawl_bytes:
+            dependencies.config.maxRetainedCrawlBytes ??
+            GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlBytes,
         },
         { "cache-control": "no-store" },
       );
@@ -480,6 +505,8 @@ export function createGatewayHandler(
     }
     activeRequests += 1;
     let released = false;
+    let responseFinished = false;
+    const requestController = new AbortController();
     const release = () => {
       if (released) {
         return;
@@ -487,8 +514,21 @@ export function createGatewayHandler(
       released = true;
       activeRequests -= 1;
     };
-    response.once("finish", release);
-    response.once("close", release);
+    response.once("finish", () => {
+      responseFinished = true;
+      release();
+    });
+    response.once("close", () => {
+      release();
+      if (!responseFinished) {
+        requestController.abort(new Error("Gateway client disconnected."));
+      }
+    });
+    request.once("aborted", () => {
+      if (!responseFinished) {
+        requestController.abort(new Error("Gateway client disconnected."));
+      }
+    });
 
     let body: Uint8Array | undefined;
     try {
@@ -500,6 +540,9 @@ export function createGatewayHandler(
           error: "Firecrawl request body exceeds the gateway limit.",
           code: "request_too_large",
         });
+        return;
+      }
+      if (requestController.signal.aborted) {
         return;
       }
       throw error;
@@ -546,6 +589,7 @@ export function createGatewayHandler(
             path: request.url ?? "/",
             headers: upstreamHeaders,
             ...(body === undefined ? {} : { body }),
+            signal: requestController.signal,
           },
           dependencies,
         );
@@ -560,6 +604,9 @@ export function createGatewayHandler(
           return;
         }
       } catch {
+        if (requestController.signal.aborted) {
+          return;
+        }
         sendJson(response, 502, {
           success: false,
           error: "Firecrawl upstream request failed.",
@@ -589,7 +636,11 @@ export function createGatewayHandler(
         resolveDeepSeekClient,
         resolveSitemapReader,
         crawlJobs,
+        requestController.signal,
       );
+      if (requestController.signal.aborted) {
+        return;
+      }
       sendJson(response, 200, result);
     } catch (error) {
       fallbackError(response, error);

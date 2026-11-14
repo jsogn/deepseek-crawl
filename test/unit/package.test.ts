@@ -203,5 +203,9 @@ describe("deployment assets", () => {
     expect(ciWorkflow).toContain("npm run smoke:docker");
     expect(smokeScript).toContain("docker stop --timeout 30");
     expect(smokeScript).toContain('docker exec "$container_name" id -u');
+    expect(smokeScript).toContain('provider_mode="no-fallback"');
+    expect(smokeScript).toContain('credits_cooldown_seconds="0"');
+    expect(smokeScript).toContain('"provider_mode":"no-fallback"');
+    expect(smokeScript).toContain('"credits_cooldown_seconds":0');
   });
 });

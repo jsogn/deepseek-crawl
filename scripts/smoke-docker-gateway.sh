@@ -6,6 +6,8 @@ container_name="deepseek-crawl-gateway-smoke-$$"
 image_name="${DOCKER_SMOKE_IMAGE:-deepseek-crawl-gateway:smoke}"
 gateway_token="smoke-gateway-token"
 deepseek_token="smoke-deepseek-token"
+provider_mode="no-fallback"
+credits_cooldown_seconds="0"
 platform="${DOCKER_SMOKE_PLATFORM:-}"
 
 cleanup() {
@@ -30,6 +32,8 @@ run_args=(
   --publish "127.0.0.1::8787"
   --env "GATEWAY_API_KEY=$gateway_token"
   --env "DEEPSEEK_API_KEY=$deepseek_token"
+  --env "DEEPSEEK_GATEWAY_PROVIDER_MODE=$provider_mode"
+  --env "DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS=$credits_cooldown_seconds"
 )
 if [[ -n "$platform" ]]; then
   run_args+=(--platform "$platform")
@@ -94,6 +98,22 @@ case "$health_response" in
     exit 1
     ;;
 esac
+case "$health_response" in
+  *'"provider_mode":"no-fallback"'*) ;;
+  *)
+    printf 'Docker gateway did not expose the configured provider mode: %s\n' \
+      "$health_response" >&2
+    exit 1
+    ;;
+esac
+case "$health_response" in
+  *'"credits_cooldown_seconds":0'*) ;;
+  *)
+    printf 'Docker gateway did not expose the configured cooldown: %s\n' \
+      "$health_response" >&2
+    exit 1
+    ;;
+esac
 
 container_uid="$(docker exec "$container_name" id -u)"
 if [[ "$container_uid" == "0" ]]; then
@@ -115,5 +135,5 @@ if [[ "$exit_code" != "0" ]]; then
   exit 1
 fi
 
-printf 'Docker gateway smoke passed: health=%s, uid=%s, exit=%s\n' \
-  "$container_health" "$container_uid" "$exit_code"
+printf 'Docker gateway smoke passed: health=%s, uid=%s, provider=%s, cooldown=%ss, exit=%s\n' \
+  "$container_health" "$container_uid" "$provider_mode" "$credits_cooldown_seconds" "$exit_code"

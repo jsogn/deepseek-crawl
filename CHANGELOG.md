@@ -20,6 +20,8 @@
   budget, avoiding soft capacity lockout.
 - Reject Crawl capacity configurations whose retained job limit is below the
   active job limit.
+- Harden output publication locks against incomplete, released, and concurrently
+  recovered lock files.
 
 ## 0.13.0 - 2026-11-14
 

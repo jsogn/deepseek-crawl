@@ -20,7 +20,7 @@ const MAX_SITEMAP_DOCUMENTS = 10;
 const MAX_SITEMAP_CANDIDATES = 10_000;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
-export interface SitemapFetchResponse {
+interface SitemapFetchResponse {
   body: string;
   finalUrl: URL;
 }

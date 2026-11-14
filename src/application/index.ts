@@ -4,45 +4,9 @@ import { fetchInputSchema, searchInputSchema } from "../deepseek/schemas.js";
 import { boundFetchOutput, boundSearchOutput } from "../output/bounds.js";
 import type { FetchOutput, SearchOutput } from "../types.js";
 
-export type {
-  CrawlBaseline,
-  CrawlChangeStatus,
-  CrawlChanges,
-  CrawlCheckpointActiveLayer,
-  CrawlCheckpointCounters,
-  CrawlCheckpointOptions,
-  CrawlCheckpointSource,
-  CrawlCheckpointState,
-  CrawlContentVersion,
-  CrawlFailure,
-  CrawlJobStatus,
-  CrawlModifiedContent,
-  CrawlOptions,
-  CrawlOutputResult,
-  CrawlPage,
-  CrawlPageIndex,
-  CrawlPageSource,
-  CrawlPageSummary,
-  CrawlPlanOmissionReason,
-  CrawlPlanOmittedUrl,
-  CrawlPlanResult,
-  CrawlPlanSeed,
-  CrawlPlanUrl,
-  CrawlRunResult,
-  CrawlSitemapMode,
-  CrawlSitemapReader,
-  CrawlUrlSource,
-  MapResult,
-  MapUrl,
-  MapUrlSource,
-  MapWarning,
-} from "../crawl/types.js";
-export type { DeepSeekGateway } from "../deepseek/gateway.js";
-export { executeBatchFetch, executeBatchFetchRetry, parseBatchFetchInput } from "./batch.js";
 export { executeCrawl } from "./crawl.js";
 export { executeCrawlPlan } from "./crawl-plan.js";
 export { executeCrawlRetry } from "./crawl-retry.js";
-export type { MapOptions, MapSitemapReader } from "./map.js";
 export { executeMap } from "./map.js";
 
 export async function executeSearch(

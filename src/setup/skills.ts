@@ -3,8 +3,8 @@ import { cp, lstat, mkdir, readlink, rename, rm, stat, symlink } from "node:fs/p
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 export type SkillAgent = "agents" | "codex" | "claude-code" | "cursor";
-export type SkillSetupScope = "global" | "project";
-export type SkillSetupMode = "symlink" | "copy";
+type SkillSetupScope = "global" | "project";
+type SkillSetupMode = "symlink" | "copy";
 
 const SKILL_NAME = "deepseek-crawl";
 const AGENT_ORDER: SkillAgent[] = ["agents", "codex", "claude-code", "cursor"];
@@ -28,7 +28,7 @@ export interface SetupSkillsOptions extends ResolveSkillTargetsOptions {
   force?: boolean;
 }
 
-export interface SkillSetupInstall extends ResolvedSkillTarget {
+interface SkillSetupInstall extends ResolvedSkillTarget {
   status: "installed" | "unchanged" | "replaced";
   mode: SkillSetupMode;
 }

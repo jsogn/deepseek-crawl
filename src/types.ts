@@ -10,7 +10,7 @@ export interface FetchInput {
   url: string;
 }
 
-export interface RawSearchResult extends Record<string, unknown> {
+interface RawSearchResult extends Record<string, unknown> {
   rerank_score: number;
   title: string;
   url: string;
@@ -34,7 +34,7 @@ export interface RawFetchResponse extends Record<string, unknown> {
 
 export type FetchRetrievalSource = "api" | "cache";
 
-export interface SearchResultItem extends RawSearchResult {
+interface SearchResultItem extends RawSearchResult {
   content_truncated?: boolean;
   content_original_length?: number;
 }

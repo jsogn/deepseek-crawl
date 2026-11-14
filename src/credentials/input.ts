@@ -1,9 +1,9 @@
-export interface SecretInput extends NodeJS.ReadableStream {
+interface SecretInput extends NodeJS.ReadableStream {
   isTTY?: boolean;
   setRawMode?: (mode: boolean) => void;
 }
 
-export interface SecretOutput {
+interface SecretOutput {
   write(value: string): unknown;
 }
 

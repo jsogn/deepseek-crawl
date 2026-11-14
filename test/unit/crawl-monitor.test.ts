@@ -2,25 +2,15 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { MapSitemapReader } from "../../src/application/index.js";
+import type { MapSitemapReader } from "../../src/application/map.js";
 import { runCli } from "../../src/cli/run.js";
 import { contentHash } from "../../src/content/hash.js";
 import { CrawlMonitorStore, readCrawlMonitorState } from "../../src/crawl/monitor.js";
 import type { CrawlMonitorState } from "../../src/crawl/types.js";
 import type { DeepSeekGateway } from "../../src/deepseek/gateway.js";
+import { writer as outputWriter } from "../helpers/cli.js";
 
 const RUN_AT = new Date("2026-11-14T01:02:03.456Z");
-
-function outputWriter() {
-  let value = "";
-  return {
-    write(chunk: string) {
-      value += chunk;
-      return true;
-    },
-    value: () => value,
-  };
-}
 
 function dependencies(
   crawlClient: DeepSeekGateway,

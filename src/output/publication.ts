@@ -1,6 +1,7 @@
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { assertPathMissing, createExistingPathError } from "./files.js";
+import { acquireProcessLock, releaseProcessLock } from "../fs/process-lock.js";
+import { assertPathMissing } from "./files.js";
 import { type PageFileIdentity, pageRelativePath } from "./page.js";
 
 export interface StagedDirectoryOutput {
@@ -13,38 +14,6 @@ export interface StagedDirectoryOutput {
 
 function lockPath(finalPath: string): string {
   return join(dirname(finalPath), `.${basename(finalPath)}.lock`);
-}
-
-function processIsAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code !== "ESRCH";
-  }
-}
-
-async function acquirePublicationLock(path: string): Promise<void> {
-  const payload = JSON.stringify({ pid: process.pid, created_at: new Date().toISOString() });
-  try {
-    await writeFile(path, payload, { encoding: "utf8", flag: "wx" });
-    return;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-      throw error;
-    }
-  }
-
-  const existing = JSON.parse(await readFile(path, "utf8")) as { pid?: unknown };
-  if (!Number.isSafeInteger(existing.pid) || (existing.pid as number) < 1) {
-    throw createExistingPathError(path);
-  }
-  if (processIsAlive(existing.pid as number)) {
-    throw createExistingPathError(path);
-  }
-
-  await rm(path, { force: true });
-  await writeFile(path, payload, { encoding: "utf8", flag: "wx" });
 }
 
 export async function createStagedDirectoryOutput(
@@ -87,7 +56,7 @@ export async function createStagedDirectoryOutput(
       let ownsLock = false;
       try {
         const output = await writeManifest(stagingPath, pagePaths);
-        await acquirePublicationLock(publicationLock);
+        await acquireProcessLock(publicationLock);
         ownsLock = true;
         await assertPathMissing(finalPath);
         await rename(stagingPath, finalPath);
@@ -101,7 +70,7 @@ export async function createStagedDirectoryOutput(
         throw error;
       } finally {
         if (ownsLock) {
-          await rm(publicationLock, { force: true }).catch(() => undefined);
+          await releaseProcessLock(publicationLock).catch(() => undefined);
         }
       }
     },

@@ -1,9 +1,9 @@
 import { isIP } from "node:net";
 import { type CredentialStore, createCredentialStore } from "./credentials/store.js";
 
-export type CredentialSource = "environment" | "keychain" | "file";
+type CredentialSource = "environment" | "keychain" | "file";
 
-export interface ResolvedCredential {
+interface ResolvedCredential {
   apiKey: string;
   source: CredentialSource;
 }
@@ -97,10 +97,7 @@ export function loadConfig(
   };
 }
 
-export function resolveCredential(
-  env: NodeJS.ProcessEnv,
-  store?: CredentialStore,
-): ResolvedCredential {
+function resolveCredential(env: NodeJS.ProcessEnv, store?: CredentialStore): ResolvedCredential {
   const environmentKey = env.DEEPSEEK_API_KEY?.trim();
   if (environmentKey) {
     if (/[\r\n]/.test(environmentKey)) {

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { link, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { createExistingPathError } from "../fs/path-error.js";
 
 export async function writeFileAtomic(outputPath: string, content: string): Promise<void> {
   const directory = dirname(outputPath);
@@ -14,12 +15,6 @@ export async function writeFileAtomic(outputPath: string, content: string): Prom
     await rm(temporaryPath, { force: true }).catch(() => undefined);
     throw error;
   }
-}
-
-export function createExistingPathError(path: string): NodeJS.ErrnoException {
-  const error = new Error(`Output path already exists: ${path}`) as NodeJS.ErrnoException;
-  error.code = "EEXIST";
-  return error;
 }
 
 export async function assertPathMissing(outputPath: string): Promise<void> {

@@ -1,18 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import {
-  type CrawlOptions,
-  type CrawlPage,
-  type CrawlRunResult,
-  type DeepSeekGateway,
-  executeCrawl,
-  executeFetch,
-  executeMap,
-  executeSearch,
-  type MapResult,
-  type MapSitemapReader,
-} from "../application/index.js";
+import { executeCrawl } from "../application/crawl.js";
+import { executeFetch, executeMap, executeSearch } from "../application/index.js";
+import type { MapSitemapReader } from "../application/map.js";
+import type { CrawlOptions, CrawlPage, CrawlRunResult, MapResult } from "../crawl/types.js";
+import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { codepointLength, truncateText } from "../output/bounds.js";
 import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { formatMapUrls } from "../output/map.js";

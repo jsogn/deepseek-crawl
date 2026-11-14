@@ -1,7 +1,7 @@
 import type { RetryAttempt, RetrySummary } from "../retry/types.js";
 import type { FetchRetrievalSource } from "../types.js";
 
-export type MapWarningCode =
+type MapWarningCode =
   | "sitemap_unavailable"
   | "sitemap_invalid"
   | "sitemap_limit_reached"
@@ -26,7 +26,7 @@ export interface CrawlSitemapEntry {
   lastmod?: string;
 }
 
-export interface CrawlSitemapReader {
+interface CrawlSitemapReader {
   read(
     seedUrl: URL,
     options: { maxDocuments: number; maxCandidates: number },
@@ -53,10 +53,6 @@ export interface MapResult extends Record<string, unknown> {
   urls: MapUrl[];
   warnings: MapWarning[];
   search?: string;
-}
-
-export interface CrawlInput {
-  url: string;
 }
 
 export interface CrawlOptions {

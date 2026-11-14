@@ -21,13 +21,13 @@ export interface CredentialStore {
   remove(): void;
 }
 
-export interface SecurityCommandResult {
+interface SecurityCommandResult {
   status: number | null;
   stdout: string;
   stderr: string;
 }
 
-export type SecurityCommandRunner = (args: string[], input?: string) => SecurityCommandResult;
+type SecurityCommandRunner = (args: string[], input?: string) => SecurityCommandResult;
 
 export interface CredentialStoreOptions {
   platform?: NodeJS.Platform;

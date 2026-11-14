@@ -1,45 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { createExistingPathError } from "../output/files.js";
+import { acquireProcessLock, releaseProcessLock } from "../fs/process-lock.js";
 
-export function writerLockPath(directory: string): string {
+function writerLockPath(directory: string): string {
   return join(directory, "writer.lock");
 }
 
-function processIsAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code !== "ESRCH";
-  }
-}
-
 export async function acquireWriterLock(directory: string): Promise<void> {
-  const path = writerLockPath(directory);
-  const payload = JSON.stringify({ pid: process.pid, created_at: new Date().toISOString() });
-  try {
-    await writeFile(path, payload, { encoding: "utf8", mode: 0o600, flag: "wx" });
-    return;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-      throw error;
-    }
-  }
-  const existing = JSON.parse(await readFile(path, "utf8")) as { pid?: unknown };
-  if (!Number.isSafeInteger(existing.pid) || (existing.pid as number) < 1) {
-    throw createExistingPathError(path);
-  }
-  if (processIsAlive(existing.pid as number)) {
-    throw createExistingPathError(path);
-  }
-  await rm(path, { force: true });
-  await writeFile(path, payload, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  await acquireProcessLock(writerLockPath(directory));
 }
 
 export async function releaseWriterLock(directory: string): Promise<void> {
-  await rm(writerLockPath(directory), { force: true });
+  await releaseProcessLock(writerLockPath(directory));
 }
 
 export async function writeJsonAtomic(path: string, value: unknown): Promise<void> {

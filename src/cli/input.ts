@@ -1,6 +1,6 @@
 import { open } from "node:fs/promises";
 
-export const MAX_CLI_INPUT_BYTES = 8 * 1024 * 1024;
+const MAX_CLI_INPUT_BYTES = 8 * 1024 * 1024;
 
 function oversized(label: string): Error {
   return new Error(`${label} exceeds the 8 MiB input limit.`);

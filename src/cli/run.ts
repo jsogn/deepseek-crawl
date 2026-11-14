@@ -11,8 +11,8 @@ import {
   executeFetch,
   executeMap,
   executeSearch,
-  type MapSitemapReader,
 } from "../application/index.js";
+import type { MapSitemapReader } from "../application/map.js";
 import { CachedFetchGateway } from "../cache/cached-gateway.js";
 import { FileFetchCache } from "../cache/file-cache.js";
 import { resolveCacheDirectory } from "../cache/paths.js";

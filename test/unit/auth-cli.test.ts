@@ -1,17 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { runCli } from "../../src/cli/run.js";
 import type { CredentialStore } from "../../src/credentials/store.js";
-
-function writer() {
-  let value = "";
-  return {
-    write(chunk: string) {
-      value += chunk;
-      return true;
-    },
-    value: () => value,
-  };
-}
+import { writer } from "../helpers/cli.js";
 
 function memoryStore(initial?: string) {
   let value = initial;

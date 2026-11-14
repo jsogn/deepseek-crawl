@@ -4,7 +4,6 @@ export {
   executeBatchFetchRetry,
   parseBatchFetchInput,
 } from "./application/batch.js";
-export type { MapOptions, MapSitemapReader } from "./application/index.js";
 export {
   executeCrawl,
   executeCrawlPlan,
@@ -13,6 +12,7 @@ export {
   executeMap,
   executeSearch,
 } from "./application/index.js";
+export type { MapOptions, MapSitemapReader } from "./application/map.js";
 export type {
   BatchFetchFailure,
   BatchFetchOptions,

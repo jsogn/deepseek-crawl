@@ -1,7 +1,8 @@
-import { type DeepSeekGateway, executeSearch } from "../application/index.js";
+import { executeSearch } from "../application/index.js";
 import { loadConfig } from "../config.js";
 import type { CredentialStore } from "../credentials/store.js";
 import { DeepSeekClient } from "../deepseek/client.js";
+import type { DeepSeekGateway } from "../deepseek/gateway.js";
 
 export interface DoctorOptions {
   env: NodeJS.ProcessEnv;
@@ -13,7 +14,7 @@ export interface DoctorOptions {
   credentialStore?: CredentialStore;
 }
 
-export interface DoctorResult {
+interface DoctorResult {
   ok: boolean;
   api_key: "configured" | "invalid" | "missing";
   credential_source: string;

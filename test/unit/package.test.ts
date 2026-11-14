@@ -55,6 +55,7 @@ describe("package documentation", () => {
       "deepseek-crawl auth set",
       "deepseek-crawl auth status",
       "deepseek-crawl auth remove",
+      "deepseek-crawl balance",
       "macOS Keychain",
       "DEEPSEEK_API_KEY",
       "fetch --input",

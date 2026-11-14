@@ -1,13 +1,35 @@
 import { contentHashFor, fetchSourceFor } from "../cache/cached-gateway.js";
-import type { DeepSeekGateway } from "../deepseek/gateway.js";
+import type { DeepSeekBalanceGateway, DeepSeekGateway } from "../deepseek/gateway.js";
 import { fetchInputSchema, searchInputSchema } from "../deepseek/schemas.js";
 import { boundFetchOutput, boundSearchOutput } from "../output/bounds.js";
-import type { FetchOutput, SearchOutput } from "../types.js";
+import type { BalanceOutput, FetchOutput, SearchOutput } from "../types.js";
 
 export { executeCrawl } from "./crawl.js";
 export { executeCrawlPlan } from "./crawl-plan.js";
 export { executeCrawlRetry } from "./crawl-retry.js";
 export { executeMap } from "./map.js";
+
+export async function executeBalance(
+  client: DeepSeekBalanceGateway,
+  signal?: AbortSignal,
+): Promise<BalanceOutput> {
+  const response = await client.balance(signal);
+  return {
+    version: 1,
+    provider: "deepseek",
+    available: response.is_available,
+    balances: response.balance_infos
+      .map((balance) => ({
+        currency: balance.currency,
+        total: balance.total_balance,
+        granted: balance.granted_balance,
+        topped_up: balance.topped_up_balance,
+      }))
+      .sort((left, right) =>
+        left.currency < right.currency ? -1 : left.currency > right.currency ? 1 : 0,
+      ),
+  };
+}
 
 export async function executeSearch(
   client: DeepSeekGateway,

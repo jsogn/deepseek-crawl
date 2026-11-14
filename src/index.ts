@@ -5,6 +5,7 @@ export {
   parseBatchFetchInput,
 } from "./application/batch.js";
 export {
+  executeBalance,
   executeCrawl,
   executeCrawlPlan,
   executeCrawlRetry,
@@ -72,4 +73,10 @@ export {
 export { DeepSeekClient } from "./deepseek/client.js";
 export { DeepSeekError } from "./deepseek/errors.js";
 export type { RetryAttempt, RetrySummary } from "./retry/types.js";
-export type { FetchRetrievalSource } from "./types.js";
+export type {
+  BalanceAmount,
+  BalanceOutput,
+  FetchRetrievalSource,
+  RawBalanceInfo,
+  RawBalanceResponse,
+} from "./types.js";

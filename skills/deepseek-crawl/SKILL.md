@@ -26,6 +26,16 @@ Confirm that the API key is configured without printing it. If the command is
 missing or the key is absent, report the setup failure instead of inventing a
 different provider.
 
+To check whether the selected DeepSeek account is currently available, run:
+
+```bash
+deepseek-crawl balance --json
+```
+
+This is a non-billable account query. Use its `available` field when a workflow
+explicitly asks to route based on DeepSeek availability. Do not infer a provider
+preference from this skill.
+
 For first-time setup, ask the user to run `deepseek-crawl init`. It prompts for a
 missing key, installs this Skill, and runs a non-billable doctor check.
 

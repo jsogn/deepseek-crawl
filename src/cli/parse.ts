@@ -114,6 +114,7 @@ export type ParsedCommand =
   | { kind: "crawl-monitor-reset"; monitorDir: string; json: boolean }
   | { kind: "cache-clear"; json: boolean }
   | { kind: "doctor"; live: boolean; json: boolean }
+  | { kind: "balance"; json: boolean; output?: string }
   | {
       kind: "init";
       skipAuth: boolean;
@@ -709,6 +710,26 @@ export function parseCli(argv: string[]): ParsedCommand {
               live: parsed.values.live ?? false,
               json: parsed.values.json ?? false,
             };
+      }
+      case "balance": {
+        const parsed = parseArgs({
+          args,
+          allowPositionals: false,
+          strict: true,
+          options: {
+            json: { type: "boolean" },
+            output: { type: "string", short: "o" },
+            help: { type: "boolean", short: "h" },
+          },
+        });
+        if (parsed.values.help) {
+          return { kind: "help", command: "balance" };
+        }
+        return {
+          kind: "balance",
+          json: parsed.values.json ?? false,
+          ...(parsed.values.output === undefined ? {} : { output: parsed.values.output }),
+        };
       }
       case "init": {
         const parsed = parseArgs({

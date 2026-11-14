@@ -1,6 +1,12 @@
 import { isIP } from "node:net";
 import { z } from "zod";
-import type { FetchInput, RawFetchResponse, RawSearchResponse, SearchInput } from "../types.js";
+import type {
+  FetchInput,
+  RawBalanceResponse,
+  RawFetchResponse,
+  RawSearchResponse,
+  SearchInput,
+} from "../types.js";
 
 function unicodeLength(value: string): number {
   return [...value].length;
@@ -64,4 +70,16 @@ export const searchResponseSchema: z.ZodType<RawSearchResponse> = z.looseObject(
 export const fetchResponseSchema: z.ZodType<RawFetchResponse> = z.looseObject({
   title: z.string(),
   content: z.string(),
+});
+
+const balanceInfoSchema = z.looseObject({
+  currency: z.string(),
+  total_balance: z.string(),
+  granted_balance: z.string(),
+  topped_up_balance: z.string(),
+});
+
+export const balanceResponseSchema: z.ZodType<RawBalanceResponse> = z.looseObject({
+  is_available: z.boolean(),
+  balance_infos: z.array(balanceInfoSchema),
 });

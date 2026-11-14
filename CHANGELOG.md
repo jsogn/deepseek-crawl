@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Add `deepseek-crawl balance [--json] [-o <path>]` for non-billable
+  account-balance and availability checks.
+
 ### Changed
 
 - Make the DeepSeek Crawl Skill description provider-neutral: it applies only

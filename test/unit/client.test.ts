@@ -40,6 +40,43 @@ function createClient(
 }
 
 describe("DeepSeekClient", () => {
+  it("gets account balance with Bearer authentication", async () => {
+    const expected = {
+      is_available: true,
+      balance_infos: [
+        {
+          currency: "CNY",
+          total_balance: "110.00",
+          granted_balance: "10.00",
+          topped_up_balance: "100.00",
+        },
+      ],
+    };
+    let requestUrl = "";
+    let requestOptions: RequestInit | undefined;
+    const { client } = createClient(async (url, options) => {
+      requestUrl = String(url);
+      requestOptions = options;
+      return Response.json(expected);
+    });
+
+    await expect(client.balance()).resolves.toEqual(expected);
+    expect(requestUrl).toBe("https://api.deepseek.com/user/balance");
+    expect(requestOptions?.method).toBe("GET");
+    expect(new Headers(requestOptions?.headers).get("authorization")).toBe("Bearer test-key");
+    expect(requestOptions?.body).toBeUndefined();
+  });
+
+  it("rejects a malformed balance response", async () => {
+    const { client } = createClient(async () =>
+      Response.json({ is_available: true, balance_infos: "wrong" }),
+    );
+
+    await expect(client.balance()).rejects.toMatchObject({
+      kind: "invalid_response",
+    });
+  });
+
   it("posts search input and parses the response", async () => {
     let requestUrl = "";
     let requestOptions: RequestInit | undefined;

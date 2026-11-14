@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { executeBatchFetch, executeBatchFetchRetry } from "../application/batch.js";
 import {
+  executeBalance,
   executeCrawl,
   executeCrawlPlan,
   executeCrawlRetry,
@@ -34,7 +35,7 @@ import { readSecret } from "../credentials/input.js";
 import { type CredentialStore, createCredentialStore } from "../credentials/store.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
-import type { DeepSeekGateway } from "../deepseek/gateway.js";
+import type { DeepSeekBalanceGateway, DeepSeekGateway } from "../deepseek/gateway.js";
 import { errorMessage as genericErrorMessage } from "../error-message.js";
 import { createBatchFetchOutputWriter, formatBatchFetchHuman } from "../output/batch.js";
 import {
@@ -43,7 +44,7 @@ import {
   formatCrawlPlanHuman,
 } from "../output/crawl.js";
 import { assertPathMissing, writeFileAtomic, writeFileAtomicNoClobber } from "../output/files.js";
-import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
+import { formatBalanceHuman, formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { formatMapUrls, formatMapWarnings } from "../output/map.js";
 import { type SkillSetupResult, setupSkills } from "../setup/skills.js";
 import { packageVersion } from "../version.js";
@@ -60,6 +61,7 @@ export interface CliDependencies {
   crawlClient?: DeepSeekGateway;
   fetchClient?: DeepSeekGateway;
   mapClient?: DeepSeekGateway;
+  balanceClient?: DeepSeekBalanceGateway;
   sitemapReader?: MapSitemapReader;
   setupEnvironment?: {
     home: string;
@@ -91,6 +93,7 @@ Usage:
   deepseek-crawl crawl monitor reset <monitor-dir> [--json]
   deepseek-crawl crawl --retry-failed <crawl.json> -o <dir> [options]
   deepseek-crawl cache clear [--json]
+  deepseek-crawl balance [--json] [--output, -o <path>]
   deepseek-crawl init [options]
   deepseek-crawl doctor [--live] [--json]
   deepseek-crawl setup skills [options]
@@ -200,6 +203,10 @@ Monitor options:
 
 Without --live, doctor does not make a billable DeepSeek request.
 `,
+  balance: `Usage: deepseek-crawl balance [--json] [--output, -o <path>]
+
+Read the DeepSeek account balance without making a billable request.
+`,
   init: `Usage: deepseek-crawl init [options]
 
 Prompt for a missing API key, install the bundled Agent Skill, and run a
@@ -248,6 +255,9 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     ...(dependencies.crawlClient === undefined ? {} : { crawlClient: dependencies.crawlClient }),
     ...(dependencies.fetchClient === undefined ? {} : { fetchClient: dependencies.fetchClient }),
     ...(dependencies.mapClient === undefined ? {} : { mapClient: dependencies.mapClient }),
+    ...(dependencies.balanceClient === undefined
+      ? {}
+      : { balanceClient: dependencies.balanceClient }),
     ...(dependencies.sitemapReader === undefined
       ? {}
       : { sitemapReader: dependencies.sitemapReader }),
@@ -303,6 +313,25 @@ function withFetchCache(
 async function defaultSitemapReader(): Promise<MapSitemapReader> {
   const { SitemapReader } = await import("../sitemap/reader.js");
   return new SitemapReader();
+}
+
+async function runBalance(
+  command: Extract<ParsedCommand, { kind: "balance" }>,
+  deps: CliDependencies,
+) {
+  const config = loadConfig(deps.env, deps.credentialStore);
+  const client = deps.balanceClient ?? new DeepSeekClient({ ...config, fetchImpl: deps.fetchImpl });
+  const output = await executeBalance(client, deps.signal);
+  const content = command.json
+    ? `${JSON.stringify(output, null, 2)}\n`
+    : `${formatBalanceHuman(output)}\n`;
+  if (command.output) {
+    await writeFileAtomic(command.output, content);
+    deps.stdout.write(`Wrote ${command.output}\n`);
+  } else {
+    deps.stdout.write(content);
+  }
+  return 0;
 }
 
 async function runSearch(
@@ -1234,6 +1263,8 @@ export async function runCli(
           stdout: deps.stdout,
           stderr: deps.stderr,
         });
+      case "balance":
+        return await runBalance(command, deps);
       case "init":
         return await runInit(command, deps);
       case "mcp": {

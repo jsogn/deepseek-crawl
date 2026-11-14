@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { executeFetch, executeSearch } from "../../src/application/index.js";
+import { executeBalance, executeFetch, executeSearch } from "../../src/application/index.js";
 import { contentHash } from "../../src/content/hash.js";
 
 const result = {
@@ -22,6 +22,50 @@ function gateway() {
     fetch: vi.fn(async () => ({ title: "Page", content: "abcdef", page_extra: true })),
   };
 }
+
+describe("executeBalance", () => {
+  it("normalizes provider balance for Agent output", async () => {
+    const client = {
+      balance: vi.fn(async () => ({
+        is_available: true,
+        balance_infos: [
+          {
+            currency: "USD",
+            total_balance: "5.50",
+            granted_balance: "0.50",
+            topped_up_balance: "5.00",
+          },
+          {
+            currency: "CNY",
+            total_balance: "110.00",
+            granted_balance: "10.00",
+            topped_up_balance: "100.00",
+          },
+        ],
+      })),
+    };
+
+    await expect(executeBalance(client)).resolves.toEqual({
+      version: 1,
+      provider: "deepseek",
+      available: true,
+      balances: [
+        {
+          currency: "CNY",
+          total: "110.00",
+          granted: "10.00",
+          topped_up: "100.00",
+        },
+        {
+          currency: "USD",
+          total: "5.50",
+          granted: "0.50",
+          topped_up: "5.00",
+        },
+      ],
+    });
+  });
+});
 
 describe("executeSearch", () => {
   it("validates input before calling the client", async () => {

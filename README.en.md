@@ -155,6 +155,17 @@ deepseek-crawl doctor
 `init` performs the same check. `doctor` validates configuration without a
 billable call; `doctor --live` performs one billable Search.
 
+### Check the account balance
+
+```bash
+deepseek-crawl balance
+deepseek-crawl balance --json
+```
+
+The balance command reads DeepSeek `/user/balance` without making a billable
+request. `--json` returns a stable `available` flag and currency-sorted
+`balances[]` for Agents and scripts. Use `-o` to publish the output atomically.
+
 ### Make the first request
 
 After installation and authentication, verify end-to-end page reading with a
@@ -166,7 +177,7 @@ deepseek-crawl fetch "https://api-docs.deepseek.com/" \
 ```
 
 This command makes one DeepSeek Fetch request. For a fully non-billable install
-check, stop after `--version`, `init`, `auth status`, and `doctor`.
+check, stop after `--version`, `init`, `auth status`, `doctor`, and `balance`.
 
 `init` installs the Agent Skill by default; add `--skip-skills` when only the
 basic CLI is needed. See [Agent integration](#agent-integration) for targets and

@@ -76,6 +76,40 @@ Optional environment:
 - `DEEPSEEK_MAX_RETRIES`
 - `DEEPSEEK_CACHE_DIR`
 
+## Balance
+
+```text
+deepseek-crawl balance
+  [--json]
+  [--output, -o <path>]
+```
+
+Reads the authenticated DeepSeek account balance from `/user/balance`. The
+request is non-billable and does not call Search or Fetch.
+
+Human output lists each currency with total, granted, and topped-up balances.
+`--json` emits one stable object:
+
+```json
+{
+  "version": 1,
+  "provider": "deepseek",
+  "available": true,
+  "balances": [
+    {
+      "currency": "CNY",
+      "total": "110.00",
+      "granted": "10.00",
+      "topped_up": "100.00"
+    }
+  ]
+}
+```
+
+Balances are sorted by currency. `available` reflects DeepSeek's
+`is_available` field. Use this command when a user or workflow explicitly asks
+to route by DeepSeek availability; it does not choose a provider.
+
 ## Escalation
 
 ```text

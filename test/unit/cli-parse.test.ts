@@ -352,6 +352,18 @@ describe("parseCli", () => {
     expect(parseCli(["--version"])).toEqual({ kind: "version" });
   });
 
+  it("parses balance output options", () => {
+    expect(parseCli(["balance"])).toEqual({
+      kind: "balance",
+      json: false,
+    });
+    expect(parseCli(["balance", "--json", "--output", "balance.json"])).toEqual({
+      kind: "balance",
+      json: true,
+      output: "balance.json",
+    });
+  });
+
   it("parses init setup options", () => {
     expect(parseCli(["init"])).toEqual({
       kind: "init",
@@ -503,6 +515,8 @@ describe("parseCli", () => {
     [["auth"], /auth|subcommand/i],
     [["auth", "unknown"], /auth|subcommand/i],
     [["auth", "set", "--json"], /unknown option/i],
+    [["balance", "extra"], /argument|unknown option/i],
+    [["balance", "--live"], /unknown option/i],
     [["init", "--skip-skills", "--project"], /skip-skills|project/i],
     [["init", "--skip-skills", "--agent", "codex"], /skip-skills|agent/i],
     [["init", "--skip-skills", "--copy"], /skip-skills|copy/i],

@@ -144,6 +144,17 @@ deepseek-crawl doctor
 `init` 已经包含同样的检查。`doctor` 检查配置且不调用计费接口；
 `doctor --live` 会执行一次计费 Search。
 
+### 查看账户余额
+
+```bash
+deepseek-crawl balance
+deepseek-crawl balance --json
+```
+
+余额查询读取 DeepSeek `/user/balance`，不会产生计费请求。`--json` 输出稳定的
+`available` 和按币种排序的 `balances[]`，可直接用于 Agent 或脚本判断 DeepSeek
+当前是否可用；使用 `-o` 可原子写入文件。
+
 ### 第一次请求
 
 安装和认证成功后，用一个已知 URL 验证端到端读取：
@@ -154,7 +165,7 @@ deepseek-crawl fetch "https://api-docs.deepseek.com/" \
 ```
 
 这条命令会产生一次 DeepSeek Fetch 请求。需要完全无计费的安装检查时，到此为止，
-只使用 `--version`、`init`、`auth status` 和 `doctor`。
+只使用 `--version`、`init`、`auth status`、`doctor` 和 `balance`。
 
 `init` 默认安装 Agent Skill；只使用基础 CLI 时可添加 `--skip-skills`。更多安装
 位置和目标见下方 [Agent 集成](#agent-集成)。

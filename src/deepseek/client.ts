@@ -1,8 +1,14 @@
 import type { ReadableStreamDefaultReader } from "node:stream/web";
 import type { z } from "zod";
-import type { FetchInput, RawFetchResponse, RawSearchResponse, SearchInput } from "../types.js";
+import type {
+  FetchInput,
+  RawBalanceResponse,
+  RawFetchResponse,
+  RawSearchResponse,
+  SearchInput,
+} from "../types.js";
 import { DeepSeekError, type DeepSeekErrorKind } from "./errors.js";
-import { fetchResponseSchema, searchResponseSchema } from "./schemas.js";
+import { balanceResponseSchema, fetchResponseSchema, searchResponseSchema } from "./schemas.js";
 
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_UPSTREAM_MESSAGE_LENGTH = 500;
@@ -261,40 +267,67 @@ export class DeepSeekClient {
   }
 
   search(input: SearchInput, signal?: AbortSignal): Promise<RawSearchResponse> {
-    return this.#request("search", input, searchResponseSchema, signal);
+    return this.#request({
+      method: "POST",
+      path: "v1/tools/search",
+      body: input,
+      schema: searchResponseSchema,
+      ...(signal === undefined ? {} : { signal }),
+    });
   }
 
   fetch(input: FetchInput, signal?: AbortSignal): Promise<RawFetchResponse> {
-    return this.#request("fetch", input, fetchResponseSchema, signal);
+    return this.#request({
+      method: "POST",
+      path: "v1/tools/fetch",
+      body: input,
+      schema: fetchResponseSchema,
+      maxResponseBytes: this.#fetchResponseByteLimit,
+      ...(signal === undefined ? {} : { signal }),
+    });
   }
 
-  async #request<T>(
-    operation: "search" | "fetch",
-    input: SearchInput | FetchInput,
-    schema: z.ZodType<T>,
-    signal?: AbortSignal,
-  ): Promise<T> {
+  balance(signal?: AbortSignal): Promise<RawBalanceResponse> {
+    return this.#request({
+      method: "GET",
+      path: "user/balance",
+      schema: balanceResponseSchema,
+      ...(signal === undefined ? {} : { signal }),
+    });
+  }
+
+  async #request<T>(options: {
+    method: "GET" | "POST";
+    path: string;
+    body?: unknown;
+    schema: z.ZodType<T>;
+    maxResponseBytes?: number;
+    signal?: AbortSignal;
+  }): Promise<T> {
     for (let attempt = 0; attempt <= this.#maxRetries; attempt += 1) {
-      if (signal?.aborted) {
+      if (options.signal?.aborted) {
         throw cancellationError();
       }
 
       const timeoutController = new AbortController();
       const timer = setTimeout(() => timeoutController.abort(), this.#timeoutMs);
-      const requestSignal = signal
-        ? AbortSignal.any([signal, timeoutController.signal])
+      const requestSignal = options.signal
+        ? AbortSignal.any([options.signal, timeoutController.signal])
         : timeoutController.signal;
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${this.#apiKey}`,
+        Accept: "application/json",
+      };
+      if (options.body !== undefined) {
+        headers["Content-Type"] = "application/json";
+      }
 
       let response: Response | undefined;
       try {
-        response = await this.#fetchImpl(new URL(`v1/tools/${operation}`, this.#baseUrl), {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${this.#apiKey}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(input),
+        response = await this.#fetchImpl(new URL(options.path, this.#baseUrl), {
+          method: options.method,
+          headers,
+          ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
           redirect: "error",
           signal: requestSignal,
         });
@@ -311,23 +344,23 @@ export class DeepSeekClient {
                 ? parseRetryAfter(response.headers.get("retry-after"))
                 : undefined;
             clearTimeout(timer);
-            await this.#sleep(retryAfter ?? jitteredDelay(attempt, this.#random), signal);
+            await this.#sleep(retryAfter ?? jitteredDelay(attempt, this.#random), options.signal);
             continue;
           }
           throw error;
         }
 
-        if (operation === "fetch") {
+        if (options.maxResponseBytes !== undefined) {
           return await readJsonWithByteLimit(
             response,
-            this.#fetchResponseByteLimit,
-            schema,
+            options.maxResponseBytes,
+            options.schema,
             requestSignal,
           );
         }
-        return schema.parse(await response.json());
+        return options.schema.parse(await response.json());
       } catch (error) {
-        if (signal?.aborted) {
+        if (options.signal?.aborted) {
           throw cancellationError();
         }
         if (timeoutController.signal.aborted) {

@@ -32,6 +32,32 @@ export interface RawFetchResponse extends Record<string, unknown> {
   content: string;
 }
 
+export interface RawBalanceInfo {
+  currency: string;
+  total_balance: string;
+  granted_balance: string;
+  topped_up_balance: string;
+}
+
+export interface RawBalanceResponse extends Record<string, unknown> {
+  is_available: boolean;
+  balance_infos: RawBalanceInfo[];
+}
+
+export interface BalanceAmount {
+  currency: string;
+  total: string;
+  granted: string;
+  topped_up: string;
+}
+
+export interface BalanceOutput extends Record<string, unknown> {
+  version: 1;
+  provider: "deepseek";
+  available: boolean;
+  balances: BalanceAmount[];
+}
+
 export type FetchRetrievalSource = "api" | "cache";
 
 interface SearchResultItem extends RawSearchResult {

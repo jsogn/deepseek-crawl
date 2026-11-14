@@ -1,4 +1,4 @@
-import type { FetchOutput, SearchOutput } from "../types.js";
+import type { BalanceOutput, FetchOutput, SearchOutput } from "../types.js";
 
 export function formatSearchHuman(output: SearchOutput): string {
   if (output.results.length === 0) {
@@ -43,6 +43,18 @@ export function formatFetchHuman(output: FetchOutput): string {
     lines.push(
       "",
       `[Content truncated from ${output.original_length} to ${[...output.content].length} characters.]`,
+    );
+  }
+  return lines.join("\n");
+}
+
+export function formatBalanceHuman(output: BalanceOutput): string {
+  const lines = ["DeepSeek balance", `Available: ${output.available ? "yes" : "no"}`];
+  for (const balance of output.balances) {
+    lines.push(
+      `${balance.currency}: ${balance.total}`,
+      `  Granted: ${balance.granted}`,
+      `  Topped up: ${balance.topped_up}`,
     );
   }
   return lines.join("\n");

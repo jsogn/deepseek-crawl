@@ -3,7 +3,7 @@
 import { runCli } from "./cli/run.js";
 
 const argv = process.argv.slice(2);
-const signalCommands = new Set(["crawl", "map"]);
+const signalCommands = new Set(["crawl", "gateway", "map"]);
 
 if (!signalCommands.has(argv[0] ?? "")) {
   process.exitCode = await runCli(argv);

@@ -8,7 +8,7 @@ describe("package executable", () => {
       encoding: "utf8",
     });
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("0.12.0");
+    expect(result.stdout.trim()).toBe("0.13.0");
     expect(result.stderr).toBe("");
   });
 
@@ -20,7 +20,8 @@ describe("package executable", () => {
     expect(packageJson.files).toContain("README.en.md");
     expect(packageJson.files).toContain("LICENSE");
     expect(packageJson.description).toMatch(/CLI-first/i);
-    expect(packageJson.description).toMatch(/optional MCP/i);
+    expect(packageJson.description).toMatch(/MCP/i);
+    expect(packageJson.description).toMatch(/optional Firecrawl-compatible gateway/i);
     expect(packageJson.private).not.toBe(true);
     expect(packageJson.license).toBe("MIT");
   });
@@ -56,6 +57,7 @@ describe("package documentation", () => {
       "deepseek-crawl auth status",
       "deepseek-crawl auth remove",
       "deepseek-crawl balance",
+      "deepseek-crawl gateway",
       "deepseek-crawl fetch status",
       "--job-dir",
       "macOS Keychain",
@@ -65,6 +67,9 @@ describe("package documentation", () => {
       "--include-paths",
       "--exclude-paths",
       "--ignore-query-parameters",
+      "FIRECRAWL_API_URL",
+      "FIRECRAWL_UPSTREAM_URL",
+      "Firecrawl-compatible",
     ]) {
       expect(allDocumentation).toContain(text);
     }

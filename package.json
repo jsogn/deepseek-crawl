@@ -1,7 +1,7 @@
 {
   "name": "deepseek-crawl",
-  "version": "0.12.0",
-  "description": "CLI-first AI web search, page reading, mapping, and crawling with optional MCP",
+  "version": "0.13.0",
+  "description": "CLI-first AI web search, page reading, mapping, crawling, MCP, and an optional Firecrawl-compatible gateway",
   "type": "module",
   "license": "MIT",
   "homepage": "https://github.com/jsogn/deepseek-crawl#readme",
@@ -18,7 +18,10 @@
     "web-search",
     "mcp",
     "agent-skill",
-    "cli"
+    "cli",
+    "firecrawl",
+    "gateway",
+    "proxy"
   ],
   "bin": {
     "deepseek-crawl": "dist/bin.js"
@@ -68,6 +71,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.7",
     "@types/node": "22.20.5",
+    "firecrawl": "4.54.0",
     "typescript": "7.0.2",
     "vitest": "5.1.0"
   }

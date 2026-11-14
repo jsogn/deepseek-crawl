@@ -387,6 +387,25 @@ describe("parseCli", () => {
     expect(parseCli(["--version"])).toEqual({ kind: "version" });
   });
 
+  it("parses gateway options", () => {
+    expect(parseCli(["gateway"])).toEqual({
+      kind: "gateway",
+      host: "127.0.0.1",
+      port: 8787,
+      allowRemote: false,
+    });
+    expect(parseCli(["gateway", "--host", "0.0.0.0", "--port", "9000", "--allow-remote"])).toEqual({
+      kind: "gateway",
+      host: "0.0.0.0",
+      port: 9000,
+      allowRemote: true,
+    });
+    expect(parseCli(["gateway", "--help"])).toEqual({
+      kind: "help",
+      command: "gateway",
+    });
+  });
+
   it("parses balance output options", () => {
     expect(parseCli(["balance"])).toEqual({
       kind: "balance",
@@ -560,6 +579,10 @@ describe("parseCli", () => {
     [["auth", "set", "--json"], /unknown option/i],
     [["balance", "extra"], /argument|unknown option/i],
     [["balance", "--live"], /unknown option/i],
+    [["gateway", "--port", "0"], /port/i],
+    [["gateway", "--port", "65536"], /port/i],
+    [["gateway", "extra"], /argument/i],
+    [["gateway", "--host", "   "], /host/i],
     [["init", "--skip-skills", "--project"], /skip-skills|project/i],
     [["init", "--skip-skills", "--agent", "codex"], /skip-skills|agent/i],
     [["init", "--skip-skills", "--copy"], /skip-skills|copy/i],

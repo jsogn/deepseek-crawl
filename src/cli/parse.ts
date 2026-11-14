@@ -145,6 +145,12 @@ export type ParsedCommand =
   | { kind: "auth-set" }
   | { kind: "auth-status"; json: boolean }
   | { kind: "auth-remove"; json: boolean }
+  | {
+      kind: "gateway";
+      host: string;
+      port: number;
+      allowRemote: boolean;
+    }
   | { kind: "mcp" }
   | { kind: "help"; command?: string }
   | { kind: "version" };
@@ -918,6 +924,35 @@ export function parseCli(argv: string[]): ParsedCommand {
           options: { help: { type: "boolean", short: "h" } },
         });
         return parsed.values.help ? { kind: "help", command: "mcp" } : { kind: "mcp" };
+      }
+      case "gateway": {
+        const parsed = parseArgs({
+          args,
+          allowPositionals: false,
+          strict: true,
+          options: {
+            host: { type: "string" },
+            port: { type: "string" },
+            "allow-remote": { type: "boolean" },
+            help: { type: "boolean", short: "h" },
+          },
+        });
+        if (parsed.values.help) {
+          return { kind: "help", command: "gateway" };
+        }
+        const host = parsed.values.host === undefined ? "127.0.0.1" : parsed.values.host.trim();
+        if (!host) {
+          throw new CliUsageError("Gateway host is required.");
+        }
+        return {
+          kind: "gateway",
+          host,
+          port:
+            parsed.values.port === undefined
+              ? 8787
+              : parseInteger(parsed.values.port, "port", 1, 65_535),
+          allowRemote: parsed.values["allow-remote"] ?? false,
+        };
       }
       default:
         throw new CliUsageError(`Unknown command: ${command ?? ""}`);

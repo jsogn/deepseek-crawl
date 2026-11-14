@@ -48,6 +48,8 @@ import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekBalanceGateway, DeepSeekGateway } from "../deepseek/gateway.js";
 import { errorMessage as genericErrorMessage } from "../error-message.js";
+import { loadGatewayConfig } from "../gateway/config.js";
+import { startGatewayServer } from "../gateway/server.js";
 import { createBatchFetchOutputWriter, formatBatchFetchHuman } from "../output/batch.js";
 import {
   createCrawlOutputWriter,
@@ -114,6 +116,7 @@ Usage:
   deepseek-crawl auth set
   deepseek-crawl auth status [--json]
   deepseek-crawl auth remove [--json]
+  deepseek-crawl gateway [--host <host>] [--port <port>] [--allow-remote]
   deepseek-crawl mcp
 
 Run "deepseek-crawl help <command>" for command details.
@@ -263,6 +266,15 @@ Options:
   deepseek-crawl auth remove [--json]
 `,
   mcp: "Usage: deepseek-crawl mcp\n\nStart the MCP server over stdio.\n",
+  gateway: `Usage: deepseek-crawl gateway [options]
+
+Start a Firecrawl-compatible HTTP gateway.
+
+Options:
+  --host <host>       Listener host (default: 127.0.0.1)
+  --port <1..65535>   Listener port (default: 8787)
+  --allow-remote      Allow binding to a non-loopback host
+`,
   cache: `Usage: deepseek-crawl cache clear [--json]
 
 Clear the local DeepSeek Fetch cache.
@@ -354,6 +366,42 @@ async function runBalance(
     deps.stdout.write(`Wrote ${command.output}\n`);
   } else {
     deps.stdout.write(content);
+  }
+  return 0;
+}
+
+function waitForAbort(signal: AbortSignal | undefined): Promise<void> {
+  if (!signal) {
+    return new Promise(() => undefined);
+  }
+  if (signal.aborted) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
+}
+
+async function runGateway(
+  command: Extract<ParsedCommand, { kind: "gateway" }>,
+  deps: CliDependencies,
+) {
+  const config = loadGatewayConfig({
+    host: command.host,
+    port: command.port,
+    allowRemote: command.allowRemote,
+    env: deps.env,
+  });
+  const server = await startGatewayServer({
+    config,
+    env: deps.env,
+    fetchImpl: deps.fetchImpl,
+  });
+  deps.stdout.write(`Firecrawl gateway listening on ${server.url.href}\n`);
+  try {
+    await waitForAbort(deps.signal);
+  } finally {
+    await server.close();
   }
   return 0;
 }
@@ -1520,6 +1568,8 @@ export async function runCli(
         });
       case "balance":
         return await runBalance(command, deps);
+      case "gateway":
+        return await runGateway(command, deps);
       case "init":
         return await runInit(command, deps);
       case "mcp": {

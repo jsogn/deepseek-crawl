@@ -77,6 +77,17 @@ export {
 } from "./credentials/store.js";
 export { DeepSeekClient } from "./deepseek/client.js";
 export { DeepSeekError } from "./deepseek/errors.js";
+export type { GatewayConfig, GatewayConfigInput } from "./gateway/config.js";
+export { loadGatewayConfig } from "./gateway/config.js";
+export type {
+  CrawlJobManagerOptions,
+  FirecrawlCrawlDocument,
+  FirecrawlCrawlError,
+  FirecrawlCrawlStatus,
+} from "./gateway/crawl-jobs.js";
+export { CrawlJobManager } from "./gateway/crawl-jobs.js";
+export type { GatewayServer, GatewayServerOptions } from "./gateway/server.js";
+export { startGatewayServer } from "./gateway/server.js";
 export type { RetryAttempt, RetrySummary } from "./retry/types.js";
 export type {
   BalanceAmount,

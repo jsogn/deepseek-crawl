@@ -316,6 +316,11 @@ try {
   ) {
     throw new Error("Installed Batch Fetch job commands are missing expected help output.");
   }
+  const gatewayHelp = (await runOk(process.execPath, [binary, "gateway", "--help"], consumerRoot))
+    .stdout;
+  if (!gatewayHelp.includes("--allow-remote") || !gatewayHelp.includes("8787")) {
+    throw new Error("Installed Firecrawl-compatible gateway command is missing expected help.");
+  }
 
   probe = await startProbeServer();
   const initChecks = await verifyPackagedInit(binary, consumerRoot, temporaryRoot, probe);
@@ -324,6 +329,7 @@ try {
   console.log(`Installed CLI version: ${version}`);
   console.log("Installed Skill setup command is available.");
   console.log("Installed Batch Fetch job commands are available.");
+  console.log("Installed Firecrawl-compatible gateway command is available.");
   console.log("Verified packaged init with environment credentials and a copied Skill.");
   console.log("Verified packaged init conflict handling with --force.");
   console.log("Verified packaged init JSON failure without a billable request.");

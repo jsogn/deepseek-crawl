@@ -37,6 +37,38 @@ describe("Crawl baseline", () => {
     expect(baseline.hashes.get("https://example.com/a")).toBe(hashA);
   });
 
+  it("preserves page metadata and Sitemap lastmod for safe fetch skipping", () => {
+    const baseline = parseCrawlBaseline(
+      {
+        version: 1,
+        pages: [
+          {
+            url: "https://example.com/a",
+            title: "Page A",
+            depth: 1,
+            sources: ["sitemap"],
+            content_length: 42,
+            content_hash: hashA,
+            content_truncated: false,
+            sitemap_lastmod: "2026-11-14T08:00:00.000Z",
+          },
+        ],
+      },
+      "previous/crawl.json",
+    );
+
+    expect(baseline.pages?.get("https://example.com/a")).toEqual({
+      url: "https://example.com/a",
+      title: "Page A",
+      depth: 1,
+      sources: ["sitemap"],
+      content_length: 42,
+      content_hash: hashA,
+      content_truncated: false,
+      sitemap_lastmod: "2026-11-14T08:00:00.000Z",
+    });
+  });
+
   it("rejects duplicate, malformed, or missing content hashes", () => {
     expect(() =>
       parseCrawlBaseline(

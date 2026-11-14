@@ -3,7 +3,7 @@ import https from "node:https";
 import { isIP } from "node:net";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { normalizeHttpUrl, sameOrigin } from "../crawl/links.js";
-import type { MapWarning } from "../crawl/types.js";
+import type { CrawlSitemapEntry, MapWarning } from "../crawl/types.js";
 import { errorMessage } from "../error-message.js";
 import { packageVersion } from "../version.js";
 import {
@@ -40,6 +40,7 @@ export interface SitemapReadOptions {
 
 export interface SitemapDiscovery {
   urls: URL[];
+  entries?: CrawlSitemapEntry[];
   warnings: MapWarning[];
   truncated: boolean;
 }
@@ -257,7 +258,7 @@ export function createPublicSitemapFetcher(
 
 interface ParsedSitemap {
   kind: "urlset" | "sitemapindex";
-  locations: string[];
+  locations: Array<{ location: string; lastmod?: string }>;
 }
 
 const sitemapParser = new XMLParser({
@@ -279,15 +280,27 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [value];
 }
 
-function locationsFrom(entries: unknown[]): string[] {
-  const locations: string[] = [];
+function normalizeLastmod(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) {
+    return undefined;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined;
+}
+
+function locationsFrom(entries: unknown[]): ParsedSitemap["locations"] {
+  const locations: ParsedSitemap["locations"] = [];
   for (const entry of entries) {
     if (typeof entry !== "object" || entry === null || !("loc" in entry)) {
       continue;
     }
     const location = (entry as { loc?: unknown }).loc;
     if (typeof location === "string" && location.trim()) {
-      locations.push(location.trim());
+      const lastmod = normalizeLastmod((entry as { lastmod?: unknown }).lastmod);
+      locations.push({
+        location: location.trim(),
+        ...(lastmod ? { lastmod } : {}),
+      });
     }
   }
   return locations;
@@ -355,6 +368,7 @@ export class SitemapReader {
     const queue = [root];
     const seenDocuments = new Set([root.href]);
     const urls = new Map<string, URL>();
+    const lastmods = new Map<string, string>();
     const warnings: MapWarning[] = [];
     let documentsRead = 0;
     let truncated = false;
@@ -400,12 +414,15 @@ export class SitemapReader {
       }
 
       if (parsed.kind === "urlset") {
-        for (const location of parsed.locations) {
-          const url = normalizeHttpUrl(location, fetched.finalUrl);
+        for (const entry of parsed.locations) {
+          const url = normalizeHttpUrl(entry.location, fetched.finalUrl);
           if (!url || !sameOrigin(url, seedUrl)) {
             continue;
           }
           if (urls.has(url.href)) {
+            if (entry.lastmod && !lastmods.has(url.href)) {
+              lastmods.set(url.href, entry.lastmod);
+            }
             continue;
           }
           if (urls.size >= limits.maxCandidates) {
@@ -422,10 +439,13 @@ export class SitemapReader {
             break;
           }
           urls.set(url.href, url);
+          if (entry.lastmod) {
+            lastmods.set(url.href, entry.lastmod);
+          }
         }
       } else {
-        for (const location of parsed.locations) {
-          const url = normalizeHttpUrl(location, fetched.finalUrl);
+        for (const entry of parsed.locations) {
+          const url = normalizeHttpUrl(entry.location, fetched.finalUrl);
           if (!url || !sameOrigin(url, seedUrl) || seenDocuments.has(url.href)) {
             continue;
           }
@@ -445,10 +465,18 @@ export class SitemapReader {
       );
     }
 
+    const sortedUrls = [...urls.values()].sort((left, right) =>
+      left.href < right.href ? -1 : left.href > right.href ? 1 : 0,
+    );
     return {
-      urls: [...urls.values()].sort((left, right) =>
-        left.href < right.href ? -1 : left.href > right.href ? 1 : 0,
-      ),
+      urls: sortedUrls,
+      entries: sortedUrls.map((url) => {
+        const lastmod = lastmods.get(url.href);
+        return {
+          url,
+          ...(lastmod ? { lastmod } : {}),
+        };
+      }),
       warnings,
       truncated,
     };

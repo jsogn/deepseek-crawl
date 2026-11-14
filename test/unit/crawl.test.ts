@@ -103,6 +103,246 @@ describe("executeCrawl", () => {
     });
   });
 
+  it("skips fetching a Sitemap page when lastmod is unchanged", async () => {
+    const childUrl = "https://example.com/child";
+    const childHash = contentHash("old child");
+    const childLastmod = "2026-11-14T08:00:00.000Z";
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content: "",
+    }));
+    const result = await executeCrawl(
+      { search: vi.fn(), fetch },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 1,
+        maxPages: 2,
+        sitemapMode: "include",
+        sitemapReader: {
+          read: vi.fn(async () => ({
+            urls: [new URL(childUrl)],
+            entries: [{ url: new URL(childUrl), lastmod: childLastmod }],
+            warnings: [],
+            truncated: false,
+          })),
+        },
+        baseline: {
+          source: "previous/crawl.json",
+          hashes: new Map([[childUrl, childHash]]),
+          pages: new Map([
+            [
+              childUrl,
+              {
+                url: childUrl,
+                title: "Cached child",
+                depth: 1,
+                sources: ["sitemap"],
+                content_length: 123,
+                content_hash: childHash,
+                content_truncated: false,
+                sitemap_lastmod: childLastmod,
+              },
+            ],
+          ]),
+        },
+        changedOnly: true,
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith({ url: "https://example.com/" }, expect.any(AbortSignal));
+    expect(result.stats.sitemap_lastmod_skipped).toBe(1);
+    expect(result.pages.find((page) => page.url === childUrl)).toMatchObject({
+      title: "Cached child",
+      depth: 1,
+      sources: ["sitemap"],
+      content_length: 123,
+      content_hash: childHash,
+      change_status: "unchanged",
+      sitemap_lastmod: childLastmod,
+    });
+    expect(result.changes?.unchanged).toContainEqual({
+      url: childUrl,
+      content_hash: childHash,
+    });
+  });
+
+  it.each([
+    ["newer", "2026-11-15T08:00:00.000Z"],
+    ["older", "2026-11-13T08:00:00.000Z"],
+    ["invalid", "not-a-date"],
+    ["missing", undefined],
+  ])("does not skip a Sitemap page when lastmod is %s", async (_label, currentLastmod) => {
+    const childUrl = "https://example.com/child";
+    const childHash = contentHash("cached child");
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content: url === childUrl ? "fresh child" : "",
+    }));
+    const result = await executeCrawl(
+      { search: vi.fn(), fetch },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 1,
+        maxPages: 2,
+        sitemapMode: "include",
+        sitemapReader: {
+          read: vi.fn(async () => ({
+            urls: [new URL(childUrl)],
+            entries: [
+              {
+                url: new URL(childUrl),
+                ...(currentLastmod === undefined ? {} : { lastmod: currentLastmod }),
+              },
+            ],
+            warnings: [],
+            truncated: false,
+          })),
+        },
+        baseline: {
+          source: "previous/crawl.json",
+          hashes: new Map([[childUrl, childHash]]),
+          pages: new Map([
+            [
+              childUrl,
+              {
+                url: childUrl,
+                title: "Cached child",
+                depth: 1,
+                sources: ["sitemap"],
+                content_length: 12,
+                content_hash: childHash,
+                content_truncated: false,
+                sitemap_lastmod: "2026-11-14T08:00:00.000Z",
+              },
+            ],
+          ]),
+        },
+        changedOnly: true,
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.stats.sitemap_lastmod_skipped).toBeUndefined();
+    expect(result.pages.find((page) => page.url === childUrl)).toMatchObject({
+      content_hash: contentHash("fresh child"),
+      change_status: "modified",
+    });
+  });
+
+  it("does not lastmod-skip an intermediate page whose links are needed for deeper discovery", async () => {
+    const childUrl = "https://example.com/child";
+    const childHash = contentHash("cached child");
+    const sameLastmod = "2026-11-14T08:00:00.000Z";
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content:
+        url === "https://example.com/"
+          ? ""
+          : url === childUrl
+            ? "[Grandchild](/grandchild)"
+            : "grandchild body",
+    }));
+    const result = await executeCrawl(
+      { search: vi.fn(), fetch },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 2,
+        maxPages: 3,
+        sitemapMode: "include",
+        sitemapReader: {
+          read: vi.fn(async () => ({
+            urls: [new URL(childUrl)],
+            entries: [{ url: new URL(childUrl), lastmod: sameLastmod }],
+            warnings: [],
+            truncated: false,
+          })),
+        },
+        baseline: {
+          source: "previous/crawl.json",
+          hashes: new Map([[childUrl, childHash]]),
+          pages: new Map([
+            [
+              childUrl,
+              {
+                url: childUrl,
+                title: "Cached child",
+                depth: 1,
+                sources: ["sitemap"],
+                content_length: 12,
+                content_hash: childHash,
+                content_truncated: false,
+                sitemap_lastmod: sameLastmod,
+              },
+            ],
+          ]),
+        },
+        changedOnly: true,
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(result.stats.sitemap_lastmod_skipped).toBeUndefined();
+    expect(result.pages.map((page) => page.url)).toContain("https://example.com/grandchild");
+  });
+
+  it("does not lastmod-skip when full page content is required", async () => {
+    const childUrl = "https://example.com/child";
+    const childHash = contentHash("cached child");
+    const sameLastmod = "2026-11-14T08:00:00.000Z";
+    const fetch = vi.fn(async ({ url }: { url: string }) => ({
+      title: url,
+      content: url === childUrl ? "full child body" : "",
+    }));
+    const result = await executeCrawl(
+      { search: vi.fn(), fetch },
+      { url: "https://example.com/" },
+      {
+        ...options,
+        maxDepth: 1,
+        maxPages: 2,
+        sitemapMode: "include",
+        sitemapReader: {
+          read: vi.fn(async () => ({
+            urls: [new URL(childUrl)],
+            entries: [{ url: new URL(childUrl), lastmod: sameLastmod }],
+            warnings: [],
+            truncated: false,
+          })),
+        },
+        baseline: {
+          source: "previous/crawl.json",
+          hashes: new Map([[childUrl, childHash]]),
+          pages: new Map([
+            [
+              childUrl,
+              {
+                url: childUrl,
+                title: "Cached child",
+                depth: 1,
+                sources: ["sitemap"],
+                content_length: 12,
+                content_hash: childHash,
+                content_truncated: false,
+                sitemap_lastmod: sameLastmod,
+              },
+            ],
+          ]),
+        },
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.stats.sitemap_lastmod_skipped).toBeUndefined();
+    expect(result.pages.find((page) => page.url === childUrl)).toMatchObject({
+      content_hash: contentHash("full child body"),
+      change_status: "modified",
+    });
+  });
+
   it("requires a baseline when changed-only is enabled", async () => {
     await expect(
       executeCrawl(

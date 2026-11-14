@@ -318,8 +318,15 @@ All fetched pages remain in the report:
 - `changes.removed` lists baseline URLs absent from the current discovery scope.
 - `stats.added`, `modified`, `unchanged`, and `removed` provide counts.
 
-This version still reads pages or resolves cache entries to compute hashes.
-Sitemap `lastmod` request skipping is not part of this version.
+With `--changed-only`, CLI Crawl may skip DeepSeek Fetch for a deepest-frontier
+Sitemap page when its valid `lastmod` exactly matches the value stored by the
+baseline. The baseline content hash and page summary are reused, the page remains
+unchanged in the report, and `stats.sitemap_lastmod_skipped` reports the count.
+
+Pages with newer, older, missing, or invalid `lastmod` values are fetched.
+Intermediate pages are always fetched because their body can reveal deeper
+links. Sitemap `skip` mode and baselines created without `sitemap_lastmod` do not
+use this optimization.
 
 ### Change Monitor
 

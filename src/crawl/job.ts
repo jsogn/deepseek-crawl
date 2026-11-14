@@ -29,6 +29,7 @@ const pageSchema = z.object({
   content_truncated: z.boolean(),
   content_original_length: z.number().int().nonnegative().optional(),
   retrieved_from: z.enum(["api", "cache"]).optional(),
+  sitemap_lastmod: z.string().optional(),
 });
 
 const stateSchema = z.object({
@@ -55,6 +56,7 @@ const stateSchema = z.object({
     limitReached: z.boolean(),
     discoveryLimitReached: z.boolean(),
     sitemapCandidates: z.number().int().nonnegative(),
+    sitemapLastmodSkipped: z.number().int().nonnegative().optional(),
   }),
   seen: z.array(z.string().url()),
   sources: z.array(z.object({ url: z.string().url(), sources: z.array(sourceSchema) })),

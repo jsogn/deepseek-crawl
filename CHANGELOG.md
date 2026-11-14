@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.0 - 2026-11-14
+
+### Added
+
+- Incremental Crawl and Change Monitor can reuse unchanged deepest-frontier
+  Sitemap pages when their `lastmod` matches the stored baseline, avoiding
+  unnecessary Fetch requests.
+- Reports expose `stats.sitemap_lastmod_skipped`.
+
+### Changed
+
+- Baseline and monitor state retain page summaries and Sitemap `lastmod`
+  metadata while remaining compatible with older reports and state.
+
 ## 0.8.1 - 2026-11-14
 
 ### Changed

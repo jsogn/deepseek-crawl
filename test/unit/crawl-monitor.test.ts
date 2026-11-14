@@ -215,6 +215,60 @@ describe("Crawl monitor CLI", () => {
     expect(await readdir(runsDir)).toHaveLength(2);
   });
 
+  it("reuses persisted Sitemap lastmod to avoid refetching unchanged leaves", async () => {
+    const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-monitor-lastmod-"));
+    const monitorDir = join(root, "state");
+    const runsDir = join(root, "runs");
+    const childUrl = "https://example.com/child";
+    const lastmod = "2026-11-14T08:00:00.000Z";
+    let childFetches = 0;
+    const client = crawlClient(async (url) => {
+      if (url === childUrl) {
+        childFetches += 1;
+        return { title: "Child", content: "child body" };
+      }
+      return { title: "Seed", content: "" };
+    });
+    const reader = {
+      read: vi.fn(async () => ({
+        urls: [new URL(childUrl)],
+        entries: [{ url: new URL(childUrl), lastmod }],
+        warnings: [],
+        truncated: false,
+      })),
+    };
+    const arguments_ = monitorArguments(monitorDir, runsDir).map((argument) =>
+      argument === "skip" ? "include" : argument,
+    );
+
+    expect(await runCli(arguments_, dependencies(client, reader).deps)).toBe(0);
+    expect(childFetches).toBe(1);
+
+    const secondDependencies = dependencies(client, reader);
+    expect(await runCli(arguments_, secondDependencies.deps)).toBe(0);
+    const second = JSON.parse(secondDependencies.stdout.value());
+
+    expect(childFetches).toBe(1);
+    expect(second).toMatchObject({
+      stats: {
+        fetched: 1,
+        sitemap_lastmod_skipped: 1,
+        unchanged: 2,
+      },
+      changes: {
+        unchanged: expect.arrayContaining([expect.objectContaining({ url: childUrl })]),
+      },
+    });
+    expect(await readCrawlMonitorState(monitorDir)).toMatchObject({
+      baseline: expect.arrayContaining([
+        expect.objectContaining({
+          url: childUrl,
+          sitemap_lastmod: lastmod,
+        }),
+      ]),
+    });
+  });
+
   it("does not trigger or write added pages with --only-modified", async () => {
     const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-monitor-only-"));
     const monitorDir = join(root, "state");

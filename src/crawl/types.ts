@@ -21,6 +21,11 @@ export type CrawlPageSource = "seed_url" | CrawlUrlSource;
 export type CrawlChangeStatus = "added" | "modified" | "unchanged";
 export type CrawlJobStatus = "running" | "interrupted" | "completed";
 
+export interface CrawlSitemapEntry {
+  url: URL;
+  lastmod?: string;
+}
+
 export interface CrawlSitemapReader {
   read(
     seedUrl: URL,
@@ -28,6 +33,7 @@ export interface CrawlSitemapReader {
     signal?: AbortSignal,
   ): Promise<{
     urls: URL[];
+    entries?: CrawlSitemapEntry[];
     warnings: MapWarning[];
     truncated: boolean;
   }>;
@@ -76,6 +82,19 @@ export interface CrawlOptions {
 export interface CrawlBaseline {
   source: string;
   hashes: ReadonlyMap<string, string>;
+  pages?: ReadonlyMap<string, CrawlBaselinePage>;
+}
+
+export interface CrawlBaselinePage {
+  url: string;
+  title: string;
+  depth: number;
+  sources: CrawlPageSource[];
+  content_length: number;
+  content_hash: string;
+  content_truncated: boolean;
+  content_original_length?: number;
+  sitemap_lastmod?: string;
 }
 
 export interface CrawlCheckpointOptions {
@@ -97,6 +116,7 @@ export interface CrawlCheckpointCounters {
   limitReached: boolean;
   discoveryLimitReached: boolean;
   sitemapCandidates: number;
+  sitemapLastmodSkipped?: number;
 }
 
 export interface CrawlCheckpointSource {
@@ -144,6 +164,7 @@ export interface CrawlPage {
   sources: CrawlPageSource[];
   content_truncated: boolean;
   content_original_length: number;
+  sitemapLastmod?: string;
   retryOf?: RetryAttempt;
 }
 
@@ -159,6 +180,7 @@ export interface CrawlPageSummary {
   previous_content_hash?: string;
   content_truncated: boolean;
   content_original_length?: number;
+  sitemap_lastmod?: string;
   retrieved_from?: FetchRetrievalSource;
   retry_of?: RetryAttempt;
 }
@@ -251,6 +273,7 @@ export interface CrawlRunResult {
     limit_reached: boolean;
     discovery_limit_reached: boolean;
     sitemap_candidates?: number;
+    sitemap_lastmod_skipped?: number;
     cache_hits?: number;
     cache_misses?: number;
     cache_errors?: number;
@@ -290,12 +313,22 @@ export interface CrawlMonitorState {
   version: 1;
   seed_url: string;
   options: CrawlCheckpointOptions;
-  baseline: CrawlContentVersion[];
+  baseline: CrawlMonitorBaselineEntry[];
   last_run_at: string;
   last_run_id: string;
   last_output: string;
   last_changes: CrawlChanges;
   last_has_changes: boolean;
+}
+
+export interface CrawlMonitorBaselineEntry extends CrawlContentVersion {
+  title?: string;
+  depth?: number;
+  sources?: CrawlPageSource[];
+  content_length?: number;
+  content_truncated?: boolean;
+  content_original_length?: number;
+  sitemap_lastmod?: string;
 }
 
 export interface CrawlMonitorInfo {

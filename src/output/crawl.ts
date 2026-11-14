@@ -81,6 +81,9 @@ export function formatCrawlHuman(result: CrawlRunResult, outputDirectory: string
   if (result.stats.sitemap_candidates !== undefined) {
     lines.push(`Sitemap candidates: ${result.stats.sitemap_candidates}`);
   }
+  if (result.stats.sitemap_lastmod_skipped !== undefined) {
+    lines.push(`Sitemap lastmod skips: ${result.stats.sitemap_lastmod_skipped}`);
+  }
   if (result.warnings.length > 0) {
     lines.push(`Warnings: ${result.warnings.length}`);
     for (const warning of result.warnings) {

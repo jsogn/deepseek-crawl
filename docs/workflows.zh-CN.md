@@ -205,8 +205,16 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
 DeepSeek 原始 Markdown 在本地截断前计算的 SHA-256。
 
 `changes` 包括 `added`、`modified`、`unchanged`、`removed`。`--changed-only`
-只写新增和修改页面；未变化页面仍保留在报告和统计中。第一版仍会读取页面或命中缓存
-后计算 hash，尚未使用 Sitemap `lastmod` 跳过请求。
+只写新增和修改页面；未变化页面仍保留在报告和统计中。
+
+启用 baseline 和 `--changed-only` 时，如果页面位于当前 Crawl 的最深层、由 Sitemap
+发现，且当前 `lastmod` 与 baseline 中保存的有效值相同，Crawl 会复用 baseline 的
+`content_hash` 和页面摘要，不调用 DeepSeek Fetch。`stats.sitemap_lastmod_skipped`
+报告跳过数量，页面仍出现在 `changes.unchanged` 中且不写页面文件。
+
+更新、倒退、缺失或无效的 `lastmod` 都会正常读取页面。中间层页面也不会跳过，因为
+其正文可能包含更深层链接。旧 baseline 没有 `sitemap_lastmod` 时保持原有读取行为；
+使用新版本生成一次报告后，后续运行才具备该优化。
 
 ## 持久化 Change Monitor
 

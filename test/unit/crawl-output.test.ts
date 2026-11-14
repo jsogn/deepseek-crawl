@@ -215,6 +215,13 @@ describe("formatCrawlHuman", () => {
     expect(formatCrawlHuman(result(), "crawl-output")).toContain("Page limit: 20");
   });
 
+  it("reports pages skipped by unchanged Sitemap lastmod", () => {
+    const withSkips = result();
+    withSkips.stats.sitemap_lastmod_skipped = 2;
+
+    expect(formatCrawlHuman(withSkips, "crawl-output")).toContain("Sitemap lastmod skips: 2");
+  });
+
   it("reports fetched page discovery sources", () => {
     const output = formatCrawlHuman(
       result({

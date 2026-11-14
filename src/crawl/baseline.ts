@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { CrawlBaseline, CrawlChanges, CrawlPageSummary } from "./types.js";
+import type { CrawlBaseline, CrawlBaselinePage, CrawlChanges, CrawlPageSummary } from "./types.js";
 
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const baselineSchema = z.object({
@@ -8,6 +8,13 @@ const baselineSchema = z.object({
     z.object({
       url: z.string().url(),
       content_hash: hashSchema,
+      title: z.string().optional(),
+      depth: z.number().int().min(0).max(5).optional(),
+      sources: z.array(z.enum(["seed_url", "markdown", "sitemap"])).optional(),
+      content_length: z.number().int().min(0).optional(),
+      content_truncated: z.boolean().optional(),
+      content_original_length: z.number().int().min(0).optional(),
+      sitemap_lastmod: z.string().optional(),
     }),
   ),
 });
@@ -24,13 +31,35 @@ export function parseCrawlBaseline(input: unknown, source: string): CrawlBaselin
     });
   }
   const hashes = new Map<string, string>();
+  const pages = new Map<string, CrawlBaselinePage>();
   for (const page of result.data.pages) {
     if (hashes.has(page.url)) {
       throw new Error(`Crawl baseline contains duplicate URL: ${page.url}`);
     }
     hashes.set(page.url, page.content_hash);
+    if (
+      page.title !== undefined &&
+      page.depth !== undefined &&
+      page.sources !== undefined &&
+      page.content_length !== undefined &&
+      page.content_truncated !== undefined
+    ) {
+      pages.set(page.url, {
+        url: page.url,
+        title: page.title,
+        depth: page.depth,
+        sources: [...page.sources],
+        content_length: page.content_length,
+        content_hash: page.content_hash,
+        content_truncated: page.content_truncated,
+        ...(page.content_original_length === undefined
+          ? {}
+          : { content_original_length: page.content_original_length }),
+        ...(page.sitemap_lastmod === undefined ? {} : { sitemap_lastmod: page.sitemap_lastmod }),
+      });
+    }
   }
-  return { source, hashes };
+  return { source, hashes, pages };
 }
 
 export function compareCrawlBaseline(

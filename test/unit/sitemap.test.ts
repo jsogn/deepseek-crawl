@@ -43,6 +43,31 @@ describe("SitemapReader", () => {
     expect(result.truncated).toBe(false);
   });
 
+  it("captures valid lastmod values and ignores invalid dates", async () => {
+    const body = `<urlset>
+      <url>
+        <loc>https://example.com/a</loc>
+        <lastmod>2026-11-14T16:00:00+08:00</lastmod>
+      </url>
+      <url>
+        <loc>https://example.com/b</loc>
+        <lastmod>not-a-date</lastmod>
+      </url>
+    </urlset>`;
+    const { fetcher } = mappedFetcher({ "https://example.com/sitemap.xml": body });
+    const reader = new SitemapReader({ fetcher });
+
+    const result = await reader.read(new URL("https://example.com/"), options);
+
+    expect(result.entries).toEqual([
+      {
+        url: new URL("https://example.com/a"),
+        lastmod: "2026-11-14T08:00:00.000Z",
+      },
+      { url: new URL("https://example.com/b") },
+    ]);
+  });
+
   it("follows a nested sitemap index", async () => {
     const index = await fixture("sitemap-index.xml");
     const urlset = await fixture("sitemap-urlset.xml");

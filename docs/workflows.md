@@ -181,9 +181,18 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
 
 `--baseline` accepts a previous `crawl.json` or its directory. Changes are `added`,
 `modified`, `unchanged`, or `removed`. `--changed-only` writes added and modified
-pages only; unchanged pages remain in the report and baseline. The current version
-still reads content or uses cache to calculate hashes; Sitemap `lastmod` skipping
-is a later optimization.
+pages only; unchanged pages remain in the report and baseline.
+
+With a baseline and `--changed-only`, a deepest-frontier page discovered by
+Sitemap can reuse its baseline hash and summary without a DeepSeek Fetch when its
+valid `lastmod` exactly matches the stored value. The report records the skip in
+`stats.sitemap_lastmod_skipped`; the page remains in `changes.unchanged` and no
+page file is written.
+
+Newer, older, missing, or invalid `lastmod` values always fetch the page.
+Intermediate pages are not skipped because their body may contain deeper links.
+Older baselines without `sitemap_lastmod` retain the previous behavior; generate
+one report with this version before benefiting from later skips.
 
 ## Persistent Change Monitor
 

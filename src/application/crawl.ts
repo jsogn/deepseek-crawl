@@ -123,12 +123,24 @@ function summaryFor(page: CrawlPage): CrawlPageSummary {
     content_hash: page.content_hash,
     ...(page.change_status ? { change_status: page.change_status } : {}),
     ...(page.previous_content_hash ? { previous_content_hash: page.previous_content_hash } : {}),
+    ...(page.sitemapLastmod ? { sitemap_lastmod: page.sitemapLastmod } : {}),
     content_truncated: page.content_truncated,
   };
   if (page.content_truncated) {
     summary.content_original_length = page.content_original_length;
   }
   return summary;
+}
+
+function sameSitemapLastmod(current: string | undefined, previous: string | undefined): boolean {
+  if (!current || !previous) {
+    return false;
+  }
+  const currentTime = Date.parse(current);
+  const previousTime = Date.parse(previous);
+  return (
+    Number.isFinite(currentTime) && Number.isFinite(previousTime) && currentTime === previousTime
+  );
 }
 
 function pageSourcesInOrder(sources: Set<CrawlPageSource>): CrawlPageSource[] {
@@ -222,6 +234,7 @@ export async function executeCrawl(
       [seed.href, new Set<CrawlPageSource>(["seed_url"])],
     ],
   );
+  const sitemapLastmods = new Map<string, string>();
   const pages: CrawlPageSummary[] = [...(resume?.pages ?? [])];
   const failures: CrawlFailure[] = [...(resume?.failures ?? [])];
   const warnings: MapWarning[] = [...(resume?.warnings ?? [])];
@@ -233,6 +246,7 @@ export async function executeCrawl(
   let limitReached = resume?.counters.limitReached ?? false;
   let discoveryLimitReached = resume?.counters.discoveryLimitReached ?? false;
   let sitemapCandidates = resume?.counters.sitemapCandidates ?? 0;
+  let sitemapLastmodSkipped = resume?.counters.sitemapLastmodSkipped ?? 0;
   let depth = resume?.depth ?? 1;
   let activeLayer: MutableActiveLayer | undefined = resume?.active_layer
     ? {
@@ -276,6 +290,7 @@ export async function executeCrawl(
         limitReached,
         discoveryLimitReached,
         sitemapCandidates,
+        sitemapLastmodSkipped,
       },
       seen: [...seen],
       sources: [...sourcesByUrl.entries()]
@@ -328,6 +343,7 @@ export async function executeCrawl(
             : "modified"
         : undefined;
       const retrievedFrom = fetchSourceFor(client, url);
+      const sitemapLastmod = sitemapLastmods.get(url);
       const bounded = boundFetchOutput({ ...response, url }, limits.pageContentLimit);
       page = {
         index,
@@ -339,6 +355,7 @@ export async function executeCrawl(
         ...(changeStatus ? { change_status: changeStatus } : {}),
         ...(previousHash ? { previous_content_hash: previousHash } : {}),
         ...(retrievedFrom ? { retrievedFrom } : {}),
+        ...(sitemapLastmod ? { sitemapLastmod } : {}),
         sources: pageSourcesInOrder(sourcesByUrl.get(url) ?? new Set<CrawlPageSource>()),
         content_truncated: bounded.truncated ?? false,
         content_original_length: bounded.original_length ?? codepointLength(bounded.content),
@@ -412,6 +429,21 @@ export async function executeCrawl(
                 (url): url is URL => url !== undefined && sameOrigin(url, seed) && pathFilter(url),
               );
             sitemapCandidates = new Set(candidates.map((url) => url.href)).size;
+            for (const entry of discovery.entries ?? []) {
+              const canonical = canonicalizeCrawlUrl(
+                entry.url,
+                undefined,
+                limits.ignoreQueryParameters,
+              );
+              if (
+                canonical &&
+                entry.lastmod &&
+                sameOrigin(canonical, seed) &&
+                pathFilter(canonical)
+              ) {
+                sitemapLastmods.set(canonical.href, entry.lastmod);
+              }
+            }
             for (const url of candidates) {
               recordSource(url.href, "sitemap");
               seedLinks.add(url.href);
@@ -483,15 +515,61 @@ export async function executeCrawl(
       await checkpoint("running");
     }
 
-    if (selected.length > 0) {
+    const fetchable: string[] = [];
+    const fetchableIndexes: number[] = [];
+    let skippedThisLayer = 0;
+    for (let index = 0; index < selected.length; index += 1) {
+      const url = selected[index] ?? "";
+      const pageIndex = selectedIndexes[index] ?? 0;
+      const baselinePage = limits.baseline?.pages?.get(url);
+      const currentLastmod = sitemapLastmods.get(url);
+      const canSkip =
+        limits.changedOnly === true &&
+        sitemapMode !== "skip" &&
+        layerDepth === limits.maxDepth &&
+        baselinePage !== undefined &&
+        sameSitemapLastmod(currentLastmod, baselinePage.sitemap_lastmod);
+      if (!canSkip) {
+        fetchable.push(url);
+        fetchableIndexes.push(pageIndex);
+        continue;
+      }
+
+      const summary: CrawlPageSummary = {
+        index: pageIndex,
+        url,
+        title: baselinePage.title,
+        depth: layerDepth,
+        sources: pageSourcesInOrder(sourcesByUrl.get(url) ?? new Set<CrawlPageSource>(["sitemap"])),
+        content_length: baselinePage.content_length,
+        content_hash: baselinePage.content_hash,
+        change_status: "unchanged",
+        previous_content_hash: baselinePage.content_hash,
+        content_truncated: baselinePage.content_truncated,
+        ...(baselinePage.content_original_length === undefined
+          ? {}
+          : { content_original_length: baselinePage.content_original_length }),
+        ...(currentLastmod ? { sitemap_lastmod: currentLastmod } : {}),
+      };
+      pages.push(summary);
+      contentTruncated += summary.content_truncated ? 1 : 0;
+      sitemapLastmodSkipped += 1;
+      skippedThisLayer += 1;
+      activeLayer?.completed.add(url);
+    }
+    if (skippedThisLayer > 0) {
+      await checkpoint("running");
+    }
+
+    if (fetchable.length > 0) {
       try {
-        await runLayeredTasks<string, PageOutcome>(selected, {
+        await runLayeredTasks<string, PageOutcome>(fetchable, {
           concurrency: limits.concurrency,
           delayMs: limits.delayMs,
           signal: crawlSignal,
           immediate: async (url) => prepareCachedFetch(client, { url }),
           run: async (url, index) => {
-            const outcome = await fetchPage(url, layerDepth, selectedIndexes[index] ?? 0);
+            const outcome = await fetchPage(url, layerDepth, fetchableIndexes[index] ?? 0);
             if (outcome.summary) {
               fetched += 1;
               contentTruncated += outcome.summary.content_truncated ? 1 : 0;
@@ -499,7 +577,7 @@ export async function executeCrawl(
             } else {
               failures.push({
                 url: outcome.url,
-                index: selectedIndexes[index] ?? 0,
+                index: fetchableIndexes[index] ?? 0,
                 depth: layerDepth,
                 sources: pageSourcesInOrder(
                   sourcesByUrl.get(outcome.url) ?? new Set<CrawlPageSource>(),
@@ -578,6 +656,7 @@ export async function executeCrawl(
           }
         : {}),
       ...(options.sitemapMode === undefined ? {} : { sitemap_candidates: sitemapCandidates }),
+      ...(sitemapLastmodSkipped > 0 ? { sitemap_lastmod_skipped: sitemapLastmodSkipped } : {}),
     },
     pages,
     failures,

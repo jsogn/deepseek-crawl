@@ -246,8 +246,11 @@ deepseek-crawl crawl "<section-url>" \
 
 Read `changes.added`, `changes.modified`, `changes.unchanged`, and
 `changes.removed`. `--changed-only` writes only added/modified page files while
-the report still includes all fetched pages. This version still reads or
-cache-resolves pages to calculate content hashes.
+the report still includes all pages. A deepest-frontier Sitemap page with the
+same valid `lastmod` as its stored baseline may be reused without a fetch;
+`stats.sitemap_lastmod_skipped` reports this. Newer, older, missing, or invalid
+lastmod values, intermediate pages, and baselines without lastmod are fetched
+normally.
 
 For recurring checks, persist the comparison in a monitor state directory:
 

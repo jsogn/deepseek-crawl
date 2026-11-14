@@ -23,9 +23,9 @@ import { canonicalizeCrawlUrl } from "../crawl/filters.js";
 import { CrawlJobStore, readCrawlJobState } from "../crawl/job.js";
 import { CrawlMonitorStore, readCrawlMonitorState } from "../crawl/monitor.js";
 import type {
+  CrawlBaselinePage,
   CrawlChanges,
   CrawlCheckpointOptions,
-  CrawlContentVersion,
   CrawlMonitorInfo,
   CrawlMonitorState,
   CrawlRunResult,
@@ -727,20 +727,66 @@ function monitorHasChanges(
 }
 
 function rotatedMonitorBaseline(
-  previous: readonly CrawlContentVersion[],
+  previous: readonly CrawlMonitorState["baseline"][number][],
   result: CrawlRunResult,
   changes: CrawlChanges,
-): CrawlContentVersion[] {
-  const baseline = new Map(previous.map((page) => [page.url, page.content_hash]));
+): CrawlMonitorState["baseline"] {
+  const baseline = new Map(previous.map((page) => [page.url, page]));
   for (const page of changes.removed) {
     baseline.delete(page.url);
   }
   for (const page of result.pages) {
-    baseline.set(page.url, page.content_hash);
+    baseline.set(page.url, {
+      url: page.url,
+      content_hash: page.content_hash,
+      title: page.title,
+      depth: page.depth,
+      sources: [...page.sources],
+      content_length: page.content_length,
+      content_truncated: page.content_truncated,
+      ...(page.content_original_length === undefined
+        ? {}
+        : { content_original_length: page.content_original_length }),
+      ...(page.sitemap_lastmod === undefined ? {} : { sitemap_lastmod: page.sitemap_lastmod }),
+    });
   }
-  return [...baseline.entries()]
-    .map(([url, content_hash]) => ({ url, content_hash }))
+  return [...baseline.values()]
+    .map((page) => ({
+      ...page,
+      ...(page.sources === undefined ? {} : { sources: [...page.sources] }),
+    }))
     .sort((left, right) => left.url.localeCompare(right.url));
+}
+
+function monitorBaselinePages(
+  entries: CrawlMonitorState["baseline"],
+): ReadonlyMap<string, CrawlBaselinePage> {
+  const pages = new Map<string, CrawlBaselinePage>();
+  for (const entry of entries) {
+    if (
+      entry.title === undefined ||
+      entry.depth === undefined ||
+      entry.sources === undefined ||
+      entry.content_length === undefined ||
+      entry.content_truncated === undefined
+    ) {
+      continue;
+    }
+    pages.set(entry.url, {
+      url: entry.url,
+      title: entry.title,
+      depth: entry.depth,
+      sources: [...entry.sources],
+      content_length: entry.content_length,
+      content_hash: entry.content_hash,
+      content_truncated: entry.content_truncated,
+      ...(entry.content_original_length === undefined
+        ? {}
+        : { content_original_length: entry.content_original_length }),
+      ...(entry.sitemap_lastmod === undefined ? {} : { sitemap_lastmod: entry.sitemap_lastmod }),
+    });
+  }
+  return pages;
 }
 
 function monitorRunId(date: Date): string {
@@ -854,6 +900,7 @@ async function runCrawlMonitor(
           ? {
               source: join(monitor.directory, "state.json"),
               hashes: new Map(previousState.baseline.map((page) => [page.url, page.content_hash])),
+              pages: monitorBaselinePages(previousState.baseline),
             }
           : undefined;
         result = await executeCrawl(

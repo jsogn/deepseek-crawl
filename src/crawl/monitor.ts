@@ -8,6 +8,15 @@ const contentVersionSchema = z.object({
   url: z.string().url(),
   content_hash: z.string().regex(/^[a-f0-9]{64}$/),
 });
+const monitorBaselineEntrySchema = contentVersionSchema.extend({
+  title: z.string().optional(),
+  depth: z.number().int().min(0).max(5).optional(),
+  sources: z.array(z.enum(["seed_url", "markdown", "sitemap"])).optional(),
+  content_length: z.number().int().min(0).optional(),
+  content_truncated: z.boolean().optional(),
+  content_original_length: z.number().int().min(0).optional(),
+  sitemap_lastmod: z.string().optional(),
+});
 const changesSchema = z.object({
   added: z.array(contentVersionSchema),
   modified: z.array(
@@ -18,7 +27,7 @@ const changesSchema = z.object({
   unchanged: z.array(contentVersionSchema),
   removed: z.array(contentVersionSchema),
 });
-const baselineSchema = z.array(contentVersionSchema).superRefine((pages, context) => {
+const baselineSchema = z.array(monitorBaselineEntrySchema).superRefine((pages, context) => {
   const seen = new Set<string>();
   for (const page of pages) {
     if (seen.has(page.url)) {

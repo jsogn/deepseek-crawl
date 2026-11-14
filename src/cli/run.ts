@@ -99,34 +99,43 @@ export interface CliDependencies {
 
 const MAIN_HELP = `deepseek-crawl ${packageVersion}
 
-Usage:
-  deepseek-crawl search <query> [options]
-  deepseek-crawl fetch <url> [options]
-  deepseek-crawl fetch --retry-failed <fetch.json> --output-dir <dir> [options]
-  deepseek-crawl fetch --input <path|-> --output-dir <dir> --job-dir <dir> [options]
-  deepseek-crawl fetch resume <job-dir> [options]
-  deepseek-crawl fetch status <job-dir> [--json]
-  deepseek-crawl map <url> [options]
-  deepseek-crawl crawl <url> [options]
-  deepseek-crawl crawl <url> --job-dir <dir> -o <dir> [options]
-  deepseek-crawl crawl resume <job-dir> -o <dir> [options]
-  deepseek-crawl crawl status <job-dir> [--json]
-  deepseek-crawl crawl monitor <url> --monitor-dir <dir> -o <runs-dir> [options]
-  deepseek-crawl crawl monitor status <monitor-dir> [--json]
-  deepseek-crawl crawl monitor reset <monitor-dir> [--json]
-  deepseek-crawl crawl --retry-failed <crawl.json> -o <dir> [options]
-  deepseek-crawl cache clear [--json]
-  deepseek-crawl balance [--json] [--output, -o <path>]
-  deepseek-crawl init [options]
-  deepseek-crawl doctor [--live] [--json]
-  deepseek-crawl setup skills [options]
-  deepseek-crawl auth set [deepseek|firecrawl|gateway]
-  deepseek-crawl auth status [credential] [--json]
-  deepseek-crawl auth remove [credential] [--json]
-  deepseek-crawl gateway [--remote] [--host <host>] [--port <port>]
-  deepseek-crawl gateway url [--port <port>]
-  deepseek-crawl gateway status [--json]
-  deepseek-crawl mcp
+Core
+  search <query> [options]       Search the web
+  fetch <url> [options]          Read a known page
+  map <url> [options]            Discover URLs on a site
+  crawl <url> [options]          Run a bounded same-origin crawl
+
+Gateway
+  gateway [options]              Start the Firecrawl-compatible service
+  gateway status [--json]        Show runtime and credential readiness
+  gateway url [--port <port>]    Print the current gateway URL
+
+Credentials and setup
+  init [options]                 Configure DeepSeek and install the Skill
+  auth set [credential]          Store deepseek, firecrawl, or gateway credentials
+  auth status [credential]       Show credential source
+  auth remove [credential]       Remove a stored credential
+  doctor [--live] [--json]       Check DeepSeek configuration
+  balance [--json] [-o <path>]   Show the DeepSeek account balance
+  setup skills [options]         Reinstall or relocate the bundled Skill
+
+Jobs and monitoring
+  fetch --input <path|-> --output-dir <dir> [options]
+  fetch --retry-failed <fetch.json> --output-dir <dir> [options]
+  fetch status|resume <job-dir> [options]
+  crawl status|resume <job-dir> [options]
+  crawl monitor <url> --monitor-dir <dir> -o <runs-dir> [options]
+  crawl monitor status|reset <monitor-dir> [--json]
+  crawl --retry-failed <crawl.json> -o <dir> [options]
+  cache clear [--json]
+
+Integration
+  mcp                            Start the optional MCP server over stdio
+
+Examples
+  deepseek-crawl search "DeepSeek API changes" --json
+  deepseek-crawl gateway
+  export FIRECRAWL_API_URL="$(deepseek-crawl gateway url)"
 
 Run "deepseek-crawl help <command>" for command details.
 `;
@@ -237,7 +246,8 @@ Monitor options:
 `,
   doctor: `Usage: deepseek-crawl doctor [--live] [--json]
 
-Without --live, doctor does not make a billable DeepSeek request.
+DeepSeek-specific configuration check. Without --live, doctor does not make a
+billable DeepSeek request.
 `,
   balance: `Usage: deepseek-crawl balance [--json] [--output, -o <path>]
 
@@ -277,6 +287,21 @@ Options:
 Credential defaults to deepseek. Values are read from hidden input and stored in
 the user's Keychain or a private credential file.
 `,
+  "auth set": `Usage: deepseek-crawl auth set [deepseek|firecrawl|gateway]
+
+Read one credential through hidden input and store it in Keychain or the private
+credential file. Omitting the provider selects deepseek.
+`,
+  "auth status": `Usage: deepseek-crawl auth status [credential] [--json]
+
+Report whether the selected credential is available, its precedence source, and
+the storage backend. Secrets are never printed.
+`,
+  "auth remove": `Usage: deepseek-crawl auth remove [credential] [--json]
+
+Remove one stored credential without affecting environment variables or other
+providers.
+`,
   mcp: "Usage: deepseek-crawl mcp\n\nStart the MCP server over stdio.\n",
   gateway: `Usage: deepseek-crawl gateway [options]
 
@@ -294,6 +319,16 @@ Subcommands:
 Remote mode requires GATEWAY_API_KEY. Firecrawl SDK clients set their apiKey to
 this gateway token. Local mode uses stored Provider credentials and prints the
 actual SDK apiUrl after choosing an available port.
+`,
+  "gateway status": `Usage: deepseek-crawl gateway status [--json]
+
+List running gateway instances, verify each through /healthz, prune stale state,
+and report DeepSeek, Firecrawl, and gateway-auth readiness.
+`,
+  "gateway url": `Usage: deepseek-crawl gateway url [--port <port>]
+
+Print the URL of exactly one healthy gateway. If multiple gateways are running,
+select one with --port.
 `,
   cache: `Usage: deepseek-crawl cache clear [--json]
 
@@ -486,6 +521,11 @@ async function runGatewayStatus(
   deps: CliDependencies,
 ) {
   const { running, stale } = await gatewayRuntimeStates(deps);
+  const credentials = {
+    deepseek: authStatus(deps.env, resolvedCredentialStore(deps, "deepseek"), "deepseek"),
+    firecrawl: authStatus(deps.env, resolvedCredentialStore(deps, "firecrawl"), "firecrawl"),
+    gateway_auth: authStatus(deps.env, resolvedCredentialStore(deps, "gateway"), "gateway"),
+  };
   const result = {
     version: 1 as const,
     running: running.length > 0,
@@ -494,19 +534,26 @@ async function runGatewayStatus(
       pid: state.pid,
       url: state.url,
       mode: state.mode,
-      startedAt: state.startedAt,
+      started_at: state.startedAt,
     })),
+    credentials,
   };
   if (command.json) {
     deps.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  } else if (running.length === 0) {
-    deps.stdout.write("Gateway is not running.\n");
   } else {
-    deps.stdout.write(
-      `${running
-        .map((state) => `${state.mode}  ${state.url}  pid=${state.pid}  started=${state.startedAt}`)
-        .join("\n")}\n`,
+    const lines =
+      running.length === 0
+        ? ["Gateway is not running."]
+        : running.map(
+            (state) => `${state.mode}  ${state.url}  pid=${state.pid}  started=${state.startedAt}`,
+          );
+    lines.push(
+      "",
+      `DeepSeek: ${credentials.deepseek.configured ? `configured via ${credentials.deepseek.source}` : `not configured (${credentials.deepseek.backend})`}`,
+      `Firecrawl: ${credentials.firecrawl.configured ? `configured via ${credentials.firecrawl.source}` : `not configured (${credentials.firecrawl.backend})`}`,
+      `Gateway auth: ${credentials.gateway_auth.configured ? `configured via ${credentials.gateway_auth.source}` : `not configured (${credentials.gateway_auth.backend})`}`,
     );
+    deps.stdout.write(`${lines.join("\n")}\n`);
   }
   return 0;
 }

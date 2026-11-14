@@ -60,7 +60,8 @@ deepseek-crawl gateway
 Point the Firecrawl client at the URL printed by the command. Local mode starts
 at `8787` and automatically chooses the next available port when occupied.
 Use `deepseek-crawl gateway url` from another terminal or script; use
-`gateway status --json` to list instances and prune stale runtime state.
+`gateway status --json` to list instances, prune stale runtime state, and inspect
+DeepSeek/Firecrawl/gateway-auth readiness.
 
 Remote mode uses fixed port `8787`:
 

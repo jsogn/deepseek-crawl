@@ -80,7 +80,8 @@ Runtime state lives in `DEEPSEEK_GATEWAY_RUNTIME_DIR`, otherwise
 directory under the platform cache. Directories use `0700`; state files use
 `0600` and contain only PID, URL, start time, and mode. `gateway status` verifies
 the PID through public `/healthz` without exposing provider keys, request data,
-or cache contents.
+or cache contents. It also summarizes DeepSeek, Firecrawl, and gateway-auth
+readiness and source without credential values.
 
 ## Local cache
 

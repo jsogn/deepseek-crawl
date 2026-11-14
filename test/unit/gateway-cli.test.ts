@@ -3,10 +3,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli } from "../../src/cli/run.js";
+import type { CredentialName, CredentialStore } from "../../src/credentials/store.js";
 import { listGatewayRuntimeStates, writeGatewayRuntimeState } from "../../src/gateway/runtime.js";
 import { writer } from "../helpers/cli.js";
 
-function dependencies(runtimeDirectory: string) {
+function store(value?: string): CredentialStore {
+  return {
+    name: "keychain",
+    get: () => value,
+    set: () => undefined,
+    remove: () => undefined,
+  };
+}
+
+function dependencies(
+  runtimeDirectory: string,
+  credentialStores: Partial<Record<CredentialName, CredentialStore>> = {},
+) {
   const stdout = writer();
   const stderr = writer();
   return {
@@ -17,6 +30,7 @@ function dependencies(runtimeDirectory: string) {
       stderr,
       stdin: process.stdin,
       gatewayRuntimeDirectory: runtimeDirectory,
+      credentialStores,
     },
     stdout,
     stderr,
@@ -77,14 +91,44 @@ describe("gateway discovery commands", () => {
       mode: "local",
       startedAt: "2026-11-14T00:00:01.000Z",
     });
-    const { deps, stdout } = dependencies(directory);
+    const { deps, stdout } = dependencies(directory, {
+      deepseek: store("deepseek-secret"),
+      firecrawl: store("firecrawl-secret"),
+      gateway: store(),
+    });
 
     expect(await runCli(["gateway", "status", "--json"], deps)).toBe(0);
     expect(JSON.parse(stdout.value())).toMatchObject({
       running: true,
       stale: 1,
-      instances: [{ url: "http://127.0.0.1:8787/" }],
+      instances: [
+        {
+          url: "http://127.0.0.1:8787/",
+          started_at: "2026-11-14T00:00:00.000Z",
+        },
+      ],
+      credentials: {
+        deepseek: { configured: true, source: "keychain" },
+        firecrawl: { configured: true, source: "keychain" },
+        gateway_auth: { configured: false, source: "missing" },
+      },
     });
     expect(await listGatewayRuntimeStates(directory)).toHaveLength(1);
+  });
+
+  it("prints provider readiness in human-readable status when stopped", async () => {
+    const directory = await runtimeDirectory();
+    const { deps, stdout } = dependencies(directory, {
+      deepseek: store("deepseek-secret"),
+      firecrawl: store(),
+      gateway: store(),
+    });
+
+    expect(await runCli(["gateway", "status"], deps)).toBe(0);
+    expect(stdout.value()).toContain("Gateway is not running");
+    expect(stdout.value()).toContain("DeepSeek: configured via keychain");
+    expect(stdout.value()).toContain("Firecrawl: not configured (keychain)");
+    expect(stdout.value()).toContain("Gateway auth: not configured (keychain)");
+    expect(stdout.value()).not.toContain("deepseek-secret");
   });
 });

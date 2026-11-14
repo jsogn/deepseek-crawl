@@ -223,6 +223,6 @@ describe("deepseek-crawl init", () => {
 
     const main = dependencies(vi.fn() as unknown as typeof fetch);
     expect(await runCli(["help"], main.deps)).toBe(0);
-    expect(main.stdout.value()).toContain("deepseek-crawl init [options]");
+    expect(main.stdout.value()).toContain("init [options]");
   });
 });

@@ -12,6 +12,17 @@ describe("package executable", () => {
     expect(result.stderr).toBe("");
   });
 
+  it("groups the main help by user workflow", () => {
+    const result = spawnSync(process.execPath, ["dist/bin.js", "--help"], {
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(0);
+    for (const section of ["Core", "Gateway", "Credentials", "Jobs", "Integration"]) {
+      expect(result.stdout).toContain(section);
+    }
+    expect(result.stderr).toBe("");
+  });
+
   it("publishes the bundled Agent Skill", async () => {
     const packageJson = JSON.parse(
       await readFile(new URL("../../package.json", import.meta.url), "utf8"),

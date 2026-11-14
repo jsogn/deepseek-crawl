@@ -340,6 +340,8 @@ When one instance is running, `gateway url` prints its URL directly. Multiple
 instances require `gateway url --port 8788`. Runtime state stores only PID, URL,
 start time, and mode, never provider keys. `gateway status` verifies `/healthz`
 and prunes stale state.
+It also reports DeepSeek, Firecrawl, and remote gateway-auth readiness and
+source, replacing separate credential checks.
 
 The client usually only needs the gateway URL:
 

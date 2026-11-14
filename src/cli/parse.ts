@@ -902,7 +902,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             options: { help: { type: "boolean", short: "h" } },
           });
           if (parsed.values.help) {
-            return { kind: "help", command: "auth" };
+            return { kind: "help", command: "auth set" };
           }
           if (parsed.positionals.length > 1) {
             throw new CliUsageError("auth set accepts at most one credential.");
@@ -923,7 +923,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             },
           });
           if (parsed.values.help) {
-            return { kind: "help", command: "auth" };
+            return { kind: "help", command: `auth ${subcommand}` };
           }
           if (parsed.positionals.length > 1) {
             throw new CliUsageError(`auth ${subcommand} accepts at most one credential.`);
@@ -962,7 +962,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             },
           });
           return parsed.values.help
-            ? { kind: "help", command: "gateway" }
+            ? { kind: "help", command: "gateway status" }
             : { kind: "gateway-status", json: parsed.values.json ?? false };
         }
         if (subcommand === "url") {
@@ -976,7 +976,7 @@ export function parseCli(argv: string[]): ParsedCommand {
             },
           });
           if (parsed.values.help) {
-            return { kind: "help", command: "gateway" };
+            return { kind: "help", command: "gateway url" };
           }
           const port =
             parsed.values.port === undefined

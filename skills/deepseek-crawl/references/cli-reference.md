@@ -178,7 +178,9 @@ export FIRECRAWL_API_URL="$(deepseek-crawl gateway url)"
 
 `gateway url` succeeds with exactly one healthy instance. If multiple instances
 exist, pass `--port`. `gateway status --json` lists all healthy instances and
-removes stale PID/state entries.
+removes stale PID/state entries. It also reports nonsecret credential readiness
+for `deepseek`, `firecrawl`, and `gateway_auth`. Instance JSON uses
+`started_at`.
 
 `GET /healthz` is unauthenticated and returns only status, version, PID, and
 local/remote mode. It never returns provider keys or user content.

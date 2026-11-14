@@ -410,6 +410,14 @@ describe("parseCli", () => {
       kind: "gateway-url",
       port: 8788,
     });
+    expect(parseCli(["gateway", "url", "--help"])).toEqual({
+      kind: "help",
+      command: "gateway url",
+    });
+    expect(parseCli(["gateway", "status", "--help"])).toEqual({
+      kind: "help",
+      command: "gateway status",
+    });
     expect(parseCli(["gateway", "--help"])).toEqual({
       kind: "help",
       command: "gateway",
@@ -526,6 +534,10 @@ describe("parseCli", () => {
       kind: "auth-status",
       credential: "gateway",
       json: true,
+    });
+    expect(parseCli(["auth", "set", "firecrawl", "--help"])).toEqual({
+      kind: "help",
+      command: "auth set",
     });
   });
 

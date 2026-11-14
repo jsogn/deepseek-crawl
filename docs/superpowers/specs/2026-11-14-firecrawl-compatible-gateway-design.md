@@ -306,6 +306,11 @@ The gateway exposes unauthenticated `GET /healthz` with only status, version,
 PID, and local/remote mode. Runtime files contain the same nonsecret metadata
 and are stored with user-only permissions.
 
+`gateway status --json` lists healthy instances using `started_at` and summarizes
+nonsecret credential readiness for DeepSeek, Firecrawl, and gateway
+authentication. The top-level help is grouped by Core, Gateway, Credentials,
+Jobs, and Integration.
+
 ## Testing
 
 Tests remain offline and deterministic.

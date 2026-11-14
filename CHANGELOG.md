@@ -37,6 +37,8 @@
   stored or environment-provided gateway token.
 - Let local Firecrawl SDK clients use only the gateway URL while the gateway
   injects a stored provider credential.
+- Group main help by user workflow, add subcommand help, mark DeepSeek-specific
+  commands, and make `gateway status` report all credential readiness.
 
 ### Testing
 

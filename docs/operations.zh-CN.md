@@ -75,7 +75,8 @@ job 丢失。一个网关进程可以服务本机多个 Firecrawl 客户端。
 `$XDG_RUNTIME_DIR/deepseek-crawl/gateway`，或平台缓存目录下的
 `gateway/runtime`。目录权限为 `0700`，状态文件为 `0600`，只包含 PID、URL、
 启动时间和模式。`gateway status` 通过公开的 `/healthz` 验证 PID，不返回 Provider
-Key、请求内容或缓存内容。
+Key、请求内容或缓存内容。它还会汇总 DeepSeek、Firecrawl 和 gateway auth 是否
+已配置及来源，不输出凭据值。
 
 ## 本地缓存
 

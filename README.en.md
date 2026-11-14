@@ -399,6 +399,10 @@ containing only normalized route, status, duration, provider, and fallback
 reason. It never logs keys, page bodies, query strings, or full target URLs.
 Default header, request, and keep-alive timeouts are 15, 120, and 5 seconds.
 
+The official SDK WebSocket `Watcher` is not supported. Upgrade requests receive a
+structured `426 websocket_not_supported` response. Use the SDK's polling Crawl
+helpers, or `startCrawl` plus `getCrawlStatus`.
+
 Offline compatibility tests use the official `firecrawl` Node SDK to cover
 Search, Scrape, Map, Crawl, fallback, and structured errors without calling paid
 APIs.

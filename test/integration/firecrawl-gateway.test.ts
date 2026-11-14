@@ -1,5 +1,6 @@
 import { mkdtemp } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -89,6 +90,45 @@ describe("Firecrawl-compatible gateway", () => {
       request_timeout_ms: 5678,
       keep_alive_timeout_ms: 901,
     });
+  });
+
+  it("rejects WebSocket watcher upgrades with an explicit compatibility error", async () => {
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: {},
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+    servers.push(server);
+
+    const response = await new Promise<string>((resolve, reject) => {
+      const socket = connect(Number(server.url.port), server.url.hostname);
+      let data = "";
+      socket.setEncoding("utf8");
+      socket.once("connect", () => {
+        socket.write(
+          [
+            "GET /v2/crawl/dsc_test HTTP/1.1",
+            `Host: ${server.url.host}`,
+            "Connection: Upgrade",
+            "Upgrade: websocket",
+            "Sec-WebSocket-Version: 13",
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+            "",
+            "",
+          ].join("\r\n"),
+        );
+      });
+      socket.on("data", (chunk) => {
+        data += chunk;
+      });
+      socket.once("end", () => resolve(data));
+      socket.once("error", reject);
+    });
+
+    expect(response).toContain("HTTP/1.1 426 Upgrade Required");
+    expect(response).toContain('"code":"websocket_not_supported"');
   });
 
   it("registers and removes a runtime state file for a running gateway", async () => {

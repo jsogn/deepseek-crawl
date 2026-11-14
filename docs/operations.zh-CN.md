@@ -65,6 +65,10 @@ CLI 网关的 stderr 采用单行 JSON 日志。每条请求包含 `x-request-id
 `route`、status、耗时、Provider 和 fallback 原因；不会写 API Key、请求体、查询
 字符串或完整 URL。反向代理部署应在代理层再配置全局限流和可信来源处理。
 
+WebSocket `Watcher` 不在兼容范围内。网关对 upgrade 请求返回 `426` 和
+`websocket_not_supported`，官方 SDK 会快速触发 `error`，不会无限等待。Crawl
+状态轮询、errors、取消和 convenience Crawl 方法仍受支持。
+
 DeepSeek fallback 覆盖 `POST /v2/search`、`POST /v2/scrape`、`POST /v2/map`、
 `POST /v2/crawl`，以及本地 `dsc_` Crawl job 的 status、errors 和取消。
 

@@ -472,4 +472,33 @@ describe("Firecrawl SDK against the gateway", () => {
     expect(scraped.markdown).toBe("# Example");
     expect(upstream.requests[0]?.authorization).toBe("Bearer fc-stored");
   });
+
+  it("fails the official WebSocket watcher fast instead of hanging", async () => {
+    const gateway = await startGatewayServer({
+      config: testConfig(new URL("https://api.firecrawl.dev/")),
+      env: {},
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+    servers.push(gateway);
+    const client = new Firecrawl({
+      apiUrl: gateway.url.href.replace(/\/$/, ""),
+    });
+    const watcher = client.watcher("dsc_missing", {
+      pollInterval: 1,
+      timeout: 1,
+    });
+    const errors: unknown[] = [];
+    watcher.on("error", (error) => errors.push(error));
+
+    await Promise.race([
+      watcher.start(),
+      new Promise<never>((_resolve, reject) => {
+        setTimeout(() => reject(new Error("Watcher did not fail fast.")), 2000);
+      }),
+    ]);
+
+    expect(errors).toHaveLength(1);
+  });
 });

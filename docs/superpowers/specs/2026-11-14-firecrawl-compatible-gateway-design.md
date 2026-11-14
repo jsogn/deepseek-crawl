@@ -317,6 +317,10 @@ requests are bounded. Request IDs are echoed and forwarded upstream. Structured
 logs contain normalized route, method, status, duration, provider, and fallback
 reason but exclude credentials, bodies, query strings, and full target URLs.
 
+WebSocket Watcher support is not part of the compatibility surface. Upgrade
+requests receive `426 websocket_not_supported`; polling status, errors,
+cancellation, and convenience Crawl methods remain supported.
+
 `gateway status --json` lists healthy instances using `started_at` and summarizes
 nonsecret credential readiness for DeepSeek, Firecrawl, and gateway
 authentication. The top-level help is grouped by Core, Gateway, Credentials,

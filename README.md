@@ -372,6 +372,10 @@ Firecrawl 上游响应采用流式透传，不会把大型 Crawl 响应完整缓
 字符串或完整目标 URL。默认 header timeout 为 15 秒、request timeout 为 120 秒、
 keep-alive timeout 为 5 秒。
 
+官方 SDK 的 WebSocket `Watcher` 暂不支持；网关对 upgrade 请求返回结构化
+`426 websocket_not_supported`。请使用官方 SDK 默认的 Crawl 轮询/convenience
+方法，或 `startCrawl` + `getCrawlStatus`。
+
 离线兼容测试使用官方 `firecrawl` Node SDK，覆盖 Search、Scrape、Map、Crawl、
 fallback 和结构化错误，不访问真实付费 API。
 

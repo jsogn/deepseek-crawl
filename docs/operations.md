@@ -66,6 +66,11 @@ normalized `route`, status, duration, provider, and fallback reason. API keys,
 request bodies, query strings, and full URLs are excluded. Add global rate limits
 and trusted source handling at a reverse proxy when deployed behind one.
 
+The WebSocket `Watcher` is outside the supported compatibility surface. Upgrade
+requests receive `426 websocket_not_supported`; the official SDK emits `error`
+quickly rather than waiting indefinitely. Crawl polling, errors, cancellation,
+and convenience Crawl methods remain supported.
+
 DeepSeek fallback covers `POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`,
 `POST /v2/crawl`, and status, errors, and cancellation for local `dsc_` Crawl
 jobs.

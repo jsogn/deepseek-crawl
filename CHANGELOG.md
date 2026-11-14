@@ -31,6 +31,7 @@
 - Stream Firecrawl upstream responses and cancel active local Crawl jobs during
   gateway shutdown.
 - Add request IDs, bounded HTTP timeouts, and sanitized structured request logs.
+- Return an explicit `426 websocket_not_supported` for SDK Watcher upgrades.
 
 ### Changed
 

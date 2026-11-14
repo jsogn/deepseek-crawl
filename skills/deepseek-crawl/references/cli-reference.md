@@ -190,6 +190,9 @@ stderr with normalized route, status, duration, provider, and fallback reason.
 API keys, request bodies, query strings, and full target URLs are excluded.
 Authentication failures and request concurrency are bounded.
 
+WebSocket `Watcher` is unsupported and returns `426 websocket_not_supported`.
+Use polling Crawl status methods or the SDK convenience Crawl method.
+
 The gateway process does not read `FIRECRAWL_API_URL`. Set
 `FIRECRAWL_UPSTREAM_URL` only when the Firecrawl upstream is not
 `https://api.firecrawl.dev`. `--allow-remote` remains a compatibility alias for

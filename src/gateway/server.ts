@@ -109,6 +109,25 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
   server.headersTimeout = timeouts.headers_timeout_ms;
   server.requestTimeout = timeouts.request_timeout_ms;
   server.keepAliveTimeout = timeouts.keep_alive_timeout_ms;
+  server.on("upgrade", (_request, socket) => {
+    const body = Buffer.from(
+      `${JSON.stringify({
+        success: false,
+        error: "WebSocket watcher is not supported by this gateway. Use polling.",
+        code: "websocket_not_supported",
+      })}\n`,
+    );
+    socket.end(
+      [
+        "HTTP/1.1 426 Upgrade Required",
+        "Connection: close",
+        "Upgrade: websocket",
+        "Content-Type: application/json",
+        `Content-Length: ${body.byteLength}`,
+        "",
+      ].join("\r\n") + body.toString("utf8"),
+    );
+  });
   await listenGateway(server, options.config);
   const url = serverUrl(server, options.config.host);
   let runtimeStatePath: string | undefined;

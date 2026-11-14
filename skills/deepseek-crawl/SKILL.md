@@ -78,6 +78,10 @@ Every gateway response includes `x-request-id`. JSON request logs exclude
 credentials, bodies, query strings, and full target URLs. Authentication
 failures are rate-limited and concurrent requests are bounded.
 
+Do not use the SDK WebSocket `Watcher` against this gateway. It intentionally
+returns `426 websocket_not_supported`; use polling or the convenience Crawl
+method instead.
+
 Do not claim full Advanced Firecrawl compatibility. The gateway does not replace
 the normal CLI operation selection in this Skill.
 

@@ -473,6 +473,7 @@ Full limits, MCP differences, environment variables, and privacy details:
 - [Complete CLI reference](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/references/cli-reference.md)
 - [Batch and Crawl workflows](https://github.com/jsogn/deepseek-crawl/blob/main/docs/workflows.md)
 - [Operations, safety, MCP, and gateway](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.md)
+- [Docker, systemd, and reverse-proxy deployment](https://github.com/jsogn/deepseek-crawl/blob/main/docs/deploying.md)
 - [Agent Skill routing and contract](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/SKILL.md)
 - [Changelog](https://github.com/jsogn/deepseek-crawl/blob/main/CHANGELOG.md)
 - [Release process](https://github.com/jsogn/deepseek-crawl/blob/main/docs/releasing.md)

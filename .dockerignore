@@ -1,0 +1,15 @@
+.git
+.github
+.deepseek-crawl
+.env
+.env.*
+!.env.example
+coverage
+dist
+docs
+node_modules
+skills
+test
+*.log
+*.tgz
+.DS_Store

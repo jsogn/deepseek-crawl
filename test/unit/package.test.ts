@@ -2,6 +2,10 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
+async function readProjectFile(path: string): Promise<string> {
+  return readFile(new URL(`../../${path}`, import.meta.url), "utf8");
+}
+
 describe("package executable", () => {
   it("prints the package version", () => {
     const result = spawnSync(process.execPath, ["dist/bin.js", "--version"], {
@@ -90,5 +94,73 @@ describe("package documentation", () => {
     ]) {
       expect(allDocumentation).toContain(text);
     }
+  });
+});
+
+describe("deployment assets", () => {
+  it("ships bilingual deployment guidance from both READMEs", async () => {
+    const [readme, readmeEnglish, deploying, deployingChinese] = await Promise.all([
+      readProjectFile("README.md"),
+      readProjectFile("README.en.md"),
+      readProjectFile("docs/deploying.md"),
+      readProjectFile("docs/deploying.zh-CN.md"),
+    ]);
+
+    expect(readme).toContain(
+      "](https://github.com/jsogn/deepseek-crawl/blob/main/docs/deploying.zh-CN.md)",
+    );
+    expect(readmeEnglish).toContain(
+      "](https://github.com/jsogn/deepseek-crawl/blob/main/docs/deploying.md)",
+    );
+    expect(deploying).toContain("[简体中文](deploying.zh-CN.md)");
+    expect(deployingChinese).toContain("[English](deploying.md)");
+
+    for (const guidance of [deploying, deployingChinese]) {
+      expect(guidance).toContain("install -m 0600 .env.example .env");
+      expect(guidance).toContain("docker compose config --quiet");
+      expect(guidance).toContain("docker compose up -d --build");
+      expect(guidance).toContain("SIGTERM");
+    }
+  });
+
+  it("hardens container and service shutdown", async () => {
+    const [dockerfile, compose, service, environmentExample, dockerignore] = await Promise.all([
+      readProjectFile("Dockerfile"),
+      readProjectFile("docker-compose.yml"),
+      readProjectFile("deploy/deepseek-crawl-gateway.service"),
+      readProjectFile(".env.example"),
+      readProjectFile(".dockerignore"),
+    ]);
+
+    expect(dockerfile).toMatch(/^USER node$/m);
+    expect(dockerfile).toMatch(/^STOPSIGNAL SIGTERM$/m);
+    expect(dockerfile).toContain("HEALTHCHECK");
+
+    for (const setting of [
+      "init: true",
+      "read_only: true",
+      "no-new-privileges:true",
+      "cap_drop:",
+      "stop_grace_period: 30s",
+    ]) {
+      expect(compose).toContain(setting);
+    }
+    expect(compose).toMatch(/"127\.0\.0\.1:\$\{GATEWAY_PORT:-8787\}:8787"/);
+
+    for (const setting of [
+      "KillSignal=SIGTERM",
+      "TimeoutStopSec=30",
+      "NoNewPrivileges=true",
+      "ProtectSystem=strict",
+      "EnvironmentFile=/etc/deepseek-crawl/gateway.env",
+    ]) {
+      expect(service).toContain(setting);
+    }
+
+    for (const key of ["GATEWAY_API_KEY", "DEEPSEEK_API_KEY", "FIRECRAWL_API_KEY"]) {
+      expect(environmentExample).toContain(`${key}=`);
+    }
+    expect(dockerignore.split(/\r?\n/)).toContain(".env");
+    expect(dockerignore.split(/\r?\n/)).toContain("!.env.example");
   });
 });

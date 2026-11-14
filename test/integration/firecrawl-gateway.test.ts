@@ -1,5 +1,5 @@
 import { mkdtemp } from "node:fs/promises";
-import { createServer, type Server } from "node:http";
+import { createServer } from "node:http";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,28 +7,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { DeepSeekGateway } from "../../src/deepseek/gateway.js";
 import { CrawlJobManager } from "../../src/gateway/crawl-jobs.js";
 import { listGatewayRuntimeStates } from "../../src/gateway/runtime.js";
-import { type GatewayServer, startGatewayServer } from "../../src/gateway/server.js";
+import { startGatewayServer } from "../../src/gateway/server.js";
 import type { GatewayRequestLog } from "../../src/gateway/telemetry.js";
+import { closeTestServers, type TestServer } from "../helpers/server-lifecycle.js";
 
-const servers: Array<GatewayServer | Server> = [];
+const servers: TestServer[] = [];
 
 afterEach(async () => {
-  await Promise.all(
-    servers.splice(0).map((server) => {
-      if ("url" in server) {
-        return server.close();
-      }
-      return new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve();
-          }
-        });
-      });
-    }),
-  );
+  await closeTestServers(servers);
 });
 
 function testConfig() {

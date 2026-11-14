@@ -1,0 +1,31 @@
+[Unit]
+Description=DeepSeek Crawl Firecrawl-compatible gateway
+Documentation=https://github.com/jsogn/deepseek-crawl/blob/main/docs/deploying.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=deepseek-crawl
+Group=deepseek-crawl
+WorkingDirectory=/opt/deepseek-crawl
+EnvironmentFile=/etc/deepseek-crawl/gateway.env
+Environment=DEEPSEEK_GATEWAY_RUNTIME_DIR=/var/lib/deepseek-crawl/gateway
+ExecStart=/usr/bin/node /opt/deepseek-crawl/dist/bin.js gateway --remote
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+StateDirectory=deepseek-crawl
+StateDirectoryMode=0700
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

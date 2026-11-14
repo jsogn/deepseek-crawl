@@ -10,11 +10,16 @@ if (!signalCommands.has(argv[0] ?? "")) {
 } else {
   const controller = new AbortController();
   const onSigint = () => controller.abort();
+  const onSigterm = () => controller.abort();
   process.once("SIGINT", onSigint);
+  if (argv[0] === "gateway") {
+    process.once("SIGTERM", onSigterm);
+  }
 
   try {
     process.exitCode = await runCli(argv, { signal: controller.signal });
   } finally {
     process.removeListener("SIGINT", onSigint);
+    process.removeListener("SIGTERM", onSigterm);
   }
 }

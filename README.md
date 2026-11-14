@@ -439,6 +439,7 @@ CLI 的客户端，提供 `deepseek_search`、`deepseek_fetch`、`deepseek_map` 
 - [CLI 完整参考](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/references/cli-reference.md)
 - [批量读取与 Crawl 工作流](https://github.com/jsogn/deepseek-crawl/blob/main/docs/workflows.zh-CN.md)
 - [运行限制、安全、MCP 与网关](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.zh-CN.md)
+- [Docker、systemd 与反向代理部署](https://github.com/jsogn/deepseek-crawl/blob/main/docs/deploying.zh-CN.md)
 - [Agent Skill 路由与契约](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/SKILL.md)
 - [变更记录](https://github.com/jsogn/deepseek-crawl/blob/main/CHANGELOG.md)
 - [发布流程](https://github.com/jsogn/deepseek-crawl/blob/main/docs/releasing.md)

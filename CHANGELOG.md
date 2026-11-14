@@ -16,6 +16,8 @@
   exhausted credits or no Firecrawl credential is configured.
 - Expose local DeepSeek-backed Crawl jobs through Firecrawl job status, errors,
   expiration, and cancellation routes.
+- Add non-root Docker, Compose, systemd, and Nginx deployment assets plus bilingual
+  deployment guidance.
 
 ### Security
 

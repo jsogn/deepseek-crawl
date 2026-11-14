@@ -664,7 +664,8 @@ npm run verify
 python3 /path/to/skill-creator/scripts/quick_validate.py skills/deepseek-crawl
 ```
 
-普通测试完全离线，不需要 DeepSeek Key。显式 live 测试会计费：
+普通测试不调用 DeepSeek API，也不需要 DeepSeek Key。包安装验收在本地
+npm 缓存不足时可能需要访问 npm registry。显式 live 测试会计费：
 
 ```bash
 DEEPSEEK_API_KEY=sk-... npm run test:live

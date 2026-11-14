@@ -777,8 +777,9 @@ npm run verify
 python3 /path/to/skill-creator/scripts/quick_validate.py skills/deepseek-crawl
 ```
 
-Normal tests are offline and do not require a DeepSeek key. The explicit live
-check is billable:
+Normal tests do not call the DeepSeek API or require a DeepSeek key. Package
+installation checks may access the npm registry when the local cache is
+incomplete. The explicit live check is billable:
 
 ```bash
 DEEPSEEK_API_KEY=sk-... npm run test:live

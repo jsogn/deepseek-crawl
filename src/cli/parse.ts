@@ -161,6 +161,15 @@ export type ParsedCommand =
       maxRetainedCrawlJobs?: number;
       maxRetainedCrawlBytes?: number;
     }
+  | {
+      kind: "gateway-install";
+      providerMode?: GatewayProviderMode;
+      port?: number;
+      json: boolean;
+    }
+  | { kind: "gateway-start"; json: boolean }
+  | { kind: "gateway-stop"; json: boolean }
+  | { kind: "gateway-uninstall"; json: boolean }
   | { kind: "gateway-status"; json: boolean }
   | { kind: "gateway-url"; port?: number }
   | { kind: "mcp" }
@@ -1000,6 +1009,56 @@ export function parseCli(argv: string[]): ParsedCommand {
       }
       case "gateway": {
         const subcommand = args[0];
+        if (subcommand === "install") {
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: false,
+            strict: true,
+            options: {
+              "provider-mode": { type: "string" },
+              port: { type: "string" },
+              json: { type: "boolean" },
+              help: { type: "boolean", short: "h" },
+            },
+          });
+          if (parsed.values.help) {
+            return { kind: "help", command: "gateway install" };
+          }
+          const providerMode = parseProviderMode(parsed.values["provider-mode"]);
+          const port =
+            parsed.values.port === undefined
+              ? undefined
+              : parseInteger(parsed.values.port, "port", 1, 65_535);
+          return {
+            kind: "gateway-install",
+            ...(providerMode === undefined ? {} : { providerMode }),
+            ...(port === undefined ? {} : { port }),
+            json: parsed.values.json ?? false,
+          };
+        }
+        if (subcommand === "start" || subcommand === "stop" || subcommand === "uninstall") {
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: false,
+            strict: true,
+            options: {
+              json: { type: "boolean" },
+              help: { type: "boolean", short: "h" },
+            },
+          });
+          if (parsed.values.help) {
+            return { kind: "help", command: `gateway ${subcommand}` };
+          }
+          return {
+            kind:
+              subcommand === "start"
+                ? "gateway-start"
+                : subcommand === "stop"
+                  ? "gateway-stop"
+                  : "gateway-uninstall",
+            json: parsed.values.json ?? false,
+          };
+        }
         if (subcommand === "status") {
           const parsed = parseArgs({
             args: args.slice(1),

@@ -58,6 +58,22 @@ deepseek-crawl auth set firecrawl   # optional when already configured
 deepseek-crawl gateway
 ```
 
+On macOS, use the managed lifecycle when the user wants transparent CLI/Skill
+traffic after the current shell exits:
+
+```bash
+deepseek-crawl gateway install --provider-mode deepseek-first
+deepseek-crawl gateway status --json
+deepseek-crawl gateway stop
+deepseek-crawl gateway start
+deepseek-crawl gateway uninstall
+```
+
+`install` starts a LaunchAgent and points the Firecrawl CLI at the Gateway only
+after a health check. `stop` restores the saved Firecrawl API URL; `uninstall`
+also removes all managed service and log files. Do not claim this covers SDK
+clients that hard-code their own `apiUrl`.
+
 `auth import firecrawl` prints only a masked hint. `FIRECRAWL_API_KEY` still takes
 precedence over the imported credential.
 

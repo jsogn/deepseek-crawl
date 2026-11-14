@@ -60,6 +60,11 @@ import { errorMessage as genericErrorMessage } from "../error-message.js";
 import { GATEWAY_CAPACITY_DEFAULTS, loadGatewayConfig } from "../gateway/config.js";
 import { pruneGatewayRuntimeStates, resolveGatewayRuntimeDirectory } from "../gateway/runtime.js";
 import { startGatewayServer } from "../gateway/server.js";
+import {
+  createGatewayServiceManager,
+  type GatewayServiceManager,
+  type GatewayServiceStatus,
+} from "../gateway/service.js";
 import { createBatchFetchOutputWriter, formatBatchFetchHuman } from "../output/batch.js";
 import {
   createCrawlOutputWriter,
@@ -100,6 +105,7 @@ export interface CliDependencies {
   cacheClock?: () => Date;
   monitorClock?: () => Date;
   gatewayRuntimeDirectory?: string;
+  gatewayServiceManager?: GatewayServiceManager;
   stdin: NodeJS.ReadableStream;
 }
 
@@ -113,6 +119,9 @@ Core
 
 Gateway
   gateway [options]              Start the Firecrawl-compatible service
+  gateway install [options]      Install and start the managed local service
+  gateway start|stop             Start or stop the managed service
+  gateway uninstall              Restore Firecrawl CLI and remove service files
   gateway status [--json]        Show runtime and credential readiness
   gateway url [--port <port>]    Print the current gateway URL
 
@@ -341,12 +350,43 @@ Options:
   --remote            Enable authenticated remote mode (fixed port 8787)
 
 Subcommands:
+  install             Install, configure, and start the managed service
+  start               Start the installed managed service
+  stop                Stop it and restore the Firecrawl CLI endpoint
+  uninstall           Stop it and remove all managed files
   url                 Print the URL of the only running gateway
   status              List running instances and prune stale runtime state
 
 Remote mode requires GATEWAY_API_KEY. Firecrawl SDK clients set their apiKey to
 this gateway token. Local mode uses stored Provider credentials and prints the
 actual SDK apiUrl after choosing an available port.
+`,
+  "gateway install": `Usage: deepseek-crawl gateway install [options]
+
+Install and start a managed background Gateway on macOS, then point the
+Firecrawl CLI at it. The original Firecrawl CLI API URL is saved so stop and
+uninstall can restore it.
+
+Options:
+  --provider-mode <mode>
+                      firecrawl-first (default), deepseek-first, or no-fallback
+  --port <1..65535>   Managed listener port (default: 8787)
+  --json              Print a stable machine-readable result
+`,
+  "gateway start": `Usage: deepseek-crawl gateway start [--json]
+
+Start the installed managed Gateway and point the Firecrawl CLI at it after the
+service passes its health check.
+`,
+  "gateway stop": `Usage: deepseek-crawl gateway stop [--json]
+
+Stop the managed Gateway and restore the Firecrawl CLI API URL saved at install
+time.
+`,
+  "gateway uninstall": `Usage: deepseek-crawl gateway uninstall [--json]
+
+Stop the managed Gateway, restore the Firecrawl CLI API URL, and remove the
+managed LaunchAgent, launcher, state, and logs.
 `,
   "gateway status": `Usage: deepseek-crawl gateway status [--json]
 
@@ -399,6 +439,9 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     ...(dependencies.gatewayRuntimeDirectory === undefined
       ? {}
       : { gatewayRuntimeDirectory: dependencies.gatewayRuntimeDirectory }),
+    ...(dependencies.gatewayServiceManager === undefined
+      ? {}
+      : { gatewayServiceManager: dependencies.gatewayServiceManager }),
     stdin: dependencies.stdin ?? process.stdin,
   };
 }
@@ -545,6 +588,89 @@ async function gatewayRuntimeStates(deps: CliDependencies) {
   return pruneGatewayRuntimeStates(directory, deps.fetchImpl);
 }
 
+function gatewayServiceManager(deps: CliDependencies): GatewayServiceManager {
+  return (
+    deps.gatewayServiceManager ??
+    createGatewayServiceManager({
+      home: deps.setupEnvironment?.home ?? homedir(),
+      platform: process.platform,
+      uid: process.getuid?.() ?? 0,
+      nodePath: process.execPath,
+      cliPath: fileURLToPath(new URL("../bin.js", import.meta.url)),
+      env: deps.env,
+      fetchImpl: deps.fetchImpl,
+    })
+  );
+}
+
+function formatGatewayServiceStatus(
+  action: "installed" | "started" | "stopped" | "uninstalled",
+  status: GatewayServiceStatus,
+): string {
+  const lines = [
+    `Gateway service ${action}.`,
+    `Managed service: ${status.installed ? "installed" : "not installed"}`,
+    `Running: ${status.running ? "yes" : "no"}`,
+    `Healthy: ${status.healthy ? "yes" : "no"}`,
+    `Firecrawl CLI targets Gateway: ${status.client_targets_gateway ? "yes" : "no"}`,
+  ];
+  if (status.gateway_url) {
+    lines.push(`Gateway URL: ${status.gateway_url}`);
+  }
+  if (status.provider_mode) {
+    lines.push(`Provider mode: ${status.provider_mode}`);
+  }
+  if (status.issues.length > 0) {
+    lines.push("Issues:", ...status.issues.map((issue) => `- ${issue}`));
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+async function runGatewayInstall(
+  command: Extract<ParsedCommand, { kind: "gateway-install" }>,
+  deps: CliDependencies,
+) {
+  const status = await gatewayServiceManager(deps).install({
+    providerMode: command.providerMode ?? "firecrawl-first",
+    port: command.port ?? 8787,
+  });
+  deps.stdout.write(
+    command.json
+      ? `${JSON.stringify(status, null, 2)}\n`
+      : formatGatewayServiceStatus("installed", status),
+  );
+  return 0;
+}
+
+async function runGatewayServiceAction(
+  command:
+    | Extract<ParsedCommand, { kind: "gateway-start" }>
+    | Extract<ParsedCommand, { kind: "gateway-stop" }>
+    | Extract<ParsedCommand, { kind: "gateway-uninstall" }>,
+  deps: CliDependencies,
+) {
+  const manager = gatewayServiceManager(deps);
+  const status =
+    command.kind === "gateway-start"
+      ? await manager.start()
+      : command.kind === "gateway-stop"
+        ? await manager.stop()
+        : await manager.uninstall();
+  deps.stdout.write(
+    command.json
+      ? `${JSON.stringify(status, null, 2)}\n`
+      : formatGatewayServiceStatus(
+          command.kind === "gateway-start"
+            ? "started"
+            : command.kind === "gateway-stop"
+              ? "stopped"
+              : "uninstalled",
+          status,
+        ),
+  );
+  return 0;
+}
+
 async function runGatewayUrl(
   command: Extract<ParsedCommand, { kind: "gateway-url" }>,
   deps: CliDependencies,
@@ -576,7 +702,10 @@ async function runGatewayStatus(
   command: Extract<ParsedCommand, { kind: "gateway-status" }>,
   deps: CliDependencies,
 ) {
-  const { running, stale } = await gatewayRuntimeStates(deps);
+  const [{ running, stale }, service] = await Promise.all([
+    gatewayRuntimeStates(deps),
+    gatewayServiceManager(deps).status(),
+  ]);
   const credentials = {
     deepseek: authStatus(deps.env, resolvedCredentialStore(deps, "deepseek"), "deepseek"),
     firecrawl: authStatus(deps.env, resolvedCredentialStore(deps, "firecrawl"), "firecrawl"),
@@ -599,6 +728,7 @@ async function runGatewayStatus(
       max_retained_crawl_jobs: state.maxRetainedCrawlJobs ?? null,
       max_retained_crawl_bytes: state.maxRetainedCrawlBytes ?? null,
     })),
+    service,
     credentials,
   };
   if (command.json) {
@@ -613,10 +743,15 @@ async function runGatewayStatus(
           );
     lines.push(
       "",
+      `Managed service: ${service.installed ? "installed" : "not installed"}`,
+      `Firecrawl CLI targets Gateway: ${service.client_targets_gateway ? "yes" : "no"}`,
       `DeepSeek: ${credentials.deepseek.configured ? `configured via ${credentials.deepseek.source}` : `not configured (${credentials.deepseek.backend})`}`,
       `Firecrawl: ${credentials.firecrawl.configured ? `configured via ${credentials.firecrawl.source}` : `not configured (${credentials.firecrawl.backend})`}`,
       `Gateway auth: ${credentials.gateway_auth.configured ? `configured via ${credentials.gateway_auth.source}` : `not configured (${credentials.gateway_auth.backend})`}`,
     );
+    if (service.issues.length > 0) {
+      lines.push("Service issues:", ...service.issues.map((issue) => `- ${issue}`));
+    }
     deps.stdout.write(`${lines.join("\n")}\n`);
   }
   return 0;
@@ -1858,6 +1993,12 @@ export async function runCli(
         return await runBalance(command, deps);
       case "gateway":
         return await runGateway(command, deps);
+      case "gateway-install":
+        return await runGatewayInstall(command, deps);
+      case "gateway-start":
+      case "gateway-stop":
+      case "gateway-uninstall":
+        return await runGatewayServiceAction(command, deps);
       case "gateway-url":
         return await runGatewayUrl(command, deps);
       case "gateway-status":

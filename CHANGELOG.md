@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add managed macOS Gateway lifecycle commands: `gateway install`, `start`,
+  `stop`, and `uninstall`.
+- Point the Firecrawl CLI at the managed Gateway after a successful health
+  check, with original API URL backup and automatic restoration.
+- Report managed service and Firecrawl CLI binding drift from `gateway status`.
+
 ## 0.13.1 - 2026-11-14
 
 ### Added

@@ -457,6 +457,41 @@ describe("parseCli", () => {
     });
   });
 
+  it("parses managed gateway lifecycle commands", () => {
+    expect(
+      parseCli([
+        "gateway",
+        "install",
+        "--provider-mode",
+        "deepseek-first",
+        "--port",
+        "8787",
+        "--json",
+      ]),
+    ).toEqual({
+      kind: "gateway-install",
+      providerMode: "deepseek-first",
+      port: 8787,
+      json: true,
+    });
+    expect(parseCli(["gateway", "install"])).toEqual({
+      kind: "gateway-install",
+      json: false,
+    });
+    expect(parseCli(["gateway", "start", "--json"])).toEqual({
+      kind: "gateway-start",
+      json: true,
+    });
+    expect(parseCli(["gateway", "stop"])).toEqual({
+      kind: "gateway-stop",
+      json: false,
+    });
+    expect(parseCli(["gateway", "uninstall", "--json"])).toEqual({
+      kind: "gateway-uninstall",
+      json: true,
+    });
+  });
+
   it("parses balance output options", () => {
     expect(parseCli(["balance"])).toEqual({
       kind: "balance",

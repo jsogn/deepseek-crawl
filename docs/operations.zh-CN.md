@@ -220,6 +220,18 @@ HTTPS。API Key 不接受 CLI 参数或 MCP 参数。
 时才失败，且不保留被拒绝的页面。任务过期或被淘汰时立即释放对应字节额度。保留任务
 上限必须大于或等于运行中 Crawl 任务上限。
 
+## macOS 受管理 Gateway
+
+`deepseek-crawl gateway install` 会创建一个当前用户的 LaunchAgent、一个位于
+`~/Library/Application Support/deepseek-crawl/gateway` 的稳定启动器、
+`~/Library/Logs/deepseek-crawl` 日志，以及记录原 Firecrawl CLI API URL 的受管理
+状态文件。只有 Gateway 健康检查通过后才会修改 `credentials.json`；API Key 会原样
+保留，也不会写入服务状态或日志。
+
+`gateway stop` 会卸载 LaunchAgent 并恢复原 Firecrawl API URL。`gateway uninstall`
+还会删除受管理 LaunchAgent、启动器、状态和日志。整个流程不修改 DNS、`hosts`、
+系统代理或 TLS 信任。
+
 客户端使用启动输出中的 `FIRECRAWL_API_URL` 指向网关。网关不读取
 `FIRECRAWL_API_URL`，只读取 `FIRECRAWL_UPSTREAM_URL`。
 

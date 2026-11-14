@@ -241,6 +241,20 @@ terminal pages before failing; it retains no rejected page. Expiration and
 eviction release the accounted bytes immediately. The retained job limit must
 be greater than or equal to the active Crawl job limit.
 
+## Managed macOS Gateway
+
+`deepseek-crawl gateway install` creates one user LaunchAgent, a stable launcher
+under `~/Library/Application Support/deepseek-crawl/gateway`, logs under
+`~/Library/Logs/deepseek-crawl`, and a managed state file containing the original
+Firecrawl CLI API URL. It modifies `credentials.json` only after the Gateway
+passes its health check. API keys are preserved and never copied into service
+state or logs.
+
+`gateway stop` unloads the LaunchAgent and restores the saved Firecrawl API URL.
+`gateway uninstall` performs the same restoration and removes the managed
+LaunchAgent, launcher, state, and logs. The flow does not modify DNS, `hosts`,
+system proxy settings, or TLS trust.
+
 Clients use the `FIRECRAWL_API_URL` printed at startup to reach the gateway. The
 gateway does not read `FIRECRAWL_API_URL`; it reads only
 `FIRECRAWL_UPSTREAM_URL`.

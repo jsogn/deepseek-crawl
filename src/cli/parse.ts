@@ -152,6 +152,8 @@ export type ParsedCommand =
       host?: string;
       port?: number;
     }
+  | { kind: "gateway-status"; json: boolean }
+  | { kind: "gateway-url"; port?: number }
   | { kind: "mcp" }
   | { kind: "help"; command?: string }
   | { kind: "version" };
@@ -948,6 +950,43 @@ export function parseCli(argv: string[]): ParsedCommand {
         return parsed.values.help ? { kind: "help", command: "mcp" } : { kind: "mcp" };
       }
       case "gateway": {
+        const subcommand = args[0];
+        if (subcommand === "status") {
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: false,
+            strict: true,
+            options: {
+              json: { type: "boolean" },
+              help: { type: "boolean", short: "h" },
+            },
+          });
+          return parsed.values.help
+            ? { kind: "help", command: "gateway" }
+            : { kind: "gateway-status", json: parsed.values.json ?? false };
+        }
+        if (subcommand === "url") {
+          const parsed = parseArgs({
+            args: args.slice(1),
+            allowPositionals: false,
+            strict: true,
+            options: {
+              port: { type: "string" },
+              help: { type: "boolean", short: "h" },
+            },
+          });
+          if (parsed.values.help) {
+            return { kind: "help", command: "gateway" };
+          }
+          const port =
+            parsed.values.port === undefined
+              ? undefined
+              : parseInteger(parsed.values.port, "port", 1, 65_535);
+          return {
+            kind: "gateway-url",
+            ...(port === undefined ? {} : { port }),
+          };
+        }
         const parsed = parseArgs({
           args,
           allowPositionals: false,

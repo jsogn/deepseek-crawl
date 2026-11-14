@@ -1,7 +1,11 @@
+import { mkdtemp } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DeepSeekGateway } from "../../src/deepseek/gateway.js";
 import { CrawlJobManager } from "../../src/gateway/crawl-jobs.js";
+import { listGatewayRuntimeStates } from "../../src/gateway/runtime.js";
 import { type GatewayServer, startGatewayServer } from "../../src/gateway/server.js";
 
 const servers: Array<GatewayServer | Server> = [];
@@ -37,6 +41,63 @@ function testConfig() {
 }
 
 describe("Firecrawl-compatible gateway", () => {
+  it("exposes unauthenticated runtime health without provider secrets", async () => {
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        gatewayApiKey: "gateway-token",
+      },
+      env: {
+        GATEWAY_API_KEY: "gateway-token",
+        FIRECRAWL_API_KEY: "fc-secret",
+      },
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/healthz", server.url));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: "ok",
+      pid: process.pid,
+      mode: "local",
+    });
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("registers and removes a runtime state file for a running gateway", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "deepseek-gateway-runtime-"));
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: {},
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+      runtimeState: {
+        directory,
+        mode: "local",
+        now: () => new Date("2026-11-14T00:00:00.000Z"),
+      },
+    });
+    servers.push(server);
+
+    expect(await listGatewayRuntimeStates(directory)).toEqual([
+      {
+        version: 1,
+        pid: process.pid,
+        url: server.url.href,
+        mode: "local",
+        startedAt: "2026-11-14T00:00:00.000Z",
+      },
+    ]);
+
+    await server.close();
+    expect(await listGatewayRuntimeStates(directory)).toEqual([]);
+  });
+
   it("passes an incoming Firecrawl request through to the upstream API", async () => {
     const upstreamResponse = {
       success: true,

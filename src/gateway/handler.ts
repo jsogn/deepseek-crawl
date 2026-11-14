@@ -15,6 +15,7 @@ import {
   firecrawlSearchFallback,
 } from "../firecrawl/compat.js";
 import { requestFirecrawlUpstream, responseHeaders } from "../firecrawl/upstream.js";
+import { packageVersion } from "../version.js";
 import type { GatewayConfig } from "./config.js";
 import { CrawlJobManager } from "./crawl-jobs.js";
 import {
@@ -318,6 +319,22 @@ export function createGatewayHandler(
   };
 
   return async (request, response) => {
+    const requestUrl = new URL(request.url ?? "/", "http://gateway.local");
+    if (request.method === "GET" && requestUrl.pathname === "/healthz") {
+      sendJson(
+        response,
+        200,
+        {
+          status: "ok",
+          version: packageVersion,
+          pid: process.pid,
+          mode: dependencies.config.allowRemote ? "remote" : "local",
+        },
+        { "cache-control": "no-store" },
+      );
+      return;
+    }
+
     if (
       dependencies.config.gatewayApiKey !== undefined &&
       !authorized(request, dependencies.config.gatewayApiKey)
@@ -353,7 +370,6 @@ export function createGatewayHandler(
       throw error;
     }
 
-    const requestUrl = new URL(request.url ?? "/", "http://gateway.local");
     const method = request.method ?? "GET";
     const route = fallbackRoute(method, requestUrl.pathname);
     const isLocalCrawlRoute =

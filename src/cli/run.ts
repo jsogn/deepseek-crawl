@@ -53,6 +53,7 @@ import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekBalanceGateway, DeepSeekGateway } from "../deepseek/gateway.js";
 import { errorMessage as genericErrorMessage } from "../error-message.js";
 import { loadGatewayConfig } from "../gateway/config.js";
+import { pruneGatewayRuntimeStates, resolveGatewayRuntimeDirectory } from "../gateway/runtime.js";
 import { startGatewayServer } from "../gateway/server.js";
 import { createBatchFetchOutputWriter, formatBatchFetchHuman } from "../output/batch.js";
 import {
@@ -92,6 +93,7 @@ export interface CliDependencies {
   fetchCache?: FetchCache;
   cacheClock?: () => Date;
   monitorClock?: () => Date;
+  gatewayRuntimeDirectory?: string;
   stdin: NodeJS.ReadableStream;
 }
 
@@ -122,6 +124,8 @@ Usage:
   deepseek-crawl auth status [credential] [--json]
   deepseek-crawl auth remove [credential] [--json]
   deepseek-crawl gateway [--remote] [--host <host>] [--port <port>]
+  deepseek-crawl gateway url [--port <port>]
+  deepseek-crawl gateway status [--json]
   deepseek-crawl mcp
 
 Run "deepseek-crawl help <command>" for command details.
@@ -283,6 +287,10 @@ Options:
   --port <1..65535>   Fixed listener port (default locally: auto from 8787)
   --remote            Enable authenticated remote mode (fixed port 8787)
 
+Subcommands:
+  url                 Print the URL of the only running gateway
+  status              List running instances and prune stale runtime state
+
 Remote mode requires GATEWAY_API_KEY. Firecrawl SDK clients set their apiKey to
 this gateway token. Local mode uses stored Provider credentials and prints the
 actual SDK apiUrl after choosing an available port.
@@ -322,6 +330,9 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     ...(dependencies.fetchCache === undefined ? {} : { fetchCache: dependencies.fetchCache }),
     ...(dependencies.cacheClock === undefined ? {} : { cacheClock: dependencies.cacheClock }),
     ...(dependencies.monitorClock === undefined ? {} : { monitorClock: dependencies.monitorClock }),
+    ...(dependencies.gatewayRuntimeDirectory === undefined
+      ? {}
+      : { gatewayRuntimeDirectory: dependencies.gatewayRuntimeDirectory }),
     stdin: dependencies.stdin ?? process.stdin,
   };
 }
@@ -412,6 +423,11 @@ async function runGateway(
     config,
     env: deps.env,
     fetchImpl: deps.fetchImpl,
+    runtimeState: {
+      directory:
+        deps.gatewayRuntimeDirectory ?? resolveGatewayRuntimeDirectory(deps.env, homedir()),
+      mode: command.remote ? "remote" : "local",
+    },
   });
   deps.stdout.write(`Firecrawl gateway listening on ${server.url.href}\n`);
   deps.stdout.write(
@@ -428,6 +444,69 @@ async function runGateway(
     await waitForAbort(deps.signal);
   } finally {
     await server.close();
+  }
+  return 0;
+}
+
+async function gatewayRuntimeStates(deps: CliDependencies) {
+  const directory =
+    deps.gatewayRuntimeDirectory ?? resolveGatewayRuntimeDirectory(deps.env, homedir());
+  return pruneGatewayRuntimeStates(directory, deps.fetchImpl);
+}
+
+async function runGatewayUrl(
+  command: Extract<ParsedCommand, { kind: "gateway-url" }>,
+  deps: CliDependencies,
+) {
+  const { running } = await gatewayRuntimeStates(deps);
+  const matching =
+    command.port === undefined
+      ? running
+      : running.filter((state) => Number(new URL(state.url).port) === command.port);
+  if (matching.length === 0) {
+    throw new Error(
+      command.port === undefined
+        ? "No running gateway was found."
+        : `No running gateway was found on port ${command.port}.`,
+    );
+  }
+  if (matching.length > 1) {
+    throw new Error(
+      `Multiple gateways are running. Use gateway url --port <port>.\n${matching
+        .map((state) => `  ${new URL(state.url).port}  ${state.url}`)
+        .join("\n")}`,
+    );
+  }
+  deps.stdout.write(`${matching[0]?.url}\n`);
+  return 0;
+}
+
+async function runGatewayStatus(
+  command: Extract<ParsedCommand, { kind: "gateway-status" }>,
+  deps: CliDependencies,
+) {
+  const { running, stale } = await gatewayRuntimeStates(deps);
+  const result = {
+    version: 1 as const,
+    running: running.length > 0,
+    stale,
+    instances: running.map((state) => ({
+      pid: state.pid,
+      url: state.url,
+      mode: state.mode,
+      startedAt: state.startedAt,
+    })),
+  };
+  if (command.json) {
+    deps.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  } else if (running.length === 0) {
+    deps.stdout.write("Gateway is not running.\n");
+  } else {
+    deps.stdout.write(
+      `${running
+        .map((state) => `${state.mode}  ${state.url}  pid=${state.pid}  started=${state.startedAt}`)
+        .join("\n")}\n`,
+    );
   }
   return 0;
 }
@@ -1629,6 +1708,10 @@ export async function runCli(
         return await runBalance(command, deps);
       case "gateway":
         return await runGateway(command, deps);
+      case "gateway-url":
+        return await runGatewayUrl(command, deps);
+      case "gateway-status":
+        return await runGatewayStatus(command, deps);
       case "init":
         return await runInit(command, deps);
       case "mcp": {

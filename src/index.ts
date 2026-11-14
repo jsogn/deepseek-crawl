@@ -86,7 +86,20 @@ export type {
   FirecrawlCrawlStatus,
 } from "./gateway/crawl-jobs.js";
 export { CrawlJobManager } from "./gateway/crawl-jobs.js";
-export type { GatewayServer, GatewayServerOptions } from "./gateway/server.js";
+export type {
+  GatewayRuntimePruneResult,
+  GatewayRuntimeState,
+} from "./gateway/runtime.js";
+export {
+  listGatewayRuntimeStates,
+  pruneGatewayRuntimeStates,
+  resolveGatewayRuntimeDirectory,
+} from "./gateway/runtime.js";
+export type {
+  GatewayServer,
+  GatewayServerOptions,
+  GatewayServerRuntimeOptions,
+} from "./gateway/server.js";
 export { startGatewayServer } from "./gateway/server.js";
 export type { RetryAttempt, RetrySummary } from "./retry/types.js";
 export type {

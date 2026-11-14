@@ -4,6 +4,13 @@ import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import type { GatewayConfig } from "./config.js";
 import { CrawlJobManager } from "./crawl-jobs.js";
 import { createGatewayHandler } from "./handler.js";
+import { removeGatewayRuntimeState, writeGatewayRuntimeState } from "./runtime.js";
+
+export interface GatewayServerRuntimeOptions {
+  directory: string;
+  mode: "local" | "remote";
+  now?: () => Date;
+}
 
 export interface GatewayServerOptions {
   config: GatewayConfig;
@@ -12,10 +19,12 @@ export interface GatewayServerOptions {
   deepseekClient?: DeepSeekGateway;
   sitemapReader?: MapSitemapReader;
   crawlJobs?: CrawlJobManager;
+  runtimeState?: GatewayServerRuntimeOptions;
 }
 
 export interface GatewayServer {
   url: URL;
+  runtimeStatePath?: string;
   close(): Promise<void>;
 }
 
@@ -85,28 +94,50 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
     }),
   );
   await listenGateway(server, options.config);
+  const url = serverUrl(server, options.config.host);
+  let runtimeStatePath: string | undefined;
+  if (options.runtimeState) {
+    try {
+      runtimeStatePath = await writeGatewayRuntimeState(options.runtimeState.directory, {
+        version: 1,
+        pid: process.pid,
+        url: url.href,
+        mode: options.runtimeState.mode,
+        startedAt: (options.runtimeState.now ?? (() => new Date()))().toISOString(),
+      });
+    } catch (error) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      throw error;
+    }
+  }
   let closing: Promise<void> | undefined;
 
   return {
-    url: serverUrl(server, options.config.host),
+    url,
+    ...(runtimeStatePath === undefined ? {} : { runtimeStatePath }),
     close: () => {
       if (closing) {
         return closing;
       }
       closing = (async () => {
         crawlJobs.cancelAll();
-        if (!server.listening) {
-          return;
+        try {
+          if (server.listening) {
+            await new Promise<void>((resolve, reject) => {
+              server.close((error) => {
+                if (error) {
+                  reject(error);
+                } else {
+                  resolve();
+                }
+              });
+            });
+          }
+        } finally {
+          if (runtimeStatePath) {
+            await removeGatewayRuntimeState(runtimeStatePath);
+          }
         }
-        await new Promise<void>((resolve, reject) => {
-          server.close((error) => {
-            if (error) {
-              reject(error);
-            } else {
-              resolve();
-            }
-          });
-        });
       })();
       return closing;
     },

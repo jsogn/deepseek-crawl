@@ -121,6 +121,12 @@ deepseek-crawl gateway
   [--remote]
   [--host <host>]
   [--port <1..65535>]
+
+deepseek-crawl gateway url
+  [--port <1..65535>]
+
+deepseek-crawl gateway status
+  [--json]
 ```
 
 Starts a Firecrawl v2-compatible HTTP service. It is not started by ordinary CLI
@@ -167,8 +173,15 @@ Firecrawl-owned Crawl IDs continue to use the Firecrawl upstream.
 Client setup:
 
 ```bash
-export FIRECRAWL_API_URL=http://127.0.0.1:<reported-port>
+export FIRECRAWL_API_URL="$(deepseek-crawl gateway url)"
 ```
+
+`gateway url` succeeds with exactly one healthy instance. If multiple instances
+exist, pass `--port`. `gateway status --json` lists all healthy instances and
+removes stale PID/state entries.
+
+`GET /healthz` is unauthenticated and returns only status, version, PID, and
+local/remote mode. It never returns provider keys or user content.
 
 The gateway process does not read `FIRECRAWL_API_URL`. Set
 `FIRECRAWL_UPSTREAM_URL` only when the Firecrawl upstream is not

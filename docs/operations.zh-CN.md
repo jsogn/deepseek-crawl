@@ -71,6 +71,12 @@ Firecrawl 功能没有 DeepSeek 等价能力时返回结构化错误，不会伪
 DeepSeek Crawl job 只保存在当前网关进程内存中，24 小时后过期；网关重启会使这些
 job 丢失。一个网关进程可以服务本机多个 Firecrawl 客户端。
 
+运行状态保存在 `DEEPSEEK_GATEWAY_RUNTIME_DIR`，或
+`$XDG_RUNTIME_DIR/deepseek-crawl/gateway`，或平台缓存目录下的
+`gateway/runtime`。目录权限为 `0700`，状态文件为 `0600`，只包含 PID、URL、
+启动时间和模式。`gateway status` 通过公开的 `/healthz` 验证 PID，不返回 Provider
+Key、请求内容或缓存内容。
+
 ## 本地缓存
 
 启用缓存后，页面正文保存在本机私有目录：
@@ -139,16 +145,17 @@ CLI Map 和 Crawl 直接请求目标站点的 Sitemap，仅接受公网 HTTP(S) 
 
 ## 环境变量
 
-| 变量                     | 默认值                      | 用途                      |
-| ------------------------ | --------------------------- | ------------------------- |
-| `DEEPSEEK_API_KEY`       | 可选覆盖                    | DeepSeek API 凭据         |
-| `DEEPSEEK_BASE_URL`      | `https://api.deepseek.com`  | 测试或网关                |
-| `DEEPSEEK_TIMEOUT_MS`    | `60000`                     | 请求超时，1000–120000     |
-| `DEEPSEEK_MAX_RETRIES`   | `2`                         | 重试 408、429 和瞬时 5xx  |
-| `DEEPSEEK_CACHE_DIR`     | 平台缓存目录                | Fetch 缓存目录            |
-| `FIRECRAWL_API_KEY`      | 无                          | Firecrawl upstream 凭据   |
-| `FIRECRAWL_UPSTREAM_URL` | `https://api.firecrawl.dev` | Gateway 的 Firecrawl 上游 |
-| `GATEWAY_API_KEY`        | 无                          | 远程网关 Bearer Token     |
+| 变量                           | 默认值                      | 用途                      |
+| ------------------------------ | --------------------------- | ------------------------- |
+| `DEEPSEEK_API_KEY`             | 可选覆盖                    | DeepSeek API 凭据         |
+| `DEEPSEEK_BASE_URL`            | `https://api.deepseek.com`  | 测试或网关                |
+| `DEEPSEEK_TIMEOUT_MS`          | `60000`                     | 请求超时，1000–120000     |
+| `DEEPSEEK_MAX_RETRIES`         | `2`                         | 重试 408、429 和瞬时 5xx  |
+| `DEEPSEEK_CACHE_DIR`           | 平台缓存目录                | Fetch 缓存目录            |
+| `DEEPSEEK_GATEWAY_RUNTIME_DIR` | 平台 runtime/cache          | Gateway 实例状态目录      |
+| `FIRECRAWL_API_KEY`            | 无                          | Firecrawl upstream 凭据   |
+| `FIRECRAWL_UPSTREAM_URL`       | `https://api.firecrawl.dev` | Gateway 的 Firecrawl 上游 |
+| `GATEWAY_API_KEY`              | 无                          | 远程网关 Bearer Token     |
 
 环境变量优先于本地 credential store。非 loopback 的 DeepSeek base URL 必须使用
 HTTPS。API Key 不接受 CLI 参数或 MCP 参数。

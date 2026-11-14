@@ -75,6 +75,13 @@ DeepSeek Crawl jobs live only in the current gateway process and expire after 24
 hours. Restarting the gateway does not restore them. One gateway process can
 serve multiple local Firecrawl clients.
 
+Runtime state lives in `DEEPSEEK_GATEWAY_RUNTIME_DIR`, otherwise
+`$XDG_RUNTIME_DIR/deepseek-crawl/gateway`, otherwise a `gateway/runtime`
+directory under the platform cache. Directories use `0700`; state files use
+`0600` and contain only PID, URL, start time, and mode. `gateway status` verifies
+the PID through public `/healthz` without exposing provider keys, request data,
+or cache contents.
+
 ## Local cache
 
 Cached page bodies remain on the local machine:
@@ -149,16 +156,17 @@ CLI Map and Crawl request Sitemaps directly and accept only public HTTP(S) targe
 
 ## Environment
 
-| Variable                 | Default                     | Purpose                           |
-| ------------------------ | --------------------------- | --------------------------------- |
-| `DEEPSEEK_API_KEY`       | optional override           | DeepSeek API credential           |
-| `DEEPSEEK_BASE_URL`      | `https://api.deepseek.com`  | Test or gateway endpoint          |
-| `DEEPSEEK_TIMEOUT_MS`    | `60000`                     | Request timeout, 1000–120000      |
-| `DEEPSEEK_MAX_RETRIES`   | `2`                         | Retry 408, 429, and transient 5xx |
-| `DEEPSEEK_CACHE_DIR`     | platform cache directory    | Fetch cache directory             |
-| `FIRECRAWL_API_KEY`      | none                        | Firecrawl upstream credential     |
-| `FIRECRAWL_UPSTREAM_URL` | `https://api.firecrawl.dev` | Gateway Firecrawl upstream        |
-| `GATEWAY_API_KEY`        | none                        | Remote gateway Bearer token       |
+| Variable                       | Default                     | Purpose                           |
+| ------------------------------ | --------------------------- | --------------------------------- |
+| `DEEPSEEK_API_KEY`             | optional override           | DeepSeek API credential           |
+| `DEEPSEEK_BASE_URL`            | `https://api.deepseek.com`  | Test or gateway endpoint          |
+| `DEEPSEEK_TIMEOUT_MS`          | `60000`                     | Request timeout, 1000–120000      |
+| `DEEPSEEK_MAX_RETRIES`         | `2`                         | Retry 408, 429, and transient 5xx |
+| `DEEPSEEK_CACHE_DIR`           | platform cache directory    | Fetch cache directory             |
+| `DEEPSEEK_GATEWAY_RUNTIME_DIR` | platform runtime/cache      | Gateway instance state dir        |
+| `FIRECRAWL_API_KEY`            | none                        | Firecrawl upstream credential     |
+| `FIRECRAWL_UPSTREAM_URL`       | `https://api.firecrawl.dev` | Gateway Firecrawl upstream        |
+| `GATEWAY_API_KEY`              | none                        | Remote gateway Bearer token       |
 
 Environment variables override the local credential store. Non-loopback DeepSeek
 base URLs must use HTTPS. API keys are never accepted as CLI flags or MCP

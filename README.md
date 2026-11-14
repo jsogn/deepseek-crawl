@@ -309,6 +309,17 @@ deepseek-crawl gateway
 本地默认从 `8787` 开始寻找可用端口，冲突时自动尝试下一个，并打印实际地址。
 指定 `--port` 时该端口变为严格固定；被占用会直接失败。
 
+其他终端或脚本可以发现当前实际地址：
+
+```bash
+deepseek-crawl gateway url
+deepseek-crawl gateway status --json
+```
+
+只有一个实例时，`gateway url` 直接输出 URL；多个实例并存时需要
+`gateway url --port 8788`。运行状态只保存 PID、URL、启动时间和模式，不保存
+Provider Key。`gateway status` 会通过 `/healthz` 验证进程并清理陈旧状态。
+
 客户端通常只需要 Firecrawl API 地址：
 
 ```bash

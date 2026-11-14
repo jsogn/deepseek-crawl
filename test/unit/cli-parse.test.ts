@@ -402,6 +402,14 @@ describe("parseCli", () => {
       kind: "gateway",
       remote: true,
     });
+    expect(parseCli(["gateway", "status", "--json"])).toEqual({
+      kind: "gateway-status",
+      json: true,
+    });
+    expect(parseCli(["gateway", "url", "--port", "8788"])).toEqual({
+      kind: "gateway-url",
+      port: 8788,
+    });
     expect(parseCli(["gateway", "--help"])).toEqual({
       kind: "help",
       command: "gateway",
@@ -600,6 +608,9 @@ describe("parseCli", () => {
     [["gateway", "--port", "65536"], /port/i],
     [["gateway", "extra"], /argument/i],
     [["gateway", "--host", "   "], /host/i],
+    [["gateway", "url", "--port", "0"], /port/i],
+    [["gateway", "status", "--port", "8787"], /unknown option/i],
+    [["gateway", "url", "extra"], /argument/i],
     [["init", "--skip-skills", "--project"], /skip-skills|project/i],
     [["init", "--skip-skills", "--agent", "codex"], /skip-skills|agent/i],
     [["init", "--skip-skills", "--copy"], /skip-skills|copy/i],

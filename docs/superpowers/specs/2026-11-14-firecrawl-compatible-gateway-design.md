@@ -277,6 +277,7 @@ src/gateway/
   errors.ts
   route.ts
   crawl-jobs.ts
+  runtime.ts
 src/firecrawl/
   types.ts
   upstream.ts
@@ -292,12 +293,18 @@ Responsibilities:
 - `src/firecrawl/compat.ts` translates supported Firecrawl requests and
   responses to and from the existing DeepSeek application functions.
 - `src/gateway/crawl-jobs.ts` owns in-memory DeepSeek-backed Crawl jobs.
+- `src/gateway/runtime.ts` owns per-instance runtime state, URL discovery, PID and
+  health validation, and stale-state cleanup.
 
 The gateway may import application and DeepSeek modules. None of those modules
 may import the gateway or Firecrawl modules.
 
 `GatewayServer.close()` cancels all active process-local Crawl jobs before
 closing the listener.
+
+The gateway exposes unauthenticated `GET /healthz` with only status, version,
+PID, and local/remote mode. Runtime files contain the same nonsecret metadata
+and are stored with user-only permissions.
 
 ## Testing
 

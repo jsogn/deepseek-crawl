@@ -73,6 +73,9 @@ describe("package documentation", () => {
       "FIRECRAWL_UPSTREAM_URL",
       "GATEWAY_API_KEY",
       "Firecrawl-compatible",
+      "gateway url",
+      "gateway status",
+      "/healthz",
     ]) {
       expect(allDocumentation).toContain(text);
     }

@@ -329,6 +329,18 @@ use the existing `deepseek-crawl auth set` or Keychain configuration.
 Local mode starts at `8787`, tries subsequent ports when it is occupied, and
 prints the actual URL. An explicit `--port` is strict and fails if unavailable.
 
+Other terminals and scripts can discover the selected endpoint:
+
+```bash
+deepseek-crawl gateway url
+deepseek-crawl gateway status --json
+```
+
+When one instance is running, `gateway url` prints its URL directly. Multiple
+instances require `gateway url --port 8788`. Runtime state stores only PID, URL,
+start time, and mode, never provider keys. `gateway status` verifies `/healthz`
+and prunes stale state.
+
 The client usually only needs the gateway URL:
 
 ```bash

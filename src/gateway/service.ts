@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
-import { chmod, lstat, mkdir, readFile, rm } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { writeFileAtomic } from "../output/files.js";
 import type { GatewayProviderMode } from "./config.js";
 
 const SERVICE_LABEL = "com.jsogn.deepseek-crawl.gateway";
+const WINDOWS_TASK_NAME = "DeepSeek Crawl Gateway";
 const CLOUD_API_URL = "https://api.firecrawl.dev";
 const HEALTH_POLL_MS = 250;
 const DEFAULT_HEALTH_TIMEOUT_MS = 15_000;
@@ -39,7 +40,7 @@ export interface GatewayServicePaths {
   serviceDirectory: string;
   launcherPath: string;
   statePath: string;
-  plistPath: string;
+  serviceDefinitionPath: string;
   logsDirectory: string;
   firecrawlCredentialsPath: string;
 }
@@ -149,31 +150,45 @@ function validatePort(value: unknown): number {
 export function resolveGatewayServicePaths(
   home: string,
   platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
 ): GatewayServicePaths {
-  if (platform !== "darwin") {
-    throw new Error("Managed Gateway services are currently supported on macOS only.");
-  }
-  const serviceDirectory = join(
-    home,
-    "Library",
-    "Application Support",
-    "deepseek-crawl",
-    "gateway",
-  );
-  return {
-    serviceDirectory,
-    launcherPath: join(serviceDirectory, "gateway-service.sh"),
-    statePath: join(serviceDirectory, "service.json"),
-    plistPath: join(home, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`),
-    logsDirectory: join(home, "Library", "Logs", "deepseek-crawl"),
-    firecrawlCredentialsPath: join(
+  if (platform === "darwin") {
+    const serviceDirectory = join(
       home,
       "Library",
       "Application Support",
-      "firecrawl-cli",
-      "credentials.json",
-    ),
-  };
+      "deepseek-crawl",
+      "gateway",
+    );
+    return {
+      serviceDirectory,
+      launcherPath: join(serviceDirectory, "gateway-service.sh"),
+      statePath: join(serviceDirectory, "service.json"),
+      serviceDefinitionPath: join(home, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`),
+      logsDirectory: join(home, "Library", "Logs", "deepseek-crawl"),
+      firecrawlCredentialsPath: join(
+        home,
+        "Library",
+        "Application Support",
+        "firecrawl-cli",
+        "credentials.json",
+      ),
+    };
+  }
+  if (platform === "win32") {
+    const appData = env.APPDATA?.trim() || join(home, "AppData", "Roaming");
+    const localAppData = env.LOCALAPPDATA?.trim() || join(home, "AppData", "Local");
+    const serviceDirectory = join(appData, "deepseek-crawl", "gateway");
+    return {
+      serviceDirectory,
+      launcherPath: join(serviceDirectory, "gateway-service.cmd"),
+      statePath: join(serviceDirectory, "service.json"),
+      serviceDefinitionPath: join(serviceDirectory, "gateway-task.xml"),
+      logsDirectory: join(localAppData, "deepseek-crawl", "logs"),
+      firecrawlCredentialsPath: join(appData, "firecrawl-cli", "credentials.json"),
+    };
+  }
+  throw new Error("Managed Gateway services are supported on macOS and Windows only.");
 }
 
 async function fileExists(path: string): Promise<boolean> {
@@ -312,6 +327,73 @@ async function writeServiceFiles(
 ): Promise<void> {
   await mkdir(paths.serviceDirectory, { recursive: true, mode: 0o700 });
   await mkdir(paths.logsDirectory, { recursive: true, mode: 0o700 });
+  if (context.platform === "win32") {
+    const launcher = [
+      "@echo off",
+      `"${context.nodePath}" "${context.cliPath}" gateway --provider-mode ${state.providerMode} --port ${state.port} 1>>"${join(paths.logsDirectory, "gateway.log")}" 2>>"${join(paths.logsDirectory, "gateway.err.log")}"`,
+      "",
+    ].join("\r\n");
+    await writeFileAtomic(paths.launcherPath, launcher, { mode: 0o600 });
+    const user = await (await commandRunner(context))("whoami", ["/user", "/fo", "csv", "/nh"]);
+    const sid = user.stdout.match(/S-\d-(?:\d+-)+\d+/)?.[0];
+    if (user.exitCode !== 0 || !sid) {
+      throw new Error("Could not determine the current Windows user SID.");
+    }
+    const taskArguments = `/d /c ""${paths.launcherPath}""`;
+    const taskXml = `<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>deepseek-crawl</Author>
+    <Description>Run the DeepSeek Crawl Firecrawl-compatible Gateway.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>${sid}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>true</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>3</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>cmd.exe</Command>
+      <Arguments>${xmlEscape(taskArguments)}</Arguments>
+      <WorkingDirectory>${xmlEscape(paths.serviceDirectory)}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
+`;
+    await writeFile(paths.serviceDefinitionPath, `\ufeff${taskXml}`, {
+      encoding: "utf16le",
+      mode: 0o600,
+    });
+    await writeServiceState(paths.statePath, state);
+    return;
+  }
+
   const launcher = [
     "#!/bin/sh",
     "set -eu",
@@ -353,7 +435,7 @@ async function writeServiceFiles(
 </dict>
 </plist>
 `;
-  await writeFileAtomic(paths.plistPath, plist, { mode: 0o644 });
+  await writeFileAtomic(paths.serviceDefinitionPath, plist, { mode: 0o644 });
   await writeServiceState(paths.statePath, state);
 }
 
@@ -365,28 +447,64 @@ async function commandRunner(context: GatewayServiceContext): Promise<GatewayCom
   return context.runCommand ?? runCommand;
 }
 
-async function launchctlInfo(
-  context: GatewayServiceContext,
-): Promise<{ loaded: boolean; pid?: number }> {
+interface ServiceRuntimeInfo {
+  exists: boolean;
+  running: boolean;
+  pid?: number;
+}
+
+async function serviceRuntimeInfo(context: GatewayServiceContext): Promise<ServiceRuntimeInfo> {
+  if (context.platform === "win32") {
+    const result = await (await commandRunner(context))("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `$task = Get-ScheduledTask -TaskName '${WINDOWS_TASK_NAME}' -ErrorAction SilentlyContinue; if ($null -eq $task) { exit 1 }; [Console]::Out.Write($task.State)`,
+    ]);
+    if (result.exitCode !== 0) {
+      return { exists: false, running: false };
+    }
+    const state = result.stdout.trim().toLowerCase();
+    return {
+      exists: true,
+      running: state === "running",
+    };
+  }
+
   const result = await (await commandRunner(context))("launchctl", [
     "print",
     launchctlTarget(context),
   ]);
   if (result.exitCode !== 0) {
-    return { loaded: false };
+    return { exists: false, running: false };
   }
   const pidMatch = result.stdout.match(/^\s*pid\s*=\s*(\d+)\s*$/m);
   return {
-    loaded: true,
+    exists: true,
+    running: /^\s*state\s*=\s*running\s*$/m.test(result.stdout),
     ...(pidMatch ? { pid: Number(pidMatch[1]) } : {}),
   };
 }
 
-async function bootout(context: GatewayServiceContext): Promise<void> {
-  const result = await (await commandRunner(context))("launchctl", [
-    "bootout",
-    launchctlTarget(context),
-  ]);
+async function stopService(context: GatewayServiceContext): Promise<void> {
+  const runner = await commandRunner(context);
+  if (context.platform === "win32") {
+    const info = await serviceRuntimeInfo(context);
+    if (!info.exists) {
+      return;
+    }
+    const disabled = await runner("schtasks", ["/Change", "/TN", WINDOWS_TASK_NAME, "/DISABLE"]);
+    if (disabled.exitCode !== 0 && !/not found|does not exist/i.test(disabled.stderr)) {
+      throw new Error(disabled.stderr.trim() || "Could not disable the Gateway task.");
+    }
+    const ended = await runner("schtasks", ["/End", "/TN", WINDOWS_TASK_NAME]);
+    if (ended.exitCode !== 0 && !/not running|not found|does not exist/i.test(ended.stderr)) {
+      throw new Error(ended.stderr.trim() || "Could not stop the Gateway task.");
+    }
+    return;
+  }
+
+  const result = await runner("launchctl", ["bootout", launchctlTarget(context)]);
   if (
     result.exitCode !== 0 &&
     !/could not find|no such process|not found/i.test(`${result.stdout}\n${result.stderr}`)
@@ -399,7 +517,8 @@ async function waitForStopped(context: GatewayServiceContext): Promise<void> {
   const delay = context.wait ?? wait;
   const deadline = Date.now() + STOP_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (!(await launchctlInfo(context)).loaded) {
+    const info = await serviceRuntimeInfo(context);
+    if (!info.exists || !info.running) {
       return;
     }
     await delay(STOP_POLL_MS);
@@ -408,8 +527,61 @@ async function waitForStopped(context: GatewayServiceContext): Promise<void> {
 }
 
 async function bootoutAndWait(context: GatewayServiceContext): Promise<void> {
-  await bootout(context);
+  await stopService(context);
   await waitForStopped(context);
+}
+
+async function startService(
+  context: GatewayServiceContext,
+  paths: GatewayServicePaths,
+): Promise<void> {
+  const runner = await commandRunner(context);
+  if (context.platform === "win32") {
+    const created = await runner("schtasks", [
+      "/Create",
+      "/TN",
+      WINDOWS_TASK_NAME,
+      "/XML",
+      paths.serviceDefinitionPath,
+      "/F",
+    ]);
+    if (created.exitCode !== 0) {
+      throw new Error(created.stderr.trim() || "Could not register the Gateway task.");
+    }
+    const enabled = await runner("schtasks", ["/Change", "/TN", WINDOWS_TASK_NAME, "/ENABLE"]);
+    if (enabled.exitCode !== 0) {
+      throw new Error(enabled.stderr.trim() || "Could not enable the Gateway task.");
+    }
+    const started = await runner("schtasks", ["/Run", "/TN", WINDOWS_TASK_NAME]);
+    if (started.exitCode !== 0) {
+      throw new Error(started.stderr.trim() || "Could not start the Gateway task.");
+    }
+    return;
+  }
+
+  const started = await runner("launchctl", [
+    "bootstrap",
+    `gui/${context.uid}`,
+    paths.serviceDefinitionPath,
+  ]);
+  if (started.exitCode !== 0) {
+    throw new Error(started.stderr.trim() || "Could not start the Gateway service.");
+  }
+}
+
+async function deleteRegisteredService(context: GatewayServiceContext): Promise<void> {
+  if (context.platform !== "win32") {
+    return;
+  }
+  const result = await (await commandRunner(context))("schtasks", [
+    "/Delete",
+    "/TN",
+    WINDOWS_TASK_NAME,
+    "/F",
+  ]);
+  if (result.exitCode !== 0 && !/not found|does not exist/i.test(result.stderr)) {
+    throw new Error(result.stderr.trim() || "Could not delete the Gateway task.");
+  }
 }
 
 async function waitForHealthy(
@@ -422,8 +594,8 @@ async function waitForHealthy(
   const deadline = Date.now() + (context.healthTimeoutMs ?? DEFAULT_HEALTH_TIMEOUT_MS);
   let lastError = "Gateway did not become healthy.";
   while (Date.now() < deadline) {
-    const service = await launchctlInfo(context);
-    if (service.loaded && service.pid !== undefined) {
+    const service = await serviceRuntimeInfo(context);
+    if (service.running) {
       try {
         const response = await fetchImpl(new URL("healthz", `${localGatewayUrl(port)}/`), {
           signal: AbortSignal.timeout(750),
@@ -436,7 +608,7 @@ async function waitForHealthy(
         if (
           response.ok &&
           health.status === "ok" &&
-          health.pid === service.pid &&
+          (context.platform === "win32" || health.pid === service.pid) &&
           health.provider_mode === providerMode
         ) {
           return;
@@ -461,15 +633,7 @@ async function startFromState(
   state.desiredRunning = true;
   await writeServiceFiles(context, paths, state);
   await bootoutAndWait(context);
-  const runner = await commandRunner(context);
-  const bootstrapped = await runner("launchctl", [
-    "bootstrap",
-    `gui/${context.uid}`,
-    paths.plistPath,
-  ]);
-  if (bootstrapped.exitCode !== 0) {
-    throw new Error(bootstrapped.stderr.trim() || "Could not start the Gateway service.");
-  }
+  await startService(context, paths);
   try {
     await waitForHealthy(context, state.port, state.providerMode);
     await setFirecrawlApiUrl(paths.firecrawlCredentialsPath, localGatewayUrl(state.port));
@@ -493,17 +657,17 @@ function unsupportedStatus(): GatewayServiceStatus {
     gateway_url: null,
     client_api_url: null,
     service_path: null,
-    issues: ["Managed Gateway services are currently supported on macOS only."],
+    issues: ["Managed Gateway services are supported on macOS and Windows only."],
   };
 }
 
 export async function getGatewayServiceStatus(
   context: GatewayServiceContext,
 ): Promise<GatewayServiceStatus> {
-  if (context.platform !== "darwin") {
+  if (context.platform !== "darwin" && context.platform !== "win32") {
     return unsupportedStatus();
   }
-  const paths = resolveGatewayServicePaths(context.home, context.platform);
+  const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const state = await readServiceState(paths.statePath);
   if (!state) {
     return {
@@ -521,15 +685,15 @@ export async function getGatewayServiceStatus(
     };
   }
 
-  const [launchctl, clientApiUrl, launcherExists, plistExists] = await Promise.all([
-    launchctlInfo(context),
+  const [runtime, clientApiUrl, launcherExists, definitionExists] = await Promise.all([
+    serviceRuntimeInfo(context),
     currentFirecrawlApiUrl(paths.firecrawlCredentialsPath),
     fileExists(paths.launcherPath),
-    fileExists(paths.plistPath),
+    fileExists(paths.serviceDefinitionPath),
   ]);
   const expectedUrl = localGatewayUrl(state.port);
   let healthy = false;
-  if (launchctl.loaded && launchctl.pid !== undefined) {
+  if (runtime.running) {
     try {
       const response = await (context.fetchImpl ?? fetch)(new URL("healthz", `${expectedUrl}/`), {
         signal: AbortSignal.timeout(750),
@@ -542,7 +706,7 @@ export async function getGatewayServiceStatus(
       healthy =
         response.ok &&
         health.status === "ok" &&
-        health.pid === launchctl.pid &&
+        (context.platform === "win32" || health.pid === runtime.pid) &&
         health.provider_mode === state.providerMode;
     } catch {
       healthy = false;
@@ -550,12 +714,12 @@ export async function getGatewayServiceStatus(
   }
   const clientTargetsGateway = normalizedUrl(clientApiUrl) === normalizedUrl(expectedUrl);
   const issues: string[] = [];
-  if (!launcherExists || !plistExists) {
+  if (!launcherExists || !definitionExists) {
     issues.push("Managed service files are missing. Run `gateway install` again.");
   }
-  if (state.desiredRunning && !launchctl.loaded) {
+  if (state.desiredRunning && !runtime.running) {
     issues.push("Gateway service is not running.");
-  } else if (state.desiredRunning && launchctl.loaded && !healthy) {
+  } else if (state.desiredRunning && runtime.running && !healthy) {
     issues.push("Gateway service is running but unhealthy.");
   }
   if (state.desiredRunning && clientTargetsGateway && !healthy) {
@@ -564,20 +728,20 @@ export async function getGatewayServiceStatus(
   if (state.desiredRunning && healthy && !clientTargetsGateway) {
     issues.push("Firecrawl CLI is not targeting the managed Gateway.");
   }
-  if (!state.desiredRunning && launchctl.loaded) {
+  if (!state.desiredRunning && runtime.running) {
     issues.push("Gateway service is running while marked as stopped.");
   }
   return {
     supported: true,
-    installed: launcherExists && plistExists,
+    installed: launcherExists && definitionExists,
     desired_running: state.desiredRunning,
-    running: launchctl.loaded,
+    running: runtime.running,
     healthy,
     client_targets_gateway: clientTargetsGateway,
     provider_mode: state.providerMode,
     gateway_url: `${expectedUrl}/`,
     client_api_url: normalizedUrl(clientApiUrl),
-    service_path: paths.plistPath,
+    service_path: paths.serviceDefinitionPath,
     issues,
   };
 }
@@ -586,10 +750,10 @@ export async function installGatewayService(
   context: GatewayServiceContext,
   options: { providerMode: GatewayProviderMode; port: number },
 ): Promise<GatewayServiceStatus> {
-  if (context.platform !== "darwin") {
-    throw new Error("Managed Gateway services are currently supported on macOS only.");
+  if (context.platform !== "darwin" && context.platform !== "win32") {
+    throw new Error("Managed Gateway services are supported on macOS and Windows only.");
   }
-  const paths = resolveGatewayServicePaths(context.home, context.platform);
+  const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const existing = await readServiceState(paths.statePath);
   const credentials = await readFirecrawlCredentials(paths.firecrawlCredentialsPath);
   if (!credentials) {
@@ -613,7 +777,8 @@ export async function installGatewayService(
       paths.firecrawlCredentialsPath,
       state.originalFirecrawlApiUrl,
     ).catch(() => undefined);
-    await rm(paths.plistPath, { force: true }).catch(() => undefined);
+    await deleteRegisteredService(context).catch(() => undefined);
+    await rm(paths.serviceDefinitionPath, { force: true }).catch(() => undefined);
     await rm(paths.launcherPath, { force: true }).catch(() => undefined);
     await rm(paths.statePath, { force: true }).catch(() => undefined);
     throw error;
@@ -623,10 +788,10 @@ export async function installGatewayService(
 export async function startGatewayService(
   context: GatewayServiceContext,
 ): Promise<GatewayServiceStatus> {
-  if (context.platform !== "darwin") {
-    throw new Error("Managed Gateway services are currently supported on macOS only.");
+  if (context.platform !== "darwin" && context.platform !== "win32") {
+    throw new Error("Managed Gateway services are supported on macOS and Windows only.");
   }
-  const paths = resolveGatewayServicePaths(context.home, context.platform);
+  const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const state = await readServiceState(paths.statePath);
   if (!state) {
     throw new Error("Managed Gateway service is not installed. Run `gateway install` first.");
@@ -637,10 +802,10 @@ export async function startGatewayService(
 export async function stopGatewayService(
   context: GatewayServiceContext,
 ): Promise<GatewayServiceStatus> {
-  if (context.platform !== "darwin") {
-    throw new Error("Managed Gateway services are currently supported on macOS only.");
+  if (context.platform !== "darwin" && context.platform !== "win32") {
+    throw new Error("Managed Gateway services are supported on macOS and Windows only.");
   }
-  const paths = resolveGatewayServicePaths(context.home, context.platform);
+  const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const state = await readServiceState(paths.statePath);
   if (!state) {
     return getGatewayServiceStatus(context);
@@ -658,13 +823,14 @@ export async function stopGatewayService(
 export async function uninstallGatewayService(
   context: GatewayServiceContext,
 ): Promise<GatewayServiceStatus> {
-  if (context.platform !== "darwin") {
-    throw new Error("Managed Gateway services are currently supported on macOS only.");
+  if (context.platform !== "darwin" && context.platform !== "win32") {
+    throw new Error("Managed Gateway services are supported on macOS and Windows only.");
   }
-  const paths = resolveGatewayServicePaths(context.home, context.platform);
+  const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const state = await readServiceState(paths.statePath);
   try {
     await bootoutAndWait(context);
+    await deleteRegisteredService(context);
   } finally {
     if (state) {
       await restoreFirecrawlApiUrl(paths.firecrawlCredentialsPath, state.originalFirecrawlApiUrl);
@@ -680,7 +846,7 @@ export async function uninstallGatewayService(
       }
     }
   }
-  await rm(paths.plistPath, { force: true });
+  await rm(paths.serviceDefinitionPath, { force: true });
   await rm(paths.serviceDirectory, { recursive: true, force: true });
   await rm(paths.logsDirectory, { recursive: true, force: true });
   return getGatewayServiceStatus(context);

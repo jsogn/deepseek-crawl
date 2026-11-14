@@ -68,6 +68,59 @@ class FakeLaunchctl {
   };
 }
 
+class FakeWindowsScheduler {
+  registered = false;
+  enabled = false;
+  running = false;
+  readonly calls: string[][] = [];
+
+  readonly run: GatewayCommandRunner = async (command, args) => {
+    this.calls.push([command, ...args]);
+    if (command === "whoami") {
+      return {
+        exitCode: 0,
+        stdout: '"DOMAIN\\\\runner","S-1-5-21-1000-1001-1002-1003"\r\n',
+        stderr: "",
+      };
+    }
+    if (command === "powershell.exe") {
+      if (!this.registered) {
+        return { exitCode: 1, stdout: "", stderr: "Task not found." };
+      }
+      const state = this.running ? "Running" : this.enabled ? "Ready" : "Disabled";
+      return { exitCode: 0, stdout: state, stderr: "" };
+    }
+    if (command !== "schtasks") {
+      throw new Error(`Unexpected command: ${command}`);
+    }
+    const action = args[0]?.toLowerCase();
+    if (action === "/create") {
+      this.registered = true;
+      this.enabled = true;
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    if (action === "/change") {
+      this.enabled = args.some((argument) => argument.toUpperCase() === "/ENABLE");
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    if (action === "/run") {
+      this.running = true;
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    if (action === "/end") {
+      this.running = false;
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    if (action === "/delete") {
+      this.registered = false;
+      this.enabled = false;
+      this.running = false;
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    throw new Error(`Unexpected schtasks arguments: ${args.join(" ")}`);
+  };
+}
+
 async function fixture() {
   const home = await mkdtemp(join(tmpdir(), "deepseek-crawl-service-"));
   temporaryDirectories.push(home);
@@ -100,6 +153,42 @@ async function fixture() {
   return { context, launchctl, paths };
 }
 
+async function windowsFixture() {
+  const home = await mkdtemp(join(tmpdir(), "deepseek-crawl-service-windows-"));
+  temporaryDirectories.push(home);
+  const env = {
+    APPDATA: join(home, "AppData", "Roaming"),
+    LOCALAPPDATA: join(home, "AppData", "Local"),
+  };
+  const paths = resolveGatewayServicePaths(home, "win32", env);
+  await mkdir(dirname(paths.firecrawlCredentialsPath), { recursive: true });
+  await writeFile(
+    paths.firecrawlCredentialsPath,
+    `${JSON.stringify({ apiKey: "fc-windows", apiUrl: CLOUD_API_URL }, null, 2)}\n`,
+    { encoding: "utf8", mode: 0o600 },
+  );
+  const scheduler = new FakeWindowsScheduler();
+  const context: GatewayServiceContext = {
+    home,
+    platform: "win32",
+    uid: 0,
+    nodePath: "C:\\Program Files\\nodejs\\node.exe",
+    cliPath:
+      "C:\\Users\\Test User\\AppData\\Roaming\\npm\\node_modules\\deepseek-crawl\\dist\\bin.js",
+    env,
+    runCommand: scheduler.run,
+    fetchImpl: async () =>
+      Response.json({
+        status: "ok",
+        pid: 5151,
+        provider_mode: "deepseek-first",
+      }),
+    wait: async () => undefined,
+    healthTimeoutMs: 1_000,
+  };
+  return { context, paths, scheduler };
+}
+
 describe("managed Gateway service", () => {
   it("installs a persistent service and points the Firecrawl CLI at it", async () => {
     const { context, launchctl, paths } = await fixture();
@@ -123,7 +212,7 @@ describe("managed Gateway service", () => {
     expect(await readFile(paths.launcherPath, "utf8")).toContain(
       "/Users/Test User/.nvm/versions/node/v22.23.4/bin/node",
     );
-    expect(await readFile(paths.plistPath, "utf8")).toContain("<key>KeepAlive</key>");
+    expect(await readFile(paths.serviceDefinitionPath, "utf8")).toContain("<key>KeepAlive</key>");
     expect(await readFile(paths.statePath, "utf8")).not.toContain("fc-secret");
     expect((await stat(paths.firecrawlCredentialsPath)).mode & 0o777).toBe(0o600);
     expect(JSON.parse(await readFile(paths.firecrawlCredentialsPath, "utf8"))).toMatchObject({
@@ -176,7 +265,9 @@ describe("managed Gateway service", () => {
       running: false,
       client_targets_gateway: false,
     });
-    await expect(readFile(paths.plistPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(paths.serviceDefinitionPath, "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     await expect(readFile(paths.launcherPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     await expect(lstat(paths.logsDirectory)).rejects.toMatchObject({ code: "ENOENT" });
     const credentials = JSON.parse(await readFile(paths.firecrawlCredentialsPath, "utf8"));
@@ -234,7 +325,7 @@ describe("managed Gateway service", () => {
     expect(JSON.parse(await readFile(paths.firecrawlCredentialsPath, "utf8")).apiUrl).toBe(
       CLOUD_API_URL,
     );
-    await expect(lstat(paths.plistPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(paths.serviceDefinitionPath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(lstat(paths.statePath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -249,6 +340,73 @@ describe("managed Gateway service", () => {
     await installGatewayService(context, { providerMode: "deepseek-first", port: 8787 });
     await uninstallGatewayService(context);
 
+    expect(JSON.parse(await readFile(paths.firecrawlCredentialsPath, "utf8")).apiUrl).toBe(
+      CLOUD_API_URL,
+    );
+  });
+});
+
+describe("managed Windows Gateway service", () => {
+  it("installs a per-user scheduled task and points the Firecrawl CLI at it", async () => {
+    const { context, paths, scheduler } = await windowsFixture();
+
+    const status = await installGatewayService(context, {
+      providerMode: "deepseek-first",
+      port: 8787,
+    });
+
+    expect(status).toMatchObject({
+      supported: true,
+      installed: true,
+      desired_running: true,
+      running: true,
+      healthy: true,
+      client_targets_gateway: true,
+      provider_mode: "deepseek-first",
+      gateway_url: `${LOCAL_API_URL}/`,
+    });
+    expect(await readFile(paths.launcherPath, "utf8")).toContain("@echo off");
+    const taskXml = await readFile(paths.serviceDefinitionPath, "utf16le");
+    expect(taskXml).toContain("<Task version=");
+    expect(taskXml).toContain("<UserId>S-1-5-21-1000-1001-1002-1003</UserId>");
+    expect(scheduler.calls.some((call) => call[1]?.toLowerCase() === "/create")).toBe(true);
+    expect(JSON.parse(await readFile(paths.firecrawlCredentialsPath, "utf8"))).toMatchObject({
+      apiKey: "fc-windows",
+      apiUrl: LOCAL_API_URL,
+    });
+  });
+
+  it("stops, restarts, and fully uninstalls the Windows task", async () => {
+    const { context, paths, scheduler } = await windowsFixture();
+    await installGatewayService(context, { providerMode: "deepseek-first", port: 8787 });
+
+    const stopped = await stopGatewayService(context);
+    expect(stopped).toMatchObject({
+      desired_running: false,
+      running: false,
+      client_targets_gateway: false,
+      issues: [],
+    });
+    expect(JSON.parse(await readFile(paths.firecrawlCredentialsPath, "utf8")).apiUrl).toBe(
+      CLOUD_API_URL,
+    );
+
+    const started = await startGatewayService(context);
+    expect(started).toMatchObject({
+      desired_running: true,
+      running: true,
+      healthy: true,
+      client_targets_gateway: true,
+    });
+
+    const uninstalled = await uninstallGatewayService(context);
+    expect(uninstalled).toMatchObject({
+      installed: false,
+      running: false,
+      client_targets_gateway: false,
+    });
+    expect(scheduler.registered).toBe(false);
+    await expect(lstat(paths.serviceDefinitionPath)).rejects.toMatchObject({ code: "ENOENT" });
     expect(JSON.parse(await readFile(paths.firecrawlCredentialsPath, "utf8")).apiUrl).toBe(
       CLOUD_API_URL,
     );

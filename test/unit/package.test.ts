@@ -88,6 +88,7 @@ describe("package documentation", () => {
       "gateway stop",
       "gateway uninstall",
       "launchd",
+      "Task Scheduler",
       "test:live:gateway",
       "--matrix",
       "--crawl",

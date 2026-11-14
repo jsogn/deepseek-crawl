@@ -6,6 +6,7 @@
 
 - Add managed macOS Gateway lifecycle commands: `gateway install`, `start`,
   `stop`, and `uninstall`.
+- Add Windows parity through a per-user Task Scheduler service.
 - Point the Firecrawl CLI at the managed Gateway after a successful health
   check, with original API URL backup and automatic restoration.
 - Report managed service and Firecrawl CLI binding drift from `gateway status`.

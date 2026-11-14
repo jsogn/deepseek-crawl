@@ -338,7 +338,7 @@ credential. DeepSeek credentials continue to use the existing
 Local mode starts at `8787`, tries subsequent ports when it is occupied, and
 prints the actual URL. An explicit `--port` is strict and fails if unavailable.
 
-### Managed transparent proxy on macOS
+### Managed transparent proxy on macOS and Windows
 
 To let AI clients keep invoking the ordinary `firecrawl` CLI/Skill without
 setting `FIRECRAWL_API_URL` on every command, install the managed service:
@@ -347,10 +347,11 @@ setting `FIRECRAWL_API_URL` on every command, install the managed service:
 deepseek-crawl gateway install --provider-mode deepseek-first --port 8787
 ```
 
-Installation starts a `launchd` service, waits for a healthy Gateway, then
-points the Firecrawl CLI persistent `apiUrl` at the local Gateway. The original
-API URL is backed up. Subsequent `firecrawl scrape/search/map/crawl` calls are
-transparently routed through the selected provider policy.
+macOS uses `launchd`; Windows uses a per-user Task Scheduler task. Installation
+starts the background service, waits for a healthy Gateway, then points the
+Firecrawl CLI persistent `apiUrl` at the local Gateway. The original API URL is
+backed up. Subsequent `firecrawl scrape/search/map/crawl` calls are transparently
+routed through the selected provider policy.
 
 ```bash
 deepseek-crawl gateway status --json
@@ -361,9 +362,9 @@ deepseek-crawl gateway uninstall  # restore configuration and remove managed fil
 
 `stop` restores the original Firecrawl API URL so the CLI never keeps pointing
 at a dead local port. The managed flow changes only the current user's Firecrawl
-CLI configuration and LaunchAgent; it does not edit `hosts`, DNS, system proxy
-settings, or TLS certificates. A client that hard-codes the Firecrawl SDK
-`apiUrl` must still target the local Gateway itself.
+CLI configuration and user-level background task; it does not edit `hosts`, DNS,
+system proxy settings, or TLS certificates. A client that hard-codes the
+Firecrawl SDK `apiUrl` must still target the local Gateway itself.
 
 Provider mode defaults to `firecrawl-first` and can be set by CLI or
 environment:

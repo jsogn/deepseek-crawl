@@ -160,12 +160,12 @@ Firecrawl SDK `apiKey` to the gateway token. The gateway removes that incoming
 Authorization value before requesting Firecrawl and uses its stored Firecrawl
 credential.
 
-On macOS, `gateway install` creates a user LaunchAgent, starts the service,
-waits for `/healthz`, and then points the Firecrawl CLI persistent `apiUrl` at
-the managed Gateway. The original API URL is stored in managed state.
-`gateway stop` restores that URL, while `gateway uninstall` also removes the
-LaunchAgent, launcher, state, and logs. This lifecycle changes no DNS, `hosts`,
-system proxy, or TLS settings.
+`gateway install` creates a user LaunchAgent on macOS or a per-user Scheduled
+Task on Windows, starts the service, waits for `/healthz`, and then points the
+Firecrawl CLI persistent `apiUrl` at the managed Gateway. The original API URL
+is stored in managed state. `gateway stop` restores that URL, while
+`gateway uninstall` also removes the task, launcher, state, and logs. This
+lifecycle changes no DNS, `hosts`, system proxy, or TLS settings.
 
 The gateway supports these common routes:
 

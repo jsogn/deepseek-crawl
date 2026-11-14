@@ -363,8 +363,8 @@ actual SDK apiUrl after choosing an available port.
 `,
   "gateway install": `Usage: deepseek-crawl gateway install [options]
 
-Install and start a managed background Gateway on macOS, then point the
-Firecrawl CLI at it. The original Firecrawl CLI API URL is saved so stop and
+Install and start a managed background Gateway on macOS or Windows, then point
+the Firecrawl CLI at it. The original Firecrawl CLI API URL is saved so stop and
 uninstall can restore it.
 
 Options:

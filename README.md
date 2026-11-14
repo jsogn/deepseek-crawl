@@ -317,17 +317,18 @@ deepseek-crawl gateway
 本地默认从 `8787` 开始寻找可用端口，冲突时自动尝试下一个，并打印实际地址。
 指定 `--port` 时该端口变为严格固定；被占用会直接失败。
 
-### macOS 透明代理托管
+### macOS / Windows 透明代理托管
 
 如果希望 AI 继续原样调用 `firecrawl` CLI/Skill，不需要每条命令设置
-`FIRECRAWL_API_URL`，可在 macOS 上安装受管理服务：
+`FIRECRAWL_API_URL`，可安装受管理服务：
 
 ```bash
 deepseek-crawl gateway install --provider-mode deepseek-first --port 8787
 ```
 
-安装命令会启动 `launchd` 服务，健康检查通过后才把 Firecrawl CLI 的持久
-`apiUrl` 指向本地 Gateway，并备份原 API URL。AI 后续直接运行
+macOS 使用 `launchd`，Windows 使用当前用户级 Task Scheduler。安装命令会启动
+后台服务，健康检查通过后才把 Firecrawl CLI 的持久 `apiUrl` 指向本地 Gateway，
+并备份原 API URL。AI 后续直接运行
 `firecrawl scrape/search/map/crawl` 即可透明走 DeepSeek 优先策略。
 
 ```bash
@@ -338,7 +339,7 @@ deepseek-crawl gateway uninstall  # 恢复配置并清理 LaunchAgent、日志�
 ```
 
 `stop` 默认恢复原 Firecrawl API URL，避免留下指向失效本地端口的配置。
-该托管方式仅修改当前用户的 Firecrawl CLI 配置和 LaunchAgent，不修改
+该托管方式仅修改当前用户的 Firecrawl CLI 配置和用户级后台任务，不修改
 `hosts`、DNS、系统代理或 TLS 证书。直接写死 Firecrawl SDK `apiUrl` 的客户端
 仍需自行配置本地地址。
 

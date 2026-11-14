@@ -45,6 +45,7 @@ Version `0.7.0` provides:
 - Batch Fetch and Crawl can retry only failed items from an existing report.
 - Fetch, Batch, Crawl, Plan, and Retry can share an explicit-TTL local page cache.
 - Fetch, Batch, and Crawl expose stable `content_hash`; Crawl can compare a baseline and write only changed pages.
+- Crawl supports durable jobs, per-page checkpoints, `crawl resume`, and `crawl status`.
 
 The project is open source under the MIT License.
 
@@ -162,6 +163,8 @@ deepseek-crawl search <query> [options]
 deepseek-crawl fetch <url> [options]
 deepseek-crawl map <url> [--search <text>] [options]
 deepseek-crawl crawl <url> -o <dir> [options]
+deepseek-crawl crawl resume <job-dir> -o <dir> [options]
+deepseek-crawl crawl status <job-dir> [--json]
 deepseek-crawl doctor [--live] [--json]
 deepseek-crawl setup skills [options]
 deepseek-crawl auth set
@@ -349,6 +352,7 @@ deepseek-crawl crawl <url> -o <dir>
   [--fresh]
   [--baseline <crawl.json|dir>]
   [--changed-only]
+  [--job-dir <dir>]
   [--json]
 ```
 
@@ -459,6 +463,36 @@ scope.
 the report and stats with `pages[].written: false` and no `path`. This first
 incremental version still reads content or resolves it from cache to compute
 hashes. Skipping fetches with Sitemap `lastmod` is a later optimization.
+
+Resumable Crawl:
+
+```bash
+deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
+  --max-depth 2 \
+  --max-pages 50 \
+  --job-dir .deepseek-crawl/jobs/deepseek-docs \
+  --cache-ttl 3600 \
+  -o .deepseek-crawl/crawl-deepseek-guides
+
+deepseek-crawl crawl status .deepseek-crawl/jobs/deepseek-docs --json
+
+deepseek-crawl crawl resume \
+  .deepseek-crawl/jobs/deepseek-docs \
+  --cache-ttl 3600 \
+  -o .deepseek-crawl/crawl-deepseek-guides
+```
+
+With `--job-dir`, page files are stored in the job directory and `job.json` is
+atomically checkpointed after seed discovery and after every page. It records
+options, seen/frontier, the active layer, pages, failures, warnings, and next
+page index. Interruptions keep the job. Resume skips the completed seed and
+Sitemap reread, continues only unfinished URLs in the active layer, and
+atomically publishes the final output.
+
+Jobs use versioned `job.json`, `pages/`, and `writer.lock`. Only one writer may
+own a job. A stale PID lock is recoverable after abrupt termination; corrupted
+or incompatible jobs fail explicitly. `--job-dir` is temporarily incompatible
+with `--plan-only`, `--baseline`, and Retry modes.
 
 Retry only failed Crawl pages:
 

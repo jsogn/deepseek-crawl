@@ -39,6 +39,7 @@ CLI + Skill。
 - Batch Fetch 和 Crawl 可从既有报告只重试失败项，避免重复读取成功页面。
 - Fetch、Batch、Crawl、Plan 和 Retry 可共享显式 TTL 的本地页面缓存。
 - Fetch、Batch 和 Crawl 输出稳定 `content_hash`，Crawl 可对比 baseline 只写变更页面。
+- Crawl 支持 durable job、逐页 checkpoint、`crawl resume` 和 `crawl status`。
 - macOS Keychain 或其他平台私有文件凭据存储。
 - `auth set`、`auth status`、`auth remove`。
 - 可选的四个 MCP 工具。
@@ -180,6 +181,8 @@ deepseek-crawl search <query> [options]
 deepseek-crawl fetch <url> [options]
 deepseek-crawl map <url> [--search <text>] [options]
 deepseek-crawl crawl <url> -o <dir> [options]
+deepseek-crawl crawl resume <job-dir> -o <dir> [options]
+deepseek-crawl crawl status <job-dir> [--json]
 deepseek-crawl doctor [--live] [--json]
 deepseek-crawl setup skills [options]
 deepseek-crawl auth set
@@ -359,6 +362,7 @@ deepseek-crawl crawl <url> -o <dir>
   [--fresh]
   [--baseline <crawl.json|dir>]
   [--changed-only]
+  [--job-dir <dir>]
   [--json]
 ```
 
@@ -460,6 +464,33 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
 `--changed-only` 只写入新增和修改页面。未变化页面仍保留在报告和统计中，但
 `pages[].written` 为 `false` 且没有 `path`。第一版增量 Crawl 仍会读取页面内容
 或命中缓存后计算 hash；Sitemap `lastmod` 跳过请求属于下一阶段优化。
+
+可恢复 Crawl：
+
+```bash
+deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
+  --max-depth 2 \
+  --max-pages 50 \
+  --job-dir .deepseek-crawl/jobs/deepseek-docs \
+  --cache-ttl 3600 \
+  -o .deepseek-crawl/crawl-deepseek-guides
+
+deepseek-crawl crawl status .deepseek-crawl/jobs/deepseek-docs --json
+
+deepseek-crawl crawl resume \
+  .deepseek-crawl/jobs/deepseek-docs \
+  --cache-ttl 3600 \
+  -o .deepseek-crawl/crawl-deepseek-guides
+```
+
+使用 `--job-dir` 时，页面文件写入 job 目录，`job.json` 在 seed discovery 后及每
+个页面完成后原子更新。作业保存 options、seen、frontier、active layer、页面、
+失败、warnings 和下一页码。中断不会删除 job；`resume` 跳过已完成的 seed 和
+Sitemap reread，只继续活动层中的未完成 URL，成功后原子发布到最终目录。
+
+job 使用版本化 `job.json`、`pages/` 和 `writer.lock`。同一 job 只允许一个 writer；
+进程异常退出后，下一个 `resume/status` 可以恢复失效的 PID 锁。损坏或版本不兼容的
+job 会明确失败。`--job-dir` 暂不与 `--plan-only`、`--baseline` 或 Retry 组合使用。
 
 只重试 Crawl 失败页面：
 

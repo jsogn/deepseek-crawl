@@ -198,6 +198,7 @@ deepseek-crawl crawl <url>
   [--fresh]
   [--baseline <crawl.json|dir>]
   [--changed-only]
+  [--job-dir <dir>]
   --output, -o <dir>
   [--json]
 
@@ -206,6 +207,14 @@ deepseek-crawl crawl --retry-failed <crawl.json>
   [--cache-ttl <1..31536000>]
   [--fresh]
   [--json]
+
+deepseek-crawl crawl resume <job-dir>
+  --output, -o <dir>
+  [--cache-ttl <1..31536000>]
+  [--fresh]
+  [--json]
+
+deepseek-crawl crawl status <job-dir> [--json]
 ```
 
 Defaults:
@@ -290,6 +299,42 @@ All fetched pages remain in the report:
 
 This version still reads pages or resolves cache entries to compute hashes.
 Sitemap `lastmod` request skipping is not part of this version.
+
+### Resumable Crawl Jobs
+
+Supply `--job-dir <new-dir>` on a normal Crawl to enable durable checkpoints.
+The job directory contains:
+
+```text
+job.json
+pages/
+writer.lock
+```
+
+`job.json` is checkpointed after seed discovery and after each page. It records
+the crawl options, counters, seen URLs, source provenance, frontier, active
+layer, pages, failures, warnings, and next index.
+
+Resume:
+
+```bash
+deepseek-crawl crawl resume job-dir -o final-output --cache-ttl 3600
+```
+
+Resume does not reread the seed page or Sitemap. It continues only unfinished
+URLs in the active layer and publishes the final output atomically. A completed
+job can be resumed to retry publication.
+
+Status without taking the writer lock:
+
+```bash
+deepseek-crawl crawl status job-dir --json
+```
+
+Only one writer may own a job. Stale `writer.lock` files whose PID is gone are
+recovered automatically. Invalid, incomplete, or incompatible job state fails
+explicitly. `--job-dir` is not currently combinable with Plan, Retry, baseline,
+or changed-only modes.
 
 ### Crawl Retry
 

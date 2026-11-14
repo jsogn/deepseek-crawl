@@ -247,6 +247,28 @@ Read `changes.added`, `changes.modified`, `changes.unchanged`, and
 the report still includes all fetched pages. This version still reads or
 cache-resolves pages to calculate content hashes.
 
+For long Crawls that must survive interruption, use a durable job:
+
+```bash
+deepseek-crawl crawl "<section-url>" \
+  --max-depth 2 \
+  --max-pages 50 \
+  --job-dir .deepseek-crawl/jobs/site-section \
+  --cache-ttl 3600 \
+  -o .deepseek-crawl/crawl-site-section
+
+deepseek-crawl crawl status .deepseek-crawl/jobs/site-section --json
+
+deepseek-crawl crawl resume \
+  .deepseek-crawl/jobs/site-section \
+  --cache-ttl 3600 \
+  -o .deepseek-crawl/crawl-site-section
+```
+
+Job mode checkpoints after every page and preserves the active frontier. Resume
+does not reread the seed or Sitemap and continues unfinished URLs. Keep using
+cache on resume to avoid unnecessary API calls for completed pages.
+
 ## Billing and Safety
 
 - Search, the seed page used by Map, and every successfully read Crawl page can

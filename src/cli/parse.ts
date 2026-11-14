@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 import type { CrawlSitemapMode } from "../crawl/types.js";
 import type { CredentialName } from "../credentials/store.js";
+import type { GatewayProviderMode } from "../gateway/config.js";
 import { parseSkillAgents, type SkillAgent } from "../setup/skills.js";
 
 export class CliUsageError extends Error {
@@ -152,6 +153,7 @@ export type ParsedCommand =
       remote: boolean;
       host?: string;
       port?: number;
+      providerMode?: GatewayProviderMode;
     }
   | { kind: "gateway-status"; json: boolean }
   | { kind: "gateway-url"; port?: number }
@@ -202,6 +204,18 @@ function parseCredential(value: string | undefined): CredentialName {
     throw new CliUsageError("Credential must be deepseek, firecrawl, or gateway.");
   }
   return credential as CredentialName;
+}
+
+function parseProviderMode(value: string | undefined): GatewayProviderMode | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!["firecrawl-first", "deepseek-first", "no-fallback"].includes(value)) {
+    throw new CliUsageError(
+      "Gateway provider mode must be firecrawl-first, deepseek-first, or no-fallback.",
+    );
+  }
+  return value as GatewayProviderMode;
 }
 
 function parseCacheOptions(
@@ -1023,6 +1037,7 @@ export function parseCli(argv: string[]): ParsedCommand {
           options: {
             host: { type: "string" },
             port: { type: "string" },
+            "provider-mode": { type: "string" },
             remote: { type: "boolean" },
             "allow-remote": { type: "boolean" },
             help: { type: "boolean", short: "h" },
@@ -1039,11 +1054,13 @@ export function parseCli(argv: string[]): ParsedCommand {
           parsed.values.port === undefined
             ? undefined
             : parseInteger(parsed.values.port, "port", 1, 65_535);
+        const providerMode = parseProviderMode(parsed.values["provider-mode"]);
         return {
           kind: "gateway",
           remote: parsed.values.remote ?? parsed.values["allow-remote"] ?? false,
           ...(host === undefined ? {} : { host }),
           ...(port === undefined ? {} : { port }),
+          ...(providerMode === undefined ? {} : { providerMode }),
         };
       }
       default:

@@ -477,8 +477,24 @@ export function createGatewayHandler(
       route?.kind === "crawl-cancel";
     const hasFirecrawl = hasFirecrawlCredential(request, dependencies.env, dependencies.config);
     const inCreditCooldown = now() < firecrawlExhaustedUntil;
-    const shouldTryDeepSeekFirst =
-      route !== undefined && (isLocalCrawlRoute || !hasFirecrawl || inCreditCooldown);
+    const providerMode = dependencies.config.providerMode ?? "firecrawl-first";
+    let shouldTryDeepSeekFirst = false;
+    if (isLocalCrawlRoute) {
+      shouldTryDeepSeekFirst = true;
+    } else if (route !== undefined && providerMode === "deepseek-first") {
+      shouldTryDeepSeekFirst = true;
+    } else if (route !== undefined && providerMode === "no-fallback" && !hasFirecrawl) {
+      sendJson(response, 503, {
+        success: false,
+        error: "No-fallback mode requires a Firecrawl credential.",
+        code: "firecrawl_credential_required",
+      });
+      return;
+    } else if (!hasFirecrawl) {
+      shouldTryDeepSeekFirst = true;
+    } else if (route !== undefined && providerMode === "firecrawl-first" && inCreditCooldown) {
+      shouldTryDeepSeekFirst = true;
+    }
 
     if (!shouldTryDeepSeekFirst) {
       provider = "firecrawl";
@@ -497,7 +513,7 @@ export function createGatewayHandler(
           },
           dependencies,
         );
-        if (upstream.status === 402 && route !== undefined) {
+        if (upstream.status === 402 && route !== undefined && providerMode === "firecrawl-first") {
           firecrawlExhaustedUntil = now() + 60_000;
           provider = "deepseek";
           fallback = true;
@@ -520,9 +536,11 @@ export function createGatewayHandler(
       fallback = true;
       fallbackReason = isLocalCrawlRoute
         ? "local_crawl_job"
-        : !hasFirecrawl
-          ? "no_firecrawl_credential"
-          : "firecrawl_credits_cooldown";
+        : providerMode === "deepseek-first" && route !== undefined
+          ? "deepseek_first"
+          : !hasFirecrawl
+            ? "no_firecrawl_credential"
+            : "firecrawl_credits_cooldown";
     }
 
     try {

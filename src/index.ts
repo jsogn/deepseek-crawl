@@ -82,7 +82,11 @@ export type {
   AuthLimiterCheck,
 } from "./gateway/auth-limiter.js";
 export { AuthFailureLimiter } from "./gateway/auth-limiter.js";
-export type { GatewayConfig, GatewayConfigInput } from "./gateway/config.js";
+export type {
+  GatewayConfig,
+  GatewayConfigInput,
+  GatewayProviderMode,
+} from "./gateway/config.js";
 export { loadGatewayConfig } from "./gateway/config.js";
 export type {
   CrawlJobManagerOptions,

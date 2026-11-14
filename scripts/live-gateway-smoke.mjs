@@ -258,6 +258,7 @@ async function startSmokeGateway({ firecrawlApiKey, deepseekClient }) {
   delete env.GATEWAY_API_KEY;
   const config = loadGatewayConfig({
     env,
+    providerMode: "firecrawl-first",
     credentialStores: {
       firecrawl: staticStore(firecrawlApiKey),
       gateway: staticStore(GATEWAY_TOKEN),

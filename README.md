@@ -317,6 +317,16 @@ deepseek-crawl gateway
 本地默认从 `8787` 开始寻找可用端口，冲突时自动尝试下一个，并打印实际地址。
 指定 `--port` 时该端口变为严格固定；被占用会直接失败。
 
+Provider 策略默认为 `firecrawl-first`。可通过 CLI 或环境变量选择：
+
+```bash
+deepseek-crawl gateway --provider-mode deepseek-first
+DEEPSEEK_GATEWAY_PROVIDER_MODE=no-fallback deepseek-crawl gateway
+```
+
+`deepseek-first` 让常用路由直接使用 DeepSeek；`no-fallback` 让常用路由始终使用
+Firecrawl，Firecrawl `402` 会原样返回而不会切换 Provider。
+
 其他终端或脚本可以发现当前实际地址：
 
 ```bash
@@ -346,11 +356,11 @@ const firecrawl = new Firecrawl({
 });
 ```
 
-常用路由 `POST /v2/search`、`POST /v2/scrape`、`POST /v2/map` 和
-`POST /v2/crawl` 会优先调用 Firecrawl。Firecrawl 返回 `402`、或未配置
-Firecrawl 凭据时，网关使用 DeepSeek；Crawl 还会提供兼容的 job status、errors
-和取消接口。`429`、认证错误、无效请求和服务端错误保持 Firecrawl 响应，不会
-静默切换。
+默认 `firecrawl-first` 模式下，常用路由 `POST /v2/search`、`POST /v2/scrape`、
+`POST /v2/map` 和 `POST /v2/crawl` 会优先调用 Firecrawl。Firecrawl 返回
+`402`、或未配置 Firecrawl 凭据时，网关使用 DeepSeek；Crawl 还会提供兼容的
+job status、errors 和取消接口。`429`、认证错误、无效请求和服务端错误保持
+Firecrawl 响应，不会静默切换。
 
 网关进程只读取 `FIRECRAWL_UPSTREAM_URL` 作为 Firecrawl 上游地址，默认
 `https://api.firecrawl.dev`。`FIRECRAWL_API_URL` 是客户端地址，不会被网关用作

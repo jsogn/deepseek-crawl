@@ -18,6 +18,7 @@ describe("loadGatewayConfig", () => {
       port: 8787,
       allowRemote: false,
       autoPort: true,
+      providerMode: "firecrawl-first",
       upstreamUrl: new URL("https://api.firecrawl.dev/"),
       requestBodyLimit: 8 * 1024 * 1024,
       timeoutMs: 120_000,
@@ -90,6 +91,31 @@ describe("loadGatewayConfig", () => {
       firecrawlApiKey: "fc-environment",
       gatewayApiKey: "gateway-environment",
     });
+  });
+
+  it("configures provider selection from an option or environment", () => {
+    expect(
+      loadGatewayConfig({
+        providerMode: "deepseek-first",
+        env: { DEEPSEEK_GATEWAY_PROVIDER_MODE: "no-fallback" },
+        credentialStores: {},
+      }).providerMode,
+    ).toBe("deepseek-first");
+    expect(
+      loadGatewayConfig({
+        env: { DEEPSEEK_GATEWAY_PROVIDER_MODE: "no-fallback" },
+        credentialStores: {},
+      }).providerMode,
+    ).toBe("no-fallback");
+  });
+
+  it("rejects an unknown provider mode", () => {
+    expect(() =>
+      loadGatewayConfig({
+        env: { DEEPSEEK_GATEWAY_PROVIDER_MODE: "sometimes" },
+        credentialStores: {},
+      }),
+    ).toThrow(/provider mode/i);
   });
 
   it("does not use FIRECRAWL_API_URL as the gateway upstream", () => {

@@ -19,7 +19,12 @@ DEEPSEEK_API_KEY=sk-...
 ```dotenv
 FIRECRAWL_API_KEY=fc-...
 FIRECRAWL_UPSTREAM_URL=https://api.firecrawl.dev
+DEEPSEEK_GATEWAY_PROVIDER_MODE=firecrawl-first
 ```
+
+Provider 模式默认为 `firecrawl-first`。设为 `deepseek-first` 可让常用路由直接
+使用 DeepSeek；设为 `no-fallback` 会让常用路由始终使用 Firecrawl，并原样返回
+额度错误。
 
 环境文件权限应为 `0600`。不要把 Token 写入镜像、Compose 文件、命令行或仓库。
 

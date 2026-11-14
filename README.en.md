@@ -338,6 +338,17 @@ credential. DeepSeek credentials continue to use the existing
 Local mode starts at `8787`, tries subsequent ports when it is occupied, and
 prints the actual URL. An explicit `--port` is strict and fails if unavailable.
 
+Provider mode defaults to `firecrawl-first` and can be set by CLI or
+environment:
+
+```bash
+deepseek-crawl gateway --provider-mode deepseek-first
+DEEPSEEK_GATEWAY_PROVIDER_MODE=no-fallback deepseek-crawl gateway
+```
+
+`deepseek-first` sends common routes directly to DeepSeek. `no-fallback` keeps
+common routes on Firecrawl and passes Firecrawl `402` responses through.
+
 Other terminals and scripts can discover the selected endpoint:
 
 ```bash
@@ -368,11 +379,12 @@ const firecrawl = new Firecrawl({
 });
 ```
 
-`POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`, and `POST /v2/crawl`
-prefer Firecrawl. Firecrawl `402` responses, or a missing Firecrawl credential,
-switch to DeepSeek. Crawl also exposes Firecrawl-compatible job status, errors,
-and cancellation. `429`, authentication failures, invalid requests, and server
-errors remain transparent and do not silently switch providers.
+In the default `firecrawl-first` mode, `POST /v2/search`, `POST /v2/scrape`,
+`POST /v2/map`, and `POST /v2/crawl` prefer Firecrawl. Firecrawl `402` responses,
+or a missing Firecrawl credential, switch to DeepSeek. Crawl also exposes
+Firecrawl-compatible job status, errors, and cancellation. `429`, authentication
+failures, invalid requests, and server errors remain transparent and do not
+silently switch providers.
 
 The gateway process reads only `FIRECRAWL_UPSTREAM_URL` for its Firecrawl
 upstream; it defaults to `https://api.firecrawl.dev`. `FIRECRAWL_API_URL` is the

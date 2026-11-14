@@ -402,6 +402,11 @@ describe("parseCli", () => {
       kind: "gateway",
       remote: true,
     });
+    expect(parseCli(["gateway", "--provider-mode", "deepseek-first"])).toEqual({
+      kind: "gateway",
+      remote: false,
+      providerMode: "deepseek-first",
+    });
     expect(parseCli(["gateway", "status", "--json"])).toEqual({
       kind: "gateway-status",
       json: true,
@@ -633,6 +638,7 @@ describe("parseCli", () => {
     [["gateway", "--port", "65536"], /port/i],
     [["gateway", "extra"], /argument/i],
     [["gateway", "--host", "   "], /host/i],
+    [["gateway", "--provider-mode", "sometimes"], /provider mode/i],
     [["gateway", "url", "--port", "0"], /port/i],
     [["gateway", "status", "--port", "8787"], /unknown option/i],
     [["gateway", "url", "extra"], /argument/i],

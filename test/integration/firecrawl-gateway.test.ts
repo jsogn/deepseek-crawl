@@ -192,6 +192,125 @@ describe("Firecrawl-compatible gateway", () => {
     });
   });
 
+  it("uses DeepSeek first when configured, even with a Firecrawl credential", async () => {
+    const events: GatewayRequestLog[] = [];
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: { ...testConfig(), providerMode: "deepseek-first" },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          return { title: "Example", content: "# Example" };
+        },
+      },
+      fetchImpl: async () => {
+        throw new Error("Firecrawl must not be called in deepseek-first mode.");
+      },
+      logger: (event) => events.push(event),
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: { markdown: "# Example" },
+    });
+    expect(deepSeekCalls).toBe(1);
+    expect(events).toMatchObject([
+      {
+        provider: "deepseek",
+        fallback: true,
+        fallback_reason: "deepseek_first",
+        status: 200,
+      },
+    ]);
+  });
+
+  it("passes Firecrawl 402 through in no-fallback mode", async () => {
+    const events: GatewayRequestLog[] = [];
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: { ...testConfig(), providerMode: "no-fallback" },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      deepseekClient: {
+        async search() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Fetch call.");
+        },
+      },
+      fetchImpl: async () =>
+        Response.json({ success: false, error: "Payment required." }, { status: 402 }),
+      logger: (event) => events.push(event),
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+    });
+
+    expect(response.status).toBe(402);
+    expect(await response.json()).toEqual({
+      success: false,
+      error: "Payment required.",
+    });
+    expect(deepSeekCalls).toBe(0);
+    expect(events).toMatchObject([
+      {
+        provider: "firecrawl",
+        fallback: false,
+        status: 402,
+      },
+    ]);
+  });
+
+  it("requires a Firecrawl credential in no-fallback mode", async () => {
+    const server = await startGatewayServer({
+      config: { ...testConfig(), providerMode: "no-fallback" },
+      env: {},
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          throw new Error("Unexpected Fetch call.");
+        },
+      },
+      fetchImpl: async () => {
+        throw new Error("Firecrawl request was not expected without a credential.");
+      },
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+    });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      success: false,
+      error: "No-fallback mode requires a Firecrawl credential.",
+      code: "firecrawl_credential_required",
+    });
+  });
+
   it.each([
     {
       label: "authentication errors",

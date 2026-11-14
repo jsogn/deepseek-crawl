@@ -67,6 +67,9 @@ Use `deepseek-crawl gateway url` from another terminal or script; use
 `gateway status --json` to list instances, prune stale runtime state, and inspect
 DeepSeek/Firecrawl/gateway-auth readiness.
 
+Provider mode defaults to `firecrawl-first`. Use `deepseek-first` or
+`no-fallback` when the deployment must not switch providers automatically.
+
 Remote mode uses fixed port `8787`:
 
 ```bash

@@ -10,12 +10,20 @@ const DEFAULT_PORT = 8787;
 const DEFAULT_UPSTREAM_URL = "https://api.firecrawl.dev";
 const DEFAULT_REQUEST_BODY_LIMIT = 8 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 120_000;
+export type GatewayProviderMode = "firecrawl-first" | "deepseek-first" | "no-fallback";
+const DEFAULT_PROVIDER_MODE: GatewayProviderMode = "firecrawl-first";
+const PROVIDER_MODES = new Set<GatewayProviderMode>([
+  "firecrawl-first",
+  "deepseek-first",
+  "no-fallback",
+]);
 
 export interface GatewayConfig {
   host: string;
   port: number;
   allowRemote: boolean;
   autoPort?: boolean;
+  providerMode?: GatewayProviderMode;
   gatewayApiKey?: string;
   firecrawlApiKey?: string;
   authFailureLimit?: number;
@@ -35,6 +43,7 @@ export interface GatewayConfigInput {
   port?: number;
   remote?: boolean;
   allowRemote?: boolean;
+  providerMode?: GatewayProviderMode;
   env?: NodeJS.ProcessEnv;
   credentialStores?: Partial<Record<CredentialName, CredentialStore>>;
 }
@@ -112,6 +121,16 @@ function validateApiKey(value: string, name: string): string {
   return key;
 }
 
+function parseProviderMode(value: string | undefined): GatewayProviderMode {
+  const mode = value?.trim() || DEFAULT_PROVIDER_MODE;
+  if (!PROVIDER_MODES.has(mode as GatewayProviderMode)) {
+    throw new Error(
+      "Gateway provider mode must be firecrawl-first, deepseek-first, or no-fallback.",
+    );
+  }
+  return mode as GatewayProviderMode;
+}
+
 const CREDENTIAL_ENV: Record<CredentialName, string> = {
   deepseek: "DEEPSEEK_API_KEY",
   firecrawl: "FIRECRAWL_API_KEY",
@@ -135,6 +154,9 @@ function resolveCredential(
 
 export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConfig {
   const env = options.env ?? process.env;
+  const providerMode = parseProviderMode(
+    options.providerMode ?? env.DEEPSEEK_GATEWAY_PROVIDER_MODE,
+  );
   const remote = options.remote ?? options.allowRemote ?? false;
   const host = validateHost(options.host?.trim() || (remote ? "0.0.0.0" : DEFAULT_HOST), remote);
   const gatewayApiKey = resolveCredential(env, "gateway", options.credentialStores);
@@ -148,6 +170,7 @@ export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConf
     port,
     allowRemote: remote || !isLoopbackHostname(host),
     autoPort: !remote && options.port === undefined,
+    providerMode,
     ...(gatewayApiKey === undefined ? {} : { gatewayApiKey }),
     ...(firecrawlApiKey === undefined ? {} : { firecrawlApiKey }),
     upstreamUrl: parseUpstreamUrl(env.FIRECRAWL_UPSTREAM_URL),

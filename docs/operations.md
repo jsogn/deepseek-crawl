@@ -57,6 +57,13 @@ variables first, then the Keychain/file stores populated by
 `deepseek-crawl auth import firecrawl` can copy an existing Firecrawl CLI login
 into that store while displaying only a masked hint.
 
+`DEEPSEEK_GATEWAY_PROVIDER_MODE` or `gateway --provider-mode` selects provider
+policy:
+
+- `firecrawl-first`: default; use Firecrawl, then fall back after `402`.
+- `deepseek-first`: use DeepSeek directly for common routes.
+- `no-fallback`: keep common routes on Firecrawl and pass `402` through.
+
 Remote mode requires a stored `gateway` token. Clients supply it as the Firecrawl
 SDK `apiKey`; the gateway strips it and uses its own Firecrawl provider
 credential upstream. Never configure the gateway token as the Firecrawl upstream
@@ -77,11 +84,13 @@ DeepSeek fallback covers `POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`,
 `POST /v2/crawl`, and status, errors, and cancellation for local `dsc_` Crawl
 jobs.
 
-The gateway switches to DeepSeek only after a Firecrawl `402`, while exhausted
-credits are in the short local cooldown, or when no Firecrawl credential is
-configured. `429`, `401/403`, invalid requests, and `5xx` retain Firecrawl
-behavior. Advanced Firecrawl capabilities return a structured error instead of
-pretending a DeepSeek fallback succeeded.
+In the default `firecrawl-first` mode, the gateway switches to DeepSeek only
+after a Firecrawl `402`, while exhausted credits are in the short local
+cooldown, or when no Firecrawl credential is configured. `deepseek-first` skips
+Firecrawl for common routes; `no-fallback` passes Firecrawl errors through.
+`429`, `401/403`, invalid requests, and `5xx` retain Firecrawl behavior.
+Advanced Firecrawl capabilities return a structured error instead of pretending
+a DeepSeek fallback succeeded.
 
 If Firecrawl cannot be reached or times out before returning a response, the
 gateway returns `502 upstream_unavailable` without switching providers. This
@@ -187,17 +196,18 @@ CLI Map and Crawl request Sitemaps directly and accept only public HTTP(S) targe
 
 ## Environment
 
-| Variable                       | Default                     | Purpose                           |
-| ------------------------------ | --------------------------- | --------------------------------- |
-| `DEEPSEEK_API_KEY`             | optional override           | DeepSeek API credential           |
-| `DEEPSEEK_BASE_URL`            | `https://api.deepseek.com`  | Test or gateway endpoint          |
-| `DEEPSEEK_TIMEOUT_MS`          | `60000`                     | Request timeout, 1000–120000      |
-| `DEEPSEEK_MAX_RETRIES`         | `2`                         | Retry 408, 429, and transient 5xx |
-| `DEEPSEEK_CACHE_DIR`           | platform cache directory    | Fetch cache directory             |
-| `DEEPSEEK_GATEWAY_RUNTIME_DIR` | platform runtime/cache      | Gateway instance state dir        |
-| `FIRECRAWL_API_KEY`            | none                        | Firecrawl upstream credential     |
-| `FIRECRAWL_UPSTREAM_URL`       | `https://api.firecrawl.dev` | Gateway Firecrawl upstream        |
-| `GATEWAY_API_KEY`              | none                        | Remote gateway Bearer token       |
+| Variable                         | Default                     | Purpose                           |
+| -------------------------------- | --------------------------- | --------------------------------- |
+| `DEEPSEEK_API_KEY`               | optional override           | DeepSeek API credential           |
+| `DEEPSEEK_BASE_URL`              | `https://api.deepseek.com`  | Test or gateway endpoint          |
+| `DEEPSEEK_TIMEOUT_MS`            | `60000`                     | Request timeout, 1000–120000      |
+| `DEEPSEEK_MAX_RETRIES`           | `2`                         | Retry 408, 429, and transient 5xx |
+| `DEEPSEEK_CACHE_DIR`             | platform cache directory    | Fetch cache directory             |
+| `DEEPSEEK_GATEWAY_RUNTIME_DIR`   | platform runtime/cache      | Gateway instance state dir        |
+| `FIRECRAWL_API_KEY`              | none                        | Firecrawl upstream credential     |
+| `FIRECRAWL_UPSTREAM_URL`         | `https://api.firecrawl.dev` | Gateway Firecrawl upstream        |
+| `DEEPSEEK_GATEWAY_PROVIDER_MODE` | `firecrawl-first`           | Provider selection policy         |
+| `GATEWAY_API_KEY`                | none                        | Remote gateway Bearer token       |
 
 Environment variables override the local credential store. Non-loopback DeepSeek
 base URLs must use HTTPS. API keys are never accepted as CLI flags or MCP

@@ -140,6 +140,7 @@ Defaults:
 - Explicit `--port`: strict fixed port
 - Remote mode: fixed `8787` unless `--port` is supplied
 - Upstream: `FIRECRAWL_UPSTREAM_URL` or `https://api.firecrawl.dev`
+- Provider mode: `firecrawl-first`, `deepseek-first`, or `no-fallback`
 
 Use `auth set firecrawl` to make Firecrawl-first local mode available; otherwise
 common routes use DeepSeek. Remote mode requires `auth set gateway`, or the
@@ -160,10 +161,12 @@ GET    /v2/crawl/:id/errors
 DELETE /v2/crawl/:id
 ```
 
-It first uses Firecrawl and switches to DeepSeek when Firecrawl returns `402`,
-the local exhausted-credit cooldown is active, or no Firecrawl credential is
-available. `429`, authentication errors, invalid requests, and `5xx` are returned
-without provider switching.
+In the default `firecrawl-first` mode it first uses Firecrawl and switches to
+DeepSeek when Firecrawl returns `402`, the local exhausted-credit cooldown is
+active, or no Firecrawl credential is available. `deepseek-first` skips
+Firecrawl for common routes; `no-fallback` passes Firecrawl errors through.
+`429`, authentication errors, invalid requests, and `5xx` are returned without
+provider switching.
 
 Firecrawl connection failures and timeouts before a response return
 `502 upstream_unavailable`; the gateway does not switch providers.

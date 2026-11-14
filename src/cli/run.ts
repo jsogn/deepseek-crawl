@@ -324,6 +324,8 @@ Start a Firecrawl-compatible HTTP gateway.
 Options:
   --host <host>       Listener host (default: 127.0.0.1)
   --port <1..65535>   Fixed listener port (default locally: auto from 8787)
+  --provider-mode <mode>
+                      firecrawl-first (default), deepseek-first, or no-fallback
   --remote            Enable authenticated remote mode (fixed port 8787)
 
 Subcommands:
@@ -468,6 +470,7 @@ async function runGateway(
     remote: command.remote,
     ...(command.host === undefined ? {} : { host: command.host }),
     ...(command.port === undefined ? {} : { port: command.port }),
+    ...(command.providerMode === undefined ? {} : { providerMode: command.providerMode }),
     env: deps.env,
     ...(deps.credentialStores === undefined ? {} : { credentialStores: deps.credentialStores }),
   });
@@ -488,6 +491,7 @@ async function runGateway(
       ? "Firecrawl provider: configured\n"
       : "Firecrawl provider: not configured; common routes use DeepSeek\n",
   );
+  deps.stdout.write(`Provider mode: ${config.providerMode}\n`);
   deps.stdout.write(
     command.remote
       ? `Firecrawl SDK: apiUrl="${server.url.href.replace(/\/$/, "")}", apiKey=GATEWAY_API_KEY\n`

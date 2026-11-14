@@ -20,7 +20,12 @@ Optional:
 ```dotenv
 FIRECRAWL_API_KEY=fc-...
 FIRECRAWL_UPSTREAM_URL=https://api.firecrawl.dev
+DEEPSEEK_GATEWAY_PROVIDER_MODE=firecrawl-first
 ```
+
+Provider mode defaults to `firecrawl-first`. Set `deepseek-first` to avoid
+Firecrawl for common routes, or `no-fallback` to keep every common route on
+Firecrawl and pass quota errors through.
 
 Keep the environment file private (`0600`). Never put these values in an image,
 Compose file, shell command, or repository.

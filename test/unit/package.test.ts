@@ -101,6 +101,8 @@ describe("package documentation", () => {
       "--ignore-query-parameters",
       "FIRECRAWL_API_URL",
       "FIRECRAWL_UPSTREAM_URL",
+      "DEEPSEEK_GATEWAY_PROVIDER_MODE",
+      "--provider-mode",
       "GATEWAY_API_KEY",
       "Firecrawl-compatible",
       "gateway url",
@@ -183,7 +185,12 @@ describe("deployment assets", () => {
       expect(service).toContain(setting);
     }
 
-    for (const key of ["GATEWAY_API_KEY", "DEEPSEEK_API_KEY", "FIRECRAWL_API_KEY"]) {
+    for (const key of [
+      "GATEWAY_API_KEY",
+      "DEEPSEEK_API_KEY",
+      "FIRECRAWL_API_KEY",
+      "DEEPSEEK_GATEWAY_PROVIDER_MODE",
+    ]) {
       expect(environmentExample).toContain(`${key}=`);
     }
     expect(dockerignore.split(/\r?\n/)).toContain(".env");

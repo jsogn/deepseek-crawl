@@ -13,6 +13,8 @@
 - Add an explicit opt-in live Gateway smoke command that verifies Scrape, plus
   optional Search/Map matrix and bounded Crawl coverage, for Firecrawl
   passthrough and DeepSeek fallback through the official SDK.
+- Add `firecrawl-first`, `deepseek-first`, and `no-fallback` provider policies
+  through `--provider-mode` and `DEEPSEEK_GATEWAY_PROVIDER_MODE`.
 - Add `gateway url`, `gateway status`, `/healthz`, and multi-instance runtime
   discovery with stale-state cleanup.
 - Forward common Firecrawl requests to the Firecrawl upstream while preserving

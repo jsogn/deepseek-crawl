@@ -61,14 +61,39 @@ describe.runIf(process.platform === "win32")("Windows Scheduled Task integration
     const whoami = execFileSync("whoami.exe", ["/user", "/fo", "csv", "/nh"], {
       encoding: "utf8",
     });
+    let fakeRegistered = false;
+    let fakeEnabled = false;
+    let fakeRunning = false;
     const run: GatewayCommandRunner = async (command, args) => {
       if (command === "whoami") {
         return { exitCode: 0, stdout: whoami, stderr: "" };
       }
       if (command === "powershell.exe") {
-        return { exitCode: 0, stdout: "Running", stderr: "" };
+        if (!fakeRegistered) {
+          return { exitCode: 1, stdout: "", stderr: "Task not found." };
+        }
+        return {
+          exitCode: 0,
+          stdout: fakeRunning ? "Running" : fakeEnabled ? "Ready" : "Disabled",
+          stderr: "",
+        };
       }
       if (command === "schtasks") {
+        const action = args[0]?.toLowerCase();
+        if (action === "/create") {
+          fakeRegistered = true;
+          fakeEnabled = true;
+        } else if (action === "/change") {
+          fakeEnabled = args.some((argument) => argument.toUpperCase() === "/ENABLE");
+        } else if (action === "/run") {
+          fakeRunning = true;
+        } else if (action === "/end") {
+          fakeRunning = false;
+        } else if (action === "/delete") {
+          fakeRegistered = false;
+          fakeEnabled = false;
+          fakeRunning = false;
+        }
         return { exitCode: 0, stdout: "", stderr: "" };
       }
       throw new Error(`Unexpected command: ${command} ${args.join(" ")}`);

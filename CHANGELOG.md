@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.1 - 2026-11-14
+
+### Changed
+
+- Reworked the Chinese and English READMEs around quick start, operation
+  selection, and a smaller documentation map.
+- Split advanced Crawl workflows and operational safety details into focused
+  bilingual guides.
+- Tag releases now publish through GitHub Actions Trusted Publishing with npm
+  provenance.
+
+### Fixed
+
+- Package installation verification supports both npm 10 and npm 12 pack output.
+
 ## 0.8.0 - 2026-11-14
 
 ### Added
@@ -21,4 +36,5 @@
 
 ### Distribution
 
-- npm releases use tag validation, provenance, and GitHub Actions Trusted Publishing.
+- Initial public npm release used staged publishing before the OIDC trusted
+  publisher was configured.

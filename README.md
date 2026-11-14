@@ -5,8 +5,8 @@
 面向 AI Agent 的 **CLI-first** 网页搜索、页面读取、URL Map 和受限 Crawl 工具，
 底层使用 DeepSeek 官方 Search 与 Fetch API。
 
-当前版本：`0.8.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
-[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.8.0)
+当前版本：`0.8.1` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
+[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.8.1)
 
 ```text
 Agent → deepseek-crawl CLI → DeepSeek API → 文件/JSON → Agent

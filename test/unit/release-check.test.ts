@@ -17,10 +17,10 @@ function checkReleaseTag(tag: string) {
 
 describe("release tag check", () => {
   it("accepts the tag matching the package version", () => {
-    const result = checkReleaseTag("v0.8.0");
+    const result = checkReleaseTag("v0.8.1");
 
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("Release tag v0.8.0 matches package version 0.8.0.");
+    expect(result.stdout.trim()).toBe("Release tag v0.8.1 matches package version 0.8.1.");
     expect(result.stderr).toBe("");
   });
 
@@ -28,6 +28,6 @@ describe("release tag check", () => {
     const result = checkReleaseTag("v0.9.0");
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("Release tag v0.9.0 does not match package version 0.8.0.");
+    expect(result.stderr).toContain("Release tag v0.9.0 does not match package version 0.8.1.");
   });
 });

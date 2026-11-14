@@ -15,8 +15,8 @@ The npm package must authorize this repository as a Trusted Publisher:
    - Workflow filename: `release.yml`
    - Environment: leave empty
 
-Before the first release, configure the same values through the pending
-publisher flow.
+Packages published before Trusted Publishing was configured can add the same
+GitHub relationship from the existing package settings.
 
 ## Release checklist
 
@@ -29,8 +29,8 @@ publisher flow.
 5. Create and push the matching annotated tag:
 
    ```bash
-   git tag -a v0.8.0 -m "deepseek-crawl v0.8.0"
-   git push origin v0.8.0
+   git tag -a v0.8.1 -m "deepseek-crawl v0.8.1"
+   git push origin v0.8.1
    ```
 
 6. The Release workflow validates the tag, runs the full verification suite,
@@ -40,7 +40,7 @@ publisher flow.
 7. Confirm the registry and provenance:
 
    ```bash
-   npm view deepseek-crawl@0.8.0 version dist.integrity
+   npm view deepseek-crawl@0.8.1 version dist.integrity dist.attestations
    ```
 
 Do not publish from a local machine with a classic npm token. Pushing the tag is

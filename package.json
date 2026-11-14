@@ -1,6 +1,6 @@
 {
   "name": "deepseek-crawl",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "CLI-first AI web search, page reading, mapping, and crawling with optional MCP",
   "type": "module",
   "license": "MIT",

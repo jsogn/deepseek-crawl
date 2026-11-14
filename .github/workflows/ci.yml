@@ -19,7 +19,6 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
-          - windows-latest
         node:
           - 22
           - 24
@@ -31,6 +30,29 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify
+
+  windows-service:
+    name: windows service (Node ${{ matrix.node }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - 22
+          - 24
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run typecheck:test
+      - run: npm run build
+      - run: npx vitest run test/unit/gateway-service.test.ts test/unit/gateway-cli.test.ts test/unit/cli-parse.test.ts test/integration/windows-service-task.test.ts
 
   docker-smoke:
     name: Docker gateway smoke

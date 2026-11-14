@@ -189,7 +189,7 @@ async function windowsFixture() {
   return { context, paths, scheduler };
 }
 
-describe("managed Gateway service", () => {
+describe.skipIf(process.platform === "win32")("managed Gateway service", () => {
   it("installs a persistent service and points the Firecrawl CLI at it", async () => {
     const { context, launchctl, paths } = await fixture();
 

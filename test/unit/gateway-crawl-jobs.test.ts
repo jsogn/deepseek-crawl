@@ -208,11 +208,16 @@ describe("CrawlJobManager", () => {
       maxRunningJobs: 1,
     });
     let release!: () => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     const blockingClient: DeepSeekGateway = {
       async search() {
         throw new Error("Unexpected Search call.");
       },
       fetch() {
+        markStarted();
         return new Promise((resolve) => {
           release = () => resolve({ title: "Example", content: "# Example" });
         });
@@ -224,7 +229,7 @@ describe("CrawlJobManager", () => {
       blockingClient,
       reader,
     );
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await started;
     expect(() =>
       manager.create(
         { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },

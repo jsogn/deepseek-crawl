@@ -13,6 +13,28 @@ import {
 
 const temporaryDirectories: string[] = [];
 
+function runSchtasks(args: string[]): string {
+  try {
+    return execFileSync("schtasks.exe", args, {
+      encoding: "utf8",
+      stdio: "pipe",
+      timeout: 15_000,
+      windowsHide: true,
+    });
+  } catch (error) {
+    const failure = error as Error & { stdout?: Buffer | string; stderr?: Buffer | string };
+    const stdout = Buffer.isBuffer(failure.stdout)
+      ? failure.stdout.toString("utf8")
+      : failure.stdout;
+    const stderr = Buffer.isBuffer(failure.stderr)
+      ? failure.stderr.toString("utf8")
+      : failure.stderr;
+    throw new Error(
+      `schtasks ${args.join(" ")} failed: ${failure.message}\nstdout: ${stdout ?? ""}\nstderr: ${stderr ?? ""}`,
+    );
+  }
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryDirectories
@@ -72,26 +94,16 @@ describe.runIf(process.platform === "win32")("Windows Scheduled Task integration
     const taskName = `DeepSeek Crawl Test ${randomUUID()}`;
 
     try {
-      execFileSync(
-        "schtasks.exe",
-        ["/Create", "/TN", taskName, "/XML", paths.serviceDefinitionPath, "/F"],
-        { encoding: "utf8", stdio: "pipe" },
-      );
-      const query = execFileSync("schtasks.exe", ["/Query", "/TN", taskName, "/FO", "LIST"], {
-        encoding: "utf8",
-        stdio: "pipe",
-      });
+      runSchtasks(["/Create", "/TN", taskName, "/XML", paths.serviceDefinitionPath, "/F"]);
+      const query = runSchtasks(["/Query", "/TN", taskName, "/FO", "LIST"]);
       expect(query).toContain(taskName);
     } finally {
       try {
-        execFileSync("schtasks.exe", ["/Delete", "/TN", taskName, "/F"], {
-          encoding: "utf8",
-          stdio: "pipe",
-        });
+        runSchtasks(["/Delete", "/TN", taskName, "/F"]);
       } catch {
         // Best-effort cleanup for a task that may not have been created.
       }
       await uninstallGatewayService(context);
     }
-  });
+  }, 30_000);
 });

@@ -71,8 +71,10 @@ available. No DeepSeek fallback is attempted for an unsupported route.
 ## Client Integration
 
 The gateway accepts the normal Firecrawl base URL convention. For example, the
-Node SDK should receive `http://127.0.0.1:8787`, not a URL ending in `/v2`,
-because the SDK appends `/v2/*` itself.
+Node SDK should receive the local gateway root printed at startup, not a URL
+ending in `/v2`, because the SDK appends `/v2/*` itself. Local mode starts at
+`8787` and automatically tries subsequent ports. Explicit `--port` and remote
+mode remain strict.
 
 The gateway does not read `FIRECRAWL_API_URL`, because that variable identifies
 the gateway to clients. Its Firecrawl upstream is configured separately:
@@ -94,6 +96,10 @@ Firecrawl SDK `apiKey`. The gateway validates it with a constant-time comparison
 strips the incoming Authorization value, and uses only `FIRECRAWL_API_KEY` for
 the Firecrawl upstream. Loopback mode without `GATEWAY_API_KEY` preserves local
 BYOK passthrough.
+
+Provider credentials resolve from environment variables first, then the
+provider-specific Keychain/file store populated by `auth set firecrawl` or
+`auth set gateway`.
 
 ## Routing
 
@@ -120,7 +126,8 @@ silently switch providers. They are returned to the caller.
   Firecrawl response bounding.
 - Default request timeout: 120 seconds.
 - Host defaults to `127.0.0.1`.
-- A non-loopback host requires an explicit `--allow-remote` flag.
+- `--remote` enables authenticated remote mode and defaults to a fixed public
+  listener on port 8787.
 - A non-loopback host also requires `GATEWAY_API_KEY`.
 - Hop-by-hop headers and `Host` are not forwarded upstream.
 - Authorization headers are never logged.

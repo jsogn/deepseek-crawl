@@ -68,6 +68,9 @@ deepseek-crawl --version
 Credentials:
 
 - `DEEPSEEK_API_KEY`, or a key stored by `deepseek-crawl init` / `auth set`
+- `deepseek-crawl auth set [deepseek|firecrawl|gateway]`
+- `deepseek-crawl auth status [credential] --json`
+- `deepseek-crawl auth remove [credential] --json`
 
 Optional environment:
 
@@ -115,9 +118,9 @@ to route by DeepSeek availability; it does not choose a provider.
 
 ```text
 deepseek-crawl gateway
+  [--remote]
   [--host <host>]
   [--port <1..65535>]
-  [--allow-remote]
 ```
 
 Starts a Firecrawl v2-compatible HTTP service. It is not started by ordinary CLI
@@ -126,14 +129,17 @@ or MCP commands.
 Defaults:
 
 - Host: `127.0.0.1`
-- Port: `8787`
+- Local port: starts at `8787` and automatically tries subsequent free ports
+- Explicit `--port`: strict fixed port
+- Remote mode: fixed `8787` unless `--port` is supplied
 - Upstream: `FIRECRAWL_UPSTREAM_URL` or `https://api.firecrawl.dev`
 
-A non-loopback host requires `GATEWAY_API_KEY`. Set the Firecrawl SDK `apiKey` to
-this gateway token. When authentication is enabled, the gateway removes the
-incoming Authorization value before requesting Firecrawl and uses its own
-`FIRECRAWL_API_KEY`. Loopback mode without `GATEWAY_API_KEY` preserves local BYOK
-passthrough.
+Use `auth set firecrawl` to make Firecrawl-first local mode available; otherwise
+common routes use DeepSeek. Remote mode requires `auth set gateway`, or the
+equivalent environment variables in non-interactive deployments. Set the
+Firecrawl SDK `apiKey` to the gateway token. The gateway removes that incoming
+Authorization value before requesting Firecrawl and uses its stored Firecrawl
+credential.
 
 The gateway supports these common routes:
 
@@ -161,13 +167,13 @@ Firecrawl-owned Crawl IDs continue to use the Firecrawl upstream.
 Client setup:
 
 ```bash
-export FIRECRAWL_API_URL=http://127.0.0.1:8787
+export FIRECRAWL_API_URL=http://127.0.0.1:<reported-port>
 ```
 
 The gateway process does not read `FIRECRAWL_API_URL`. Set
 `FIRECRAWL_UPSTREAM_URL` only when the Firecrawl upstream is not
-`https://api.firecrawl.dev`. Use `--allow-remote` only when intentionally
-exposing the gateway beyond loopback.
+`https://api.firecrawl.dev`. `--allow-remote` remains a compatibility alias for
+`--remote`.
 Upstream responses are streamed. SIGINT/close cancels active process-local
 DeepSeek Crawl jobs.
 

@@ -43,7 +43,11 @@ import type {
   CrawlRunResult,
 } from "../crawl/types.js";
 import { readSecret } from "../credentials/input.js";
-import { type CredentialStore, createCredentialStore } from "../credentials/store.js";
+import {
+  type CredentialName,
+  type CredentialStore,
+  createCredentialStore,
+} from "../credentials/store.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekBalanceGateway, DeepSeekGateway } from "../deepseek/gateway.js";
@@ -83,6 +87,7 @@ export interface CliDependencies {
     packageRoot: string;
   };
   credentialStore?: CredentialStore;
+  credentialStores?: Partial<Record<CredentialName, CredentialStore>>;
   secretReader?: () => Promise<string>;
   fetchCache?: FetchCache;
   cacheClock?: () => Date;
@@ -113,10 +118,10 @@ Usage:
   deepseek-crawl init [options]
   deepseek-crawl doctor [--live] [--json]
   deepseek-crawl setup skills [options]
-  deepseek-crawl auth set
-  deepseek-crawl auth status [--json]
-  deepseek-crawl auth remove [--json]
-  deepseek-crawl gateway [--host <host>] [--port <port>] [--allow-remote]
+  deepseek-crawl auth set [deepseek|firecrawl|gateway]
+  deepseek-crawl auth status [credential] [--json]
+  deepseek-crawl auth remove [credential] [--json]
+  deepseek-crawl gateway [--remote] [--host <host>] [--port <port>]
   deepseek-crawl mcp
 
 Run "deepseek-crawl help <command>" for command details.
@@ -261,9 +266,12 @@ Options:
   --json
 `,
   auth: `Usage:
-  deepseek-crawl auth set
-  deepseek-crawl auth status [--json]
-  deepseek-crawl auth remove [--json]
+  deepseek-crawl auth set [deepseek|firecrawl|gateway]
+  deepseek-crawl auth status [credential] [--json]
+  deepseek-crawl auth remove [credential] [--json]
+
+Credential defaults to deepseek. Values are read from hidden input and stored in
+the user's Keychain or a private credential file.
 `,
   mcp: "Usage: deepseek-crawl mcp\n\nStart the MCP server over stdio.\n",
   gateway: `Usage: deepseek-crawl gateway [options]
@@ -272,11 +280,12 @@ Start a Firecrawl-compatible HTTP gateway.
 
 Options:
   --host <host>       Listener host (default: 127.0.0.1)
-  --port <1..65535>   Listener port (default: 8787)
-  --allow-remote      Allow binding to a non-loopback host
+  --port <1..65535>   Fixed listener port (default locally: auto from 8787)
+  --remote            Enable authenticated remote mode (fixed port 8787)
 
-A non-loopback host also requires GATEWAY_API_KEY. Firecrawl SDK clients set
-their apiKey to this gateway token. See README.md for local BYOK behavior.
+Remote mode requires GATEWAY_API_KEY. Firecrawl SDK clients set their apiKey to
+this gateway token. Local mode uses stored Provider credentials and prints the
+actual SDK apiUrl after choosing an available port.
 `,
   cache: `Usage: deepseek-crawl cache clear [--json]
 
@@ -306,6 +315,9 @@ function resolvedDependencies(dependencies: Partial<CliDependencies>): CliDepend
     ...(dependencies.credentialStore === undefined
       ? {}
       : { credentialStore: dependencies.credentialStore }),
+    ...(dependencies.credentialStores === undefined
+      ? {}
+      : { credentialStores: dependencies.credentialStores }),
     ...(dependencies.secretReader === undefined ? {} : { secretReader: dependencies.secretReader }),
     ...(dependencies.fetchCache === undefined ? {} : { fetchCache: dependencies.fetchCache }),
     ...(dependencies.cacheClock === undefined ? {} : { cacheClock: dependencies.cacheClock }),
@@ -390,10 +402,11 @@ async function runGateway(
   deps: CliDependencies,
 ) {
   const config = loadGatewayConfig({
-    host: command.host,
-    port: command.port,
-    allowRemote: command.allowRemote,
+    remote: command.remote,
+    ...(command.host === undefined ? {} : { host: command.host }),
+    ...(command.port === undefined ? {} : { port: command.port }),
     env: deps.env,
+    ...(deps.credentialStores === undefined ? {} : { credentialStores: deps.credentialStores }),
   });
   const server = await startGatewayServer({
     config,
@@ -401,6 +414,16 @@ async function runGateway(
     fetchImpl: deps.fetchImpl,
   });
   deps.stdout.write(`Firecrawl gateway listening on ${server.url.href}\n`);
+  deps.stdout.write(
+    config.firecrawlApiKey
+      ? "Firecrawl provider: configured\n"
+      : "Firecrawl provider: not configured; common routes use DeepSeek\n",
+  );
+  deps.stdout.write(
+    command.remote
+      ? `Firecrawl SDK: apiUrl="${server.url.href.replace(/\/$/, "")}", apiKey=GATEWAY_API_KEY\n`
+      : `Firecrawl SDK: apiUrl="${server.url.href.replace(/\/$/, "")}"\n`,
+  );
   try {
     await waitForAbort(deps.signal);
   } finally {
@@ -1391,12 +1414,38 @@ async function runSetupSkills(
   return 0;
 }
 
-function resolvedCredentialStore(deps: CliDependencies): CredentialStore {
-  return deps.credentialStore ?? createCredentialStore({ env: deps.env });
+function resolvedCredentialStore(
+  deps: CliDependencies,
+  credential: CredentialName = "deepseek",
+): CredentialStore {
+  const providerStore = deps.credentialStores?.[credential];
+  if (providerStore) {
+    return providerStore;
+  }
+  if (credential === "deepseek" && deps.credentialStore) {
+    return deps.credentialStore;
+  }
+  return createCredentialStore({ env: deps.env, credential });
 }
 
-function authStatus(env: NodeJS.ProcessEnv, store: CredentialStore) {
-  if (env.DEEPSEEK_API_KEY?.trim()) {
+const CREDENTIAL_ENV: Record<CredentialName, string> = {
+  deepseek: "DEEPSEEK_API_KEY",
+  firecrawl: "FIRECRAWL_API_KEY",
+  gateway: "GATEWAY_API_KEY",
+};
+
+const CREDENTIAL_LABEL: Record<CredentialName, string> = {
+  deepseek: "DeepSeek API key",
+  firecrawl: "Firecrawl API key",
+  gateway: "gateway API key",
+};
+
+function authStatus(
+  env: NodeJS.ProcessEnv,
+  store: CredentialStore,
+  credential: CredentialName = "deepseek",
+) {
+  if (env[CREDENTIAL_ENV[credential]]?.trim()) {
     return { configured: true, source: "environment", backend: "environment" };
   }
   const stored = store.get()?.trim();
@@ -1405,11 +1454,15 @@ function authStatus(env: NodeJS.ProcessEnv, store: CredentialStore) {
     : { configured: false, source: "missing", backend: store.name };
 }
 
-async function runAuthSet(deps: CliDependencies) {
-  const store = resolvedCredentialStore(deps);
-  const secret = await (deps.secretReader ?? readSecret)();
+async function runAuthSet(
+  command: Extract<ParsedCommand, { kind: "auth-set" }>,
+  deps: CliDependencies,
+) {
+  const store = resolvedCredentialStore(deps, command.credential);
+  const label = CREDENTIAL_LABEL[command.credential];
+  const secret = await (deps.secretReader ?? (() => readSecret({ label })))();
   store.set(secret);
-  deps.stdout.write(`DeepSeek API key saved in ${store.name}.\n`);
+  deps.stdout.write(`${label} saved in ${store.name}.\n`);
   return 0;
 }
 
@@ -1417,14 +1470,16 @@ async function runAuthStatus(
   command: Extract<ParsedCommand, { kind: "auth-status" }>,
   deps: CliDependencies,
 ) {
-  const result = authStatus(deps.env, resolvedCredentialStore(deps));
+  const store = resolvedCredentialStore(deps, command.credential);
+  const label = CREDENTIAL_LABEL[command.credential];
+  const result = authStatus(deps.env, store, command.credential);
   if (command.json) {
     deps.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
     deps.stdout.write(
       result.configured
-        ? `DeepSeek API key configured via ${result.source}.\n`
-        : `DeepSeek API key is not configured (${result.backend}).\n`,
+        ? `${label} configured via ${result.source}.\n`
+        : `${label} is not configured (${result.backend}).\n`,
     );
   }
   return 0;
@@ -1434,7 +1489,8 @@ async function runAuthRemove(
   command: Extract<ParsedCommand, { kind: "auth-remove" }>,
   deps: CliDependencies,
 ) {
-  const store = resolvedCredentialStore(deps);
+  const store = resolvedCredentialStore(deps, command.credential);
+  const label = CREDENTIAL_LABEL[command.credential];
   const existed = store.get() !== undefined;
   store.remove();
   const result = { removed: existed };
@@ -1442,8 +1498,8 @@ async function runAuthRemove(
     command.json
       ? `${JSON.stringify(result, null, 2)}\n`
       : existed
-        ? "Stored DeepSeek API key removed.\n"
-        : "No stored DeepSeek API key was found.\n",
+        ? `Stored ${label} removed.\n`
+        : `No stored ${label} was found.\n`,
   );
   return 0;
 }
@@ -1554,7 +1610,7 @@ export async function runCli(
       case "setup-skills":
         return await runSetupSkills(command, deps);
       case "auth-set":
-        return await runAuthSet(deps);
+        return await runAuthSet(command, deps);
       case "auth-status":
         return await runAuthStatus(command, deps);
       case "auth-remove":

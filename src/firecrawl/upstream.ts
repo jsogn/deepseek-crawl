@@ -41,7 +41,11 @@ export interface FirecrawlUpstreamDependencies {
   fetchImpl: typeof fetch;
 }
 
-function upstreamHeaders(source: Headers, env: NodeJS.ProcessEnv): Headers {
+function upstreamHeaders(
+  source: Headers,
+  env: NodeJS.ProcessEnv,
+  configuredKey: string | undefined,
+): Headers {
   const headers = new Headers();
   for (const [name, value] of source) {
     if (!BLOCKED_REQUEST_HEADERS.has(name.toLowerCase())) {
@@ -49,12 +53,12 @@ function upstreamHeaders(source: Headers, env: NodeJS.ProcessEnv): Headers {
     }
   }
 
-  const environmentKey = env.FIRECRAWL_API_KEY?.trim();
-  if (environmentKey && !headers.has("authorization")) {
-    if (/[\r\n]/.test(environmentKey)) {
+  const upstreamKey = configuredKey?.trim() || env.FIRECRAWL_API_KEY?.trim();
+  if (upstreamKey && !headers.has("authorization")) {
+    if (/[\r\n]/.test(upstreamKey)) {
       throw new Error("FIRECRAWL_API_KEY must not contain a newline.");
     }
-    headers.set("authorization", `Bearer ${environmentKey}`);
+    headers.set("authorization", `Bearer ${upstreamKey}`);
   }
   return headers;
 }
@@ -80,7 +84,7 @@ export async function requestFirecrawlUpstream(
   );
   const init: RequestInit = {
     method: input.method,
-    headers: upstreamHeaders(input.headers, dependencies.env),
+    headers: upstreamHeaders(input.headers, dependencies.env, dependencies.config.firecrawlApiKey),
     redirect: "manual",
     signal: AbortSignal.timeout(dependencies.config.timeoutMs),
   };

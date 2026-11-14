@@ -436,4 +436,40 @@ describe("Firecrawl SDK against the gateway", () => {
     expect(scraped.markdown).toBe("# Example");
     expect(upstream.requests[0]?.authorization).toBe("Bearer fc-upstream");
   });
+
+  it("lets a local official SDK client use only the gateway URL with a stored Firecrawl key", async () => {
+    const upstream = await startMockUpstream(() => ({
+      body: {
+        success: true,
+        data: {
+          markdown: "# Example",
+          metadata: {
+            title: "Example",
+            sourceURL: "https://example.com/",
+            url: "https://example.com/",
+            statusCode: 200,
+          },
+        },
+      },
+    }));
+    const gateway = await startGatewayServer({
+      config: {
+        ...testConfig(upstream.url),
+        firecrawlApiKey: "fc-stored",
+      },
+      env: {},
+      fetchImpl: fetch,
+    });
+    servers.push(gateway);
+    const client = new Firecrawl({
+      apiUrl: gateway.url.href.replace(/\/$/, ""),
+    });
+
+    const scraped = await client.scrape("https://example.com/", {
+      formats: ["markdown"],
+    });
+
+    expect(scraped.markdown).toBe("# Example");
+    expect(upstream.requests[0]?.authorization).toBe("Bearer fc-stored");
+  });
 });

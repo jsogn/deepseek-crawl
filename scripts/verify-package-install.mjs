@@ -318,7 +318,7 @@ try {
   }
   const gatewayHelp = (await runOk(process.execPath, [binary, "gateway", "--help"], consumerRoot))
     .stdout;
-  if (!gatewayHelp.includes("--allow-remote") || !gatewayHelp.includes("8787")) {
+  if (!gatewayHelp.includes("--remote") || !gatewayHelp.includes("8787")) {
     throw new Error("Installed Firecrawl-compatible gateway command is missing expected help.");
   }
 

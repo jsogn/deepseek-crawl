@@ -390,15 +390,17 @@ describe("parseCli", () => {
   it("parses gateway options", () => {
     expect(parseCli(["gateway"])).toEqual({
       kind: "gateway",
-      host: "127.0.0.1",
-      port: 8787,
-      allowRemote: false,
+      remote: false,
     });
-    expect(parseCli(["gateway", "--host", "0.0.0.0", "--port", "9000", "--allow-remote"])).toEqual({
+    expect(parseCli(["gateway", "--remote", "--host", "192.0.2.1", "--port", "9000"])).toEqual({
       kind: "gateway",
-      host: "0.0.0.0",
+      host: "192.0.2.1",
       port: 9000,
-      allowRemote: true,
+      remote: true,
+    });
+    expect(parseCli(["gateway", "--allow-remote"])).toEqual({
+      kind: "gateway",
+      remote: true,
     });
     expect(parseCli(["gateway", "--help"])).toEqual({
       kind: "help",
@@ -494,13 +496,27 @@ describe("parseCli", () => {
   });
 
   it("parses auth commands", () => {
-    expect(parseCli(["auth", "set"])).toEqual({ kind: "auth-set" });
+    expect(parseCli(["auth", "set"])).toEqual({
+      kind: "auth-set",
+      credential: "deepseek",
+    });
+    expect(parseCli(["auth", "set", "firecrawl"])).toEqual({
+      kind: "auth-set",
+      credential: "firecrawl",
+    });
     expect(parseCli(["auth", "status", "--json"])).toEqual({
       kind: "auth-status",
+      credential: "deepseek",
       json: true,
     });
     expect(parseCli(["auth", "remove", "--json"])).toEqual({
       kind: "auth-remove",
+      credential: "deepseek",
+      json: true,
+    });
+    expect(parseCli(["auth", "status", "gateway", "--json"])).toEqual({
+      kind: "auth-status",
+      credential: "gateway",
       json: true,
     });
   });
@@ -577,6 +593,7 @@ describe("parseCli", () => {
     [["auth"], /auth|subcommand/i],
     [["auth", "unknown"], /auth|subcommand/i],
     [["auth", "set", "--json"], /unknown option/i],
+    [["auth", "set", "unknown"], /credential|deepseek|firecrawl|gateway/i],
     [["balance", "extra"], /argument|unknown option/i],
     [["balance", "--live"], /unknown option/i],
     [["gateway", "--port", "0"], /port/i],

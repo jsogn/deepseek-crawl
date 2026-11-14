@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runCli } from "../../src/cli/run.js";
-import type { CredentialStore } from "../../src/credentials/store.js";
+import type { CredentialName, CredentialStore } from "../../src/credentials/store.js";
 import { writer } from "../helpers/cli.js";
 
 function memoryStore(initial?: string) {
@@ -31,6 +31,27 @@ function dependencies(store: CredentialStore, env: NodeJS.ProcessEnv = {}) {
       stdout,
       stderr,
       credentialStore: store,
+    },
+    stdout,
+    stderr,
+  };
+}
+
+function providerDependencies(
+  stores: Partial<Record<CredentialName, CredentialStore>>,
+  env: NodeJS.ProcessEnv = {},
+) {
+  const stdout = writer();
+  const stderr = writer();
+  return {
+    deps: {
+      env,
+      fetchImpl: (async () => {
+        throw new Error("auth commands must not use fetch");
+      }) as unknown as typeof fetch,
+      stdout,
+      stderr,
+      credentialStores: stores,
     },
     stdout,
     stderr,
@@ -100,5 +121,59 @@ describe("auth commands", () => {
       }),
     ).toBe(1);
     expect(stderr.value()).toContain("API key");
+  });
+
+  it("stores Firecrawl and gateway credentials in their provider stores", async () => {
+    const deepseek = memoryStore();
+    const firecrawl = memoryStore();
+    const gateway = memoryStore();
+    const environment = providerDependencies({ deepseek, firecrawl, gateway });
+    let secret = "firecrawl-secret";
+    const secretReader = async () => secret;
+
+    expect(
+      await runCli(["auth", "set", "firecrawl"], {
+        ...environment.deps,
+        secretReader,
+      }),
+    ).toBe(0);
+    secret = "gateway-secret";
+    expect(
+      await runCli(["auth", "set", "gateway"], {
+        ...environment.deps,
+        secretReader,
+      }),
+    ).toBe(0);
+
+    expect(deepseek.value()).toBeUndefined();
+    expect(firecrawl.value()).toBe("firecrawl-secret");
+    expect(gateway.value()).toBe("gateway-secret");
+    expect(environment.stdout.value()).toContain("Firecrawl API key saved");
+    expect(environment.stdout.value()).toContain("gateway API key saved");
+    expect(environment.stdout.value()).not.toContain("firecrawl-secret");
+    expect(environment.stdout.value()).not.toContain("gateway-secret");
+  });
+
+  it("reports provider-specific environment and stored status", async () => {
+    const gateway = memoryStore("stored-gateway");
+    const stored = providerDependencies({ gateway });
+
+    expect(await runCli(["auth", "status", "gateway", "--json"], stored.deps)).toBe(0);
+    expect(JSON.parse(stored.stdout.value())).toEqual({
+      configured: true,
+      source: "keychain",
+      backend: "keychain",
+    });
+
+    const environment = providerDependencies(
+      { gateway },
+      { GATEWAY_API_KEY: "environment-gateway" },
+    );
+    expect(await runCli(["auth", "status", "gateway", "--json"], environment.deps)).toBe(0);
+    expect(JSON.parse(environment.stdout.value())).toMatchObject({
+      configured: true,
+      source: "environment",
+    });
+    expect(environment.stdout.value()).not.toContain("environment-gateway");
   });
 });

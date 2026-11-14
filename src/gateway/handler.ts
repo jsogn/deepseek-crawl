@@ -130,8 +130,19 @@ function fallbackRoute(method: string, pathname: string): FallbackRoute | undefi
   return undefined;
 }
 
-function hasAuthorization(request: IncomingMessage, env: NodeJS.ProcessEnv): boolean {
-  return Boolean(request.headers.authorization || env.FIRECRAWL_API_KEY?.trim());
+function hasFirecrawlCredential(
+  request: IncomingMessage,
+  env: NodeJS.ProcessEnv,
+  config: GatewayConfig,
+): boolean {
+  if (config.gatewayApiKey !== undefined) {
+    return Boolean(config.firecrawlApiKey?.trim() || env.FIRECRAWL_API_KEY?.trim());
+  }
+  return Boolean(
+    request.headers.authorization ||
+      config.firecrawlApiKey?.trim() ||
+      env.FIRECRAWL_API_KEY?.trim(),
+  );
 }
 
 function parseJsonBody(body: Uint8Array | undefined): unknown {
@@ -352,9 +363,7 @@ export function createGatewayHandler(
     const shouldTryDeepSeekFirst =
       route !== undefined &&
       (isLocalCrawlRoute ||
-        (dependencies.config.gatewayApiKey === undefined
-          ? !hasAuthorization(request, dependencies.env)
-          : !dependencies.env.FIRECRAWL_API_KEY?.trim()) ||
+        !hasFirecrawlCredential(request, dependencies.env, dependencies.config) ||
         now() < firecrawlExhaustedUntil);
 
     if (!shouldTryDeepSeekFirst) {

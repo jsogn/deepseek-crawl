@@ -148,6 +148,17 @@ the local credential with:
 deepseek-crawl auth remove
 ```
 
+Gateway providers use the same credential commands:
+
+```bash
+deepseek-crawl auth set firecrawl
+deepseek-crawl auth set gateway
+deepseek-crawl auth status firecrawl --json
+deepseek-crawl auth remove gateway
+```
+
+Omitting the provider keeps the existing `deepseek` default.
+
 ### Verify the CLI and credential
 
 ```bash
@@ -305,28 +316,32 @@ failed-item retry:
 ## Optional Firecrawl-compatible gateway
 
 The ordinary CLI and MCP do not start an HTTP service. To connect an existing
-Firecrawl v2 client, start the gateway included in the same npm package:
+Firecrawl v2 client:
 
 ```bash
-export FIRECRAWL_API_KEY=fc-...
-export DEEPSEEK_API_KEY=sk-...
-deepseek-crawl gateway --port 8787
+deepseek-crawl auth set firecrawl
+deepseek-crawl gateway
 ```
 
-Point the client at the gateway root:
+DeepSeek-only use can skip `auth set firecrawl`. DeepSeek credentials continue to
+use the existing `deepseek-crawl auth set` or Keychain configuration.
+
+Local mode starts at `8787`, tries subsequent ports when it is occupied, and
+prints the actual URL. An explicit `--port` is strict and fails if unavailable.
+
+The client usually only needs the gateway URL:
 
 ```bash
-export FIRECRAWL_API_URL=http://127.0.0.1:8787
+export FIRECRAWL_API_URL=http://127.0.0.1:<reported-port>
 ```
 
-The Node SDK can set the same root URL directly. Do not append `/v2` to `apiUrl`:
+The local Node SDK can set only the root URL. Do not append `/v2`:
 
 ```js
 import { Firecrawl } from "firecrawl";
 
 const firecrawl = new Firecrawl({
-  apiKey: process.env.FIRECRAWL_API_KEY,
-  apiUrl: "http://127.0.0.1:8787",
+  apiUrl: "http://127.0.0.1:8787", // replace with the reported port
 });
 ```
 
@@ -344,14 +359,20 @@ proxy loop.
 Advanced Firecrawl capabilities pass through while credits are available. They
 never pretend to succeed when a DeepSeek fallback does not provide equivalent
 behavior. DeepSeek Crawl jobs remain in the current gateway process and expire
-after 24 hours. The default listener is `127.0.0.1`; a public listener requires
-the explicit `--allow-remote` flag.
+after 24 hours.
 
-A non-loopback listener also requires `GATEWAY_API_KEY`. Set the Firecrawl SDK
-`apiKey` to that gateway token. After authentication, the gateway strips it and
-uses its own `FIRECRAWL_API_KEY` for Firecrawl, so the gateway token is never
-forwarded upstream. In local loopback mode without `GATEWAY_API_KEY`, the client
-`apiKey` can still pass through as the Firecrawl upstream key.
+Remote mode uses fixed port `8787` and requires a gateway token:
+
+```bash
+deepseek-crawl auth set gateway
+deepseek-crawl gateway --remote
+```
+
+Remote clients use that token as the Firecrawl SDK `apiKey`. After
+authentication, the gateway strips it and uses its own Firecrawl provider
+credential upstream. `--allow-remote` remains a compatibility alias; new usage
+uses `--remote`.
+CI and containers can override the stored token with `GATEWAY_API_KEY`.
 
 Firecrawl upstream responses stream through the gateway instead of being fully
 buffered, including large Crawl responses. Normal gateway shutdown cancels

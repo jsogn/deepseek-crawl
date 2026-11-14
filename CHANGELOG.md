@@ -6,6 +6,8 @@
 
 - Add the optional `deepseek-crawl gateway` mode for Firecrawl v2-compatible
   Search, Scrape, Map, and asynchronous Crawl clients.
+- Add Provider-specific `auth set|status|remove` support for `deepseek`,
+  `firecrawl`, and `gateway` credentials.
 - Forward common Firecrawl requests to the Firecrawl upstream while preserving
   method, request body, authentication, status, and JSON response behavior.
 - Fall back to DeepSeek Search, Fetch, Map, and Crawl when Firecrawl reports
@@ -24,6 +26,15 @@
 - Limit inbound gateway request bodies to 8 MiB and never log credentials.
 - Stream Firecrawl upstream responses and cancel active local Crawl jobs during
   gateway shutdown.
+
+### Changed
+
+- Local gateway mode starts at port `8787` and automatically selects the next
+  available port; explicit ports and remote mode stay strict.
+- Replace the multi-flag remote setup with `gateway --remote`, which requires a
+  stored or environment-provided gateway token.
+- Let local Firecrawl SDK clients use only the gateway URL while the gateway
+  injects a stored provider credential.
 
 ### Testing
 

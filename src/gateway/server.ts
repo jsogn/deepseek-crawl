@@ -35,6 +35,33 @@ function listen(server: Server, host: string, port: number): Promise<void> {
   });
 }
 
+function isAddressInUse(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "EADDRINUSE"
+  );
+}
+
+async function listenGateway(server: Server, config: GatewayConfig): Promise<void> {
+  if (!(config.autoPort ?? false)) {
+    await listen(server, config.host, config.port);
+    return;
+  }
+  const lastPort = Math.min(config.port + 99, 65_535);
+  for (let port = config.port; port <= lastPort; port += 1) {
+    try {
+      await listen(server, config.host, port);
+      return;
+    } catch (error) {
+      if (!isAddressInUse(error)) {
+        throw error;
+      }
+    }
+  }
+  await listen(server, config.host, 0);
+}
+
 function serverUrl(server: Server, fallbackHost: string): URL {
   const address = server.address();
   if (!address || typeof address === "string") {
@@ -57,7 +84,7 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
       crawlJobs,
     }),
   );
-  await listen(server, options.config.host, options.config.port);
+  await listenGateway(server, options.config);
   let closing: Promise<void> | undefined;
 
   return {

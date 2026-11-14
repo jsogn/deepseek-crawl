@@ -10,35 +10,40 @@ interface SecretOutput {
 export interface SecretReaderOptions {
   stdin?: SecretInput;
   stderr?: SecretOutput;
+  label?: string;
 }
 
-function validateSecret(value: string): string {
+function validateSecret(value: string, label: string): string {
   const secret = value.trim();
   if (!secret) {
-    throw new Error("DeepSeek API key is required.");
+    throw new Error(`${label} is required.`);
   }
   if (/[\r\n]/.test(secret)) {
-    throw new Error("DeepSeek API key must be a single line.");
+    throw new Error(`${label} must be a single line.`);
   }
   return secret;
 }
 
-async function readPipedSecret(stdin: SecretInput): Promise<string> {
+async function readPipedSecret(stdin: SecretInput, label: string): Promise<string> {
   let value = "";
   for await (const chunk of stdin) {
     value += String(chunk);
   }
-  return validateSecret(value);
+  return validateSecret(value, label);
 }
 
-function readTerminalSecret(stdin: SecretInput, stderr: SecretOutput): Promise<string> {
+function readTerminalSecret(
+  stdin: SecretInput,
+  stderr: SecretOutput,
+  label: string,
+): Promise<string> {
   if (!stdin.setRawMode) {
     throw new Error("Terminal does not support hidden input.");
   }
 
   return new Promise((resolve, reject) => {
     let value = "";
-    stderr.write("DeepSeek API key: ");
+    stderr.write(`${label}: `);
     stdin.setEncoding?.("utf8");
     stdin.setRawMode?.(true);
     stdin.resume();
@@ -52,7 +57,7 @@ function readTerminalSecret(stdin: SecretInput, stderr: SecretOutput): Promise<s
       cleanup();
       stderr.write("\n");
       try {
-        resolve(validateSecret(value));
+        resolve(validateSecret(value, label));
       } catch (error) {
         reject(error);
       }
@@ -83,5 +88,6 @@ function readTerminalSecret(stdin: SecretInput, stderr: SecretOutput): Promise<s
 export function readSecret(options: SecretReaderOptions = {}): Promise<string> {
   const stdin = options.stdin ?? process.stdin;
   const stderr = options.stderr ?? process.stderr;
-  return stdin.isTTY ? readTerminalSecret(stdin, stderr) : readPipedSecret(stdin);
+  const label = options.label ?? "DeepSeek API key";
+  return stdin.isTTY ? readTerminalSecret(stdin, stderr, label) : readPipedSecret(stdin, label);
 }

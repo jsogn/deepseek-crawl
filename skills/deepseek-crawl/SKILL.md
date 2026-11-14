@@ -53,17 +53,23 @@ Only start the gateway when the user explicitly wants an existing Firecrawl v2
 client to keep working without changing its API calls:
 
 ```bash
-deepseek-crawl gateway --port 8787
+deepseek-crawl auth set firecrawl   # optional when already configured
+deepseek-crawl gateway
 ```
 
-Point the Firecrawl client at `http://127.0.0.1:8787`. The gateway prefers its
-Firecrawl upstream and falls back to DeepSeek for common Search, Scrape, Map, and
-Crawl operations after Firecrawl reports exhausted credits. It never starts
-automatically and is separate from ordinary CLI and MCP requests.
+Point the Firecrawl client at the URL printed by the command. Local mode starts
+at `8787` and automatically chooses the next available port when occupied.
 
-Non-loopback listeners require `GATEWAY_API_KEY`; clients pass it as the
-Firecrawl SDK `apiKey`. The gateway strips that token before forwarding to the
-Firecrawl upstream.
+Remote mode uses fixed port `8787`:
+
+```bash
+deepseek-crawl auth set gateway
+deepseek-crawl gateway --remote
+```
+
+Clients pass the gateway token as the Firecrawl SDK `apiKey`. The gateway strips
+that token before forwarding to Firecrawl. The gateway never starts
+automatically and is separate from ordinary CLI and MCP requests.
 
 Do not claim full Advanced Firecrawl compatibility. The gateway does not replace
 the normal CLI operation selection in this Skill.

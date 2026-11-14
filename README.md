@@ -137,6 +137,17 @@ macOS Keychain 保存凭据；其他平台使用权限为 `0600` 的私有文件
 deepseek-crawl auth remove
 ```
 
+网关相关 Provider 凭据使用同一套命令：
+
+```bash
+deepseek-crawl auth set firecrawl
+deepseek-crawl auth set gateway
+deepseek-crawl auth status firecrawl --json
+deepseek-crawl auth remove gateway
+```
+
+不指定 Provider 时仍默认为 `deepseek`，兼容原有命令。
+
 ### 验证 CLI 与凭据
 
 ```bash
@@ -285,29 +296,32 @@ CLI 默认合并 Sitemap 和 Markdown 发现，并限制在种子页的 exact or
 
 ## Firecrawl-compatible 网关（可选）
 
-普通 CLI 和 MCP 不启动 HTTP 服务。需要让现有 Firecrawl v2 客户端直接连接时，
-启动同一 npm 包内置的兼容网关：
+普通 CLI 和 MCP 不启动 HTTP 服务。需要让现有 Firecrawl v2 客户端直接连接时：
 
 ```bash
-export FIRECRAWL_API_KEY=fc-...
-export DEEPSEEK_API_KEY=sk-...
-deepseek-crawl gateway --port 8787
+deepseek-crawl auth set firecrawl
+deepseek-crawl gateway
 ```
 
-然后把客户端的 Firecrawl API 地址改为：
+只使用 DeepSeek 可以不执行 `auth set firecrawl`，网关仍可工作。DeepSeek Key
+继续使用现有的 `deepseek-crawl auth set` 或 Keychain 配置。
+
+本地默认从 `8787` 开始寻找可用端口，冲突时自动尝试下一个，并打印实际地址。
+指定 `--port` 时该端口变为严格固定；被占用会直接失败。
+
+客户端通常只需要 Firecrawl API 地址：
 
 ```bash
-export FIRECRAWL_API_URL=http://127.0.0.1:8787
+export FIRECRAWL_API_URL=http://127.0.0.1:<打印的端口>
 ```
 
-Node SDK 也可以直接设置根地址；不要在 `apiUrl` 末尾添加 `/v2`：
+Node SDK 本地模式可以只设置根地址；不要在 `apiUrl` 末尾添加 `/v2`：
 
 ```js
 import { Firecrawl } from "firecrawl";
 
 const firecrawl = new Firecrawl({
-  apiKey: process.env.FIRECRAWL_API_KEY,
-  apiUrl: "http://127.0.0.1:8787",
+  apiUrl: "http://127.0.0.1:8787", // 使用启动输出中的实际端口
 });
 ```
 
@@ -322,13 +336,19 @@ Firecrawl 凭据时，网关使用 DeepSeek；Crawl 还会提供兼容的 job st
 上游，以免代理自身形成循环。
 
 高级 Firecrawl 能力在有额度时可透传；没有 DeepSeek 等价能力时不会伪装成功。
-DeepSeek Crawl job 只保存在当前网关进程内，24 小时后过期。默认只监听
-`127.0.0.1`；监听公网地址必须显式添加 `--allow-remote`。
+DeepSeek Crawl job 只保存在当前网关进程内，24 小时后过期。
 
-非 loopback 监听还必须设置 `GATEWAY_API_KEY`。此时 Firecrawl SDK 的 `apiKey`
-填写网关 Token；网关校验后会剥离它，并使用服务器自己的 `FIRECRAWL_API_KEY`
-访问 Firecrawl，避免把网关凭据泄露给上游。loopback 本地模式不设置
-`GATEWAY_API_KEY` 时，仍可把客户端 `apiKey` 作为 Firecrawl upstream Key 透传。
+远程模式使用固定默认端口 `8787`，并且必须配置网关 Token：
+
+```bash
+deepseek-crawl auth set gateway
+deepseek-crawl gateway --remote
+```
+
+远程客户端把网关 Token 作为 Firecrawl SDK `apiKey`。网关校验后会剥离它，并使用
+服务器自己的 Firecrawl Provider 凭据访问上游，避免把网关凭据泄露给 Firecrawl。
+`--allow-remote` 作为旧参数仍兼容，但新用法统一为 `--remote`。
+CI 和容器可以直接用 `GATEWAY_API_KEY` 环境变量覆盖已存储 Token。
 
 Firecrawl 上游响应采用流式透传，不会把大型 Crawl 响应完整缓冲在网关内存中。
 网关正常关闭时会取消仍在运行的本地 DeepSeek Crawl jobs。

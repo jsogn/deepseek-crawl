@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import type { CrawlSitemapMode } from "../crawl/types.js";
+import type { CredentialName } from "../credentials/store.js";
 import { parseSkillAgents, type SkillAgent } from "../setup/skills.js";
 
 export class CliUsageError extends Error {
@@ -142,14 +143,14 @@ export type ParsedCommand =
       force: boolean;
       json: boolean;
     }
-  | { kind: "auth-set" }
-  | { kind: "auth-status"; json: boolean }
-  | { kind: "auth-remove"; json: boolean }
+  | { kind: "auth-set"; credential: CredentialName }
+  | { kind: "auth-status"; credential: CredentialName; json: boolean }
+  | { kind: "auth-remove"; credential: CredentialName; json: boolean }
   | {
       kind: "gateway";
-      host: string;
-      port: number;
-      allowRemote: boolean;
+      remote: boolean;
+      host?: string;
+      port?: number;
     }
   | { kind: "mcp" }
   | { kind: "help"; command?: string }
@@ -190,6 +191,14 @@ function parsePatterns(value: string, name: string): string[] {
     throw new CliUsageError(`${name} patterns must not be empty.`);
   }
   return patterns;
+}
+
+function parseCredential(value: string | undefined): CredentialName {
+  const credential = value ?? "deepseek";
+  if (!["deepseek", "firecrawl", "gateway"].includes(credential)) {
+    throw new CliUsageError("Credential must be deepseek, firecrawl, or gateway.");
+  }
+  return credential as CredentialName;
 }
 
 function parseCacheOptions(
@@ -886,16 +895,25 @@ export function parseCli(argv: string[]): ParsedCommand {
         if (subcommand === "set") {
           const parsed = parseArgs({
             args: args.slice(1),
-            allowPositionals: false,
+            allowPositionals: true,
             strict: true,
             options: { help: { type: "boolean", short: "h" } },
           });
-          return parsed.values.help ? { kind: "help", command: "auth" } : { kind: "auth-set" };
+          if (parsed.values.help) {
+            return { kind: "help", command: "auth" };
+          }
+          if (parsed.positionals.length > 1) {
+            throw new CliUsageError("auth set accepts at most one credential.");
+          }
+          return {
+            kind: "auth-set",
+            credential: parseCredential(parsed.positionals[0]),
+          };
         }
         if (subcommand === "status" || subcommand === "remove") {
           const parsed = parseArgs({
             args: args.slice(1),
-            allowPositionals: false,
+            allowPositionals: true,
             strict: true,
             options: {
               json: { type: "boolean" },
@@ -905,8 +923,12 @@ export function parseCli(argv: string[]): ParsedCommand {
           if (parsed.values.help) {
             return { kind: "help", command: "auth" };
           }
+          if (parsed.positionals.length > 1) {
+            throw new CliUsageError(`auth ${subcommand} accepts at most one credential.`);
+          }
           return {
             kind: subcommand === "status" ? "auth-status" : "auth-remove",
+            credential: parseCredential(parsed.positionals[0]),
             json: parsed.values.json ?? false,
           };
         }
@@ -933,6 +955,7 @@ export function parseCli(argv: string[]): ParsedCommand {
           options: {
             host: { type: "string" },
             port: { type: "string" },
+            remote: { type: "boolean" },
             "allow-remote": { type: "boolean" },
             help: { type: "boolean", short: "h" },
           },
@@ -940,18 +963,19 @@ export function parseCli(argv: string[]): ParsedCommand {
         if (parsed.values.help) {
           return { kind: "help", command: "gateway" };
         }
-        const host = parsed.values.host === undefined ? "127.0.0.1" : parsed.values.host.trim();
-        if (!host) {
+        const host = parsed.values.host?.trim();
+        if (parsed.values.host !== undefined && !host) {
           throw new CliUsageError("Gateway host is required.");
         }
+        const port =
+          parsed.values.port === undefined
+            ? undefined
+            : parseInteger(parsed.values.port, "port", 1, 65_535);
         return {
           kind: "gateway",
-          host,
-          port:
-            parsed.values.port === undefined
-              ? 8787
-              : parseInteger(parsed.values.port, "port", 1, 65_535),
-          allowRemote: parsed.values["allow-remote"] ?? false,
+          remote: parsed.values.remote ?? parsed.values["allow-remote"] ?? false,
+          ...(host === undefined ? {} : { host }),
+          ...(port === undefined ? {} : { port }),
         };
       }
       default:

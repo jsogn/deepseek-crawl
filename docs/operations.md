@@ -43,19 +43,23 @@ start it:
 ```bash
 deepseek-crawl gateway
 deepseek-crawl gateway --port 9000
-deepseek-crawl gateway --host 0.0.0.0 --allow-remote
+deepseek-crawl gateway --remote
 ```
 
 Clients set `FIRECRAWL_API_URL` or the SDK `apiUrl` to the gateway root. The
 gateway process uses only `FIRECRAWL_UPSTREAM_URL` for its Firecrawl upstream,
 preventing a loop back into itself.
 
-The default loopback mode supports local BYOK. A non-loopback listener requires
-`GATEWAY_API_KEY`, supplied by clients as the Firecrawl SDK `apiKey`. After
-authentication, the gateway strips that Authorization value and uses its own
-`FIRECRAWL_API_KEY` for Firecrawl. Never configure the gateway token as the
-Firecrawl upstream key. Upstream responses are streamed, and gateway shutdown
-cancels active process-local Crawl jobs.
+Local mode searches from `8787` for an available port; explicit `--port` and
+remote mode use strict fixed ports. Provider credentials come from environment
+variables first, then the Keychain/file stores populated by
+`deepseek-crawl auth set [deepseek|firecrawl|gateway]`.
+
+Remote mode requires a stored `gateway` token. Clients supply it as the Firecrawl
+SDK `apiKey`; the gateway strips it and uses its own Firecrawl provider
+credential upstream. Never configure the gateway token as the Firecrawl upstream
+key. Upstream responses are streamed, and gateway shutdown cancels active
+process-local Crawl jobs.
 
 DeepSeek fallback covers `POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`,
 `POST /v2/crawl`, and status, errors, and cancellation for local `dsc_` Crawl
@@ -156,10 +160,11 @@ CLI Map and Crawl request Sitemaps directly and accept only public HTTP(S) targe
 | `FIRECRAWL_UPSTREAM_URL` | `https://api.firecrawl.dev` | Gateway Firecrawl upstream        |
 | `GATEWAY_API_KEY`        | none                        | Remote gateway Bearer token       |
 
-Non-loopback DeepSeek base URLs must use HTTPS. API keys are never accepted as CLI
-flags or MCP arguments.
+Environment variables override the local credential store. Non-loopback DeepSeek
+base URLs must use HTTPS. API keys are never accepted as CLI flags or MCP
+arguments.
 
-Clients use `FIRECRAWL_API_URL=http://127.0.0.1:8787` to reach the gateway. The
+Clients use the `FIRECRAWL_API_URL` printed at startup to reach the gateway. The
 gateway does not read `FIRECRAWL_API_URL`; it reads only
 `FIRECRAWL_UPSTREAM_URL`.
 

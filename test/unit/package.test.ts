@@ -58,6 +58,8 @@ describe("package documentation", () => {
       "deepseek-crawl auth remove",
       "deepseek-crawl balance",
       "deepseek-crawl gateway",
+      "auth set firecrawl",
+      "--remote",
       "deepseek-crawl fetch status",
       "--job-dir",
       "macOS Keychain",

@@ -1,4 +1,9 @@
 import { isIP } from "node:net";
+import {
+  type CredentialName,
+  type CredentialStore,
+  createCredentialStore,
+} from "../credentials/store.js";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8787;
@@ -10,7 +15,9 @@ export interface GatewayConfig {
   host: string;
   port: number;
   allowRemote: boolean;
+  autoPort?: boolean;
   gatewayApiKey?: string;
+  firecrawlApiKey?: string;
   upstreamUrl: URL;
   requestBodyLimit: number;
   timeoutMs: number;
@@ -19,8 +26,10 @@ export interface GatewayConfig {
 export interface GatewayConfigInput {
   host?: string;
   port?: number;
+  remote?: boolean;
   allowRemote?: boolean;
   env?: NodeJS.ProcessEnv;
+  credentialStores?: Partial<Record<CredentialName, CredentialStore>>;
 }
 
 function isLoopbackHostname(hostname: string): boolean {
@@ -67,13 +76,13 @@ function parseUpstreamUrl(value: string | undefined): URL {
   return url;
 }
 
-function validateHost(host: string, allowRemote: boolean): string {
+function validateHost(host: string, remote: boolean): string {
   const value = host.trim();
   if (!value) {
     throw new Error("Gateway host is required.");
   }
-  if (!allowRemote && !isLoopbackHostname(value)) {
-    throw new Error("A non-loopback gateway host requires --allow-remote.");
+  if (!remote && !isLoopbackHostname(value)) {
+    throw new Error("A non-loopback gateway host requires --remote.");
   }
   return value;
 }
@@ -85,30 +94,55 @@ function validatePort(port: number): number {
   return port;
 }
 
-function parseGatewayApiKey(value: string | undefined): string | undefined {
-  const key = value?.trim();
+function validateApiKey(value: string, name: string): string {
+  const key = value.trim();
   if (!key) {
-    return undefined;
+    throw new Error(`${name} must not be empty.`);
   }
   if (/[\r\n]/.test(key)) {
-    throw new Error("GATEWAY_API_KEY must not contain a newline.");
+    throw new Error(`${name} must not contain a newline.`);
   }
   return key;
 }
 
+const CREDENTIAL_ENV: Record<CredentialName, string> = {
+  deepseek: "DEEPSEEK_API_KEY",
+  firecrawl: "FIRECRAWL_API_KEY",
+  gateway: "GATEWAY_API_KEY",
+};
+
+function resolveCredential(
+  env: NodeJS.ProcessEnv,
+  credential: CredentialName,
+  stores: GatewayConfigInput["credentialStores"],
+): string | undefined {
+  const environmentName = CREDENTIAL_ENV[credential];
+  const environmentValue = env[environmentName];
+  if (environmentValue !== undefined && environmentValue.trim() !== "") {
+    return validateApiKey(environmentValue, environmentName);
+  }
+  const store =
+    stores !== undefined ? stores[credential] : createCredentialStore({ env, credential });
+  return store?.get()?.trim() || undefined;
+}
+
 export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConfig {
   const env = options.env ?? process.env;
-  const allowRemote = options.allowRemote ?? false;
-  const host = validateHost(options.host ?? DEFAULT_HOST, allowRemote);
-  const gatewayApiKey = parseGatewayApiKey(env.GATEWAY_API_KEY);
-  if (!isLoopbackHostname(host) && !gatewayApiKey) {
+  const remote = options.remote ?? options.allowRemote ?? false;
+  const host = validateHost(options.host?.trim() || (remote ? "0.0.0.0" : DEFAULT_HOST), remote);
+  const gatewayApiKey = resolveCredential(env, "gateway", options.credentialStores);
+  const firecrawlApiKey = resolveCredential(env, "firecrawl", options.credentialStores);
+  if ((remote || !isLoopbackHostname(host)) && !gatewayApiKey) {
     throw new Error("GATEWAY_API_KEY is required for a non-loopback gateway host.");
   }
+  const port = validatePort(options.port ?? DEFAULT_PORT);
   return {
     host,
-    port: validatePort(options.port ?? DEFAULT_PORT),
-    allowRemote,
+    port,
+    allowRemote: remote || !isLoopbackHostname(host),
+    autoPort: !remote && options.port === undefined,
     ...(gatewayApiKey === undefined ? {} : { gatewayApiKey }),
+    ...(firecrawlApiKey === undefined ? {} : { firecrawlApiKey }),
     upstreamUrl: parseUpstreamUrl(env.FIRECRAWL_UPSTREAM_URL),
     requestBodyLimit: DEFAULT_REQUEST_BODY_LIMIT,
     timeoutMs: DEFAULT_TIMEOUT_MS,

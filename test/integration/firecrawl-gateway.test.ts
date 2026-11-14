@@ -592,4 +592,65 @@ describe("Firecrawl-compatible gateway", () => {
     expect(crawlJobs.status("dsc_close")?.status).toBe("cancelled");
     await crawlJobs.waitForIdle("dsc_close");
   });
+
+  it("automatically moves to the next available local port", async () => {
+    const blocker = createServer((_request, response) => {
+      response.writeHead(503);
+      response.end();
+    });
+    await new Promise<void>((resolve, reject) => {
+      blocker.once("error", reject);
+      blocker.listen(0, "127.0.0.1", resolve);
+    });
+    servers.push(blocker);
+    const address = blocker.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Port blocker did not expose a TCP address.");
+    }
+
+    const gateway = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        port: address.port,
+        autoPort: true,
+      },
+      env: {},
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+    servers.push(gateway);
+
+    expect(Number(gateway.url.port)).toBeGreaterThan(address.port);
+  });
+
+  it("keeps an explicit port strict when it is occupied", async () => {
+    const blocker = createServer((_request, response) => {
+      response.writeHead(503);
+      response.end();
+    });
+    await new Promise<void>((resolve, reject) => {
+      blocker.once("error", reject);
+      blocker.listen(0, "127.0.0.1", resolve);
+    });
+    servers.push(blocker);
+    const address = blocker.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Port blocker did not expose a TCP address.");
+    }
+
+    await expect(
+      startGatewayServer({
+        config: {
+          ...testConfig(),
+          port: address.port,
+          autoPort: false,
+        },
+        env: {},
+        fetchImpl: async () => {
+          throw new Error("Unexpected Firecrawl request.");
+        },
+      }),
+    ).rejects.toMatchObject({ code: "EADDRINUSE" });
+  });
 });

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.0 - 2026-11-14
 
 ### Added
 
@@ -10,6 +10,18 @@
 - Point the Firecrawl CLI at the managed Gateway after a successful health
   check, with original API URL backup and automatic restoration.
 - Report managed service and Firecrawl CLI binding drift from `gateway status`.
+
+### Fixed
+
+- Ensure Windows `gateway stop` disables and ends the Scheduled Task, then
+  terminates the actual Gateway process tree before restoring the Firecrawl
+  endpoint.
+
+### Testing
+
+- Add real Windows Task Scheduler registration, repeated run/end, process-tree
+  termination, uninstall, and CLI/service tests on Node 22 and Node 24.
+- Normalize repository line endings for cross-platform CI.
 
 ## 0.13.1 - 2026-11-14
 

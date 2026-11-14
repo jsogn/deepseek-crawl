@@ -46,6 +46,7 @@ Version `0.7.0` provides:
 - Fetch, Batch, Crawl, Plan, and Retry can share an explicit-TTL local page cache.
 - Fetch, Batch, and Crawl expose stable `content_hash`; Crawl can compare a baseline and write only changed pages.
 - Crawl supports durable jobs, per-page checkpoints, `crawl resume`, and `crawl status`.
+- Crawl Change Monitor persists a baseline and produces one incremental report per run for cron, CI, or Agent Automation.
 
 The project is open source under the MIT License.
 
@@ -165,6 +166,9 @@ deepseek-crawl map <url> [--search <text>] [options]
 deepseek-crawl crawl <url> -o <dir> [options]
 deepseek-crawl crawl resume <job-dir> -o <dir> [options]
 deepseek-crawl crawl status <job-dir> [--json]
+deepseek-crawl crawl monitor <url> --monitor-dir <dir> -o <runs-dir> [options]
+deepseek-crawl crawl monitor status <monitor-dir> [--json]
+deepseek-crawl crawl monitor reset <monitor-dir> [--json]
 deepseek-crawl doctor [--live] [--json]
 deepseek-crawl setup skills [options]
 deepseek-crawl auth set
@@ -463,6 +467,66 @@ scope.
 the report and stats with `pages[].written: false` and no `path`. This first
 incremental version still reads content or resolves it from cache to compute
 hashes. Skipping fetches with Sitemap `lastmod` is a later optimization.
+
+Scheduled Change Monitor:
+
+```bash
+deepseek-crawl crawl monitor "https://api-docs.deepseek.com/guides/" \
+  --monitor-dir .deepseek-crawl/monitor/deepseek-guides \
+  --max-depth 1 \
+  --max-pages 20 \
+  --include-paths "/guides/*" \
+  --cache-ttl 3600 \
+  --fail-on-change \
+  -o .deepseek-crawl/monitor/deepseek-guides-runs \
+  --json
+```
+
+Monitor performs one run and exits; it starts no background process. Repeat the
+same workflow with cron, CI, a system timer, or Agent Automation. Its state
+directory persists the latest successful baseline, crawl scope, and last result:
+
+```text
+.deepseek-crawl/monitor/deepseek-guides/
+  state.json
+  writer.lock
+```
+
+The first successful run establishes the baseline and never reports a change.
+Later runs compare against the persisted baseline and create a new timestamped
+directory under `-o`, such as
+`.deepseek-crawl/monitor/deepseek-guides-runs/20261114T010203456Z/`. Existing
+reports are never overwritten. `state.json` rotates atomically only after the
+output directory has been published. Old page hashes survive a failed or
+unfinished fetch so a transient error is not reported as removal.
+
+The first run fixes the seed and crawl scope: depth, page limit, filters,
+Sitemap mode, concurrency, and delay. Later runs reuse those values from
+`state.json`, preventing scope drift from creating false changes. Reset the
+monitor before changing its scope. `--cache-ttl`, `--fresh`, and trigger options
+remain per-run choices.
+
+Added, modified, and removed pages trigger by default. `--ignore-removed`
+excludes removals from the trigger. `--only-modified` triggers and writes only
+modified pages; added pages remain in the report and complete baseline.
+`--fail-on-change` exits with code `3` after writing a report and rotating the
+baseline when an effective change exists. The first run and runs without a
+trigger exit `0`.
+
+```bash
+deepseek-crawl crawl monitor status \
+  .deepseek-crawl/monitor/deepseek-guides \
+  --json
+
+deepseek-crawl crawl monitor reset \
+  .deepseek-crawl/monitor/deepseek-guides \
+  --json
+```
+
+`status` is read-only. `reset` takes the single-writer lock and removes the
+baseline so the next run reinitializes it. Only one writer may own a monitor
+directory; a stale PID lock is recoverable. Monitor is a CLI workflow and adds
+no MCP tool.
 
 Resumable Crawl:
 

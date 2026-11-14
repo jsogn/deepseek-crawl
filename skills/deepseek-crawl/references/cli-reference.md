@@ -215,6 +215,27 @@ deepseek-crawl crawl resume <job-dir>
   [--json]
 
 deepseek-crawl crawl status <job-dir> [--json]
+
+deepseek-crawl crawl monitor <url>
+  --monitor-dir <dir>
+  --output, -o <runs-dir>
+  [--max-depth <0..5>]
+  [--max-pages <1..100>]
+  [--concurrency <1..5>]
+  [--delay-ms <0..5000>]
+  [--include-paths <patterns>]
+  [--exclude-paths <patterns>]
+  [--ignore-query-parameters]
+  [--sitemap <include|only|skip>]
+  [--cache-ttl <1..31536000>]
+  [--fresh]
+  [--fail-on-change]
+  [--only-modified]
+  [--ignore-removed]
+  [--json]
+
+deepseek-crawl crawl monitor status <monitor-dir> [--json]
+deepseek-crawl crawl monitor reset <monitor-dir> [--json]
 ```
 
 Defaults:
@@ -299,6 +320,63 @@ All fetched pages remain in the report:
 
 This version still reads pages or resolves cache entries to compute hashes.
 Sitemap `lastmod` request skipping is not part of this version.
+
+### Change Monitor
+
+Change Monitor is a one-shot incremental Crawl workflow with persistent state.
+It does not start a daemon:
+
+```bash
+deepseek-crawl crawl monitor "https://example.com/docs/" \
+  --monitor-dir .deepseek-crawl/monitor/example-docs \
+  --max-depth 1 \
+  --max-pages 20 \
+  --include-paths "/docs/*" \
+  --cache-ttl 3600 \
+  --fail-on-change \
+  -o .deepseek-crawl/monitor/example-docs-runs \
+  --json
+```
+
+Schedule the same one-shot command with cron, CI, a system timer, or Agent
+Automation. The state directory contains `state.json` and a transient
+`writer.lock`.
+
+Behavior:
+
+- The first successful run creates the baseline and reports no change.
+- Later runs compare with the persisted baseline and write a new timestamped
+  directory below the runs directory; an existing report is never overwritten.
+- The report is published before `state.json` rotates atomically.
+- Failed or unvisited pages keep their previous known hash instead of being
+  treated as removed.
+- Only one process may write a monitor directory. A stale PID lock is
+  recoverable.
+- The first run fixes the seed and crawl scope in `state.json`. Later runs reuse
+  depth, page limit, concurrency, delay, filters, query handling, and Sitemap
+  mode. Use `reset` before intentionally changing scope.
+
+Trigger semantics:
+
+- Default: added, modified, or removed pages count as changes.
+- `--ignore-removed`: removed pages are counted in `changes.removed` but do not
+  satisfy the trigger.
+- `--only-modified`: only modified pages satisfy the trigger and only modified
+  pages are written. Added pages remain in the report and baseline.
+- `--fail-on-change`: exit `3` after publishing the report and rotating state
+  when the effective trigger condition is met. No trigger or the first baseline
+  run exits `0`.
+
+Inspect and reset:
+
+```bash
+deepseek-crawl crawl monitor status monitor-dir --json
+deepseek-crawl crawl monitor reset monitor-dir --json
+```
+
+`status` is read-only. `reset` requires the writer lock and deletes only
+`state.json`; the next normal Monitor run creates a new baseline. Monitor is
+CLI-only and has no MCP equivalent.
 
 ### Resumable Crawl Jobs
 

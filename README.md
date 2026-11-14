@@ -40,6 +40,7 @@ CLI + Skill。
 - Fetch、Batch、Crawl、Plan 和 Retry 可共享显式 TTL 的本地页面缓存。
 - Fetch、Batch 和 Crawl 输出稳定 `content_hash`，Crawl 可对比 baseline 只写变更页面。
 - Crawl 支持 durable job、逐页 checkpoint、`crawl resume` 和 `crawl status`。
+- Crawl Change Monitor 持久化 baseline，一次运行生成一份增量报告，可交给 cron、CI 或 Agent Automation 定时调度。
 - macOS Keychain 或其他平台私有文件凭据存储。
 - `auth set`、`auth status`、`auth remove`。
 - 可选的四个 MCP 工具。
@@ -183,6 +184,9 @@ deepseek-crawl map <url> [--search <text>] [options]
 deepseek-crawl crawl <url> -o <dir> [options]
 deepseek-crawl crawl resume <job-dir> -o <dir> [options]
 deepseek-crawl crawl status <job-dir> [--json]
+deepseek-crawl crawl monitor <url> --monitor-dir <dir> -o <runs-dir> [options]
+deepseek-crawl crawl monitor status <monitor-dir> [--json]
+deepseek-crawl crawl monitor reset <monitor-dir> [--json]
 deepseek-crawl doctor [--live] [--json]
 deepseek-crawl setup skills [options]
 deepseek-crawl auth set
@@ -464,6 +468,59 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
 `--changed-only` 只写入新增和修改页面。未变化页面仍保留在报告和统计中，但
 `pages[].written` 为 `false` 且没有 `path`。第一版增量 Crawl 仍会读取页面内容
 或命中缓存后计算 hash；Sitemap `lastmod` 跳过请求属于下一阶段优化。
+
+定时 Change Monitor：
+
+```bash
+deepseek-crawl crawl monitor "https://api-docs.deepseek.com/guides/" \
+  --monitor-dir .deepseek-crawl/monitor/deepseek-guides \
+  --max-depth 1 \
+  --max-pages 20 \
+  --include-paths "/guides/*" \
+  --cache-ttl 3600 \
+  --fail-on-change \
+  -o .deepseek-crawl/monitor/deepseek-guides-runs \
+  --json
+```
+
+Monitor 本身只运行一次并退出，不启动后台进程。用 cron、CI、系统定时器或
+Agent Automation 重复执行同一工作流即可。状态目录持久保存最近一次成功
+baseline、抓取范围和上次结果：
+
+```text
+.deepseek-crawl/monitor/deepseek-guides/
+  state.json
+  writer.lock
+```
+
+首次成功运行只建立 baseline，不报告变化。后续每次运行自动用持久化 baseline
+对比，并在 `-o` 下创建新的时间戳目录，例如
+`.deepseek-crawl/monitor/deepseek-guides-runs/20261114T010203456Z/`，不会覆盖旧
+报告。输出发布成功后才会原子轮换 `state.json`。失败或本轮未读取的旧页面保留
+上次已知 hash，避免临时抓取失败被误报为 removed。
+
+首次运行会固化 seed、深度、页数、过滤器、Sitemap 模式和并发等抓取范围参数；
+后续运行从 `state.json` 复用这些参数，避免范围变化制造虚假变更。需要改变范围时，
+先执行 reset，再重新初始化。`--cache-ttl`、`--fresh` 和触发选项仍按每次命令传入。
+
+默认将 added、modified、removed 视为变化。`--ignore-removed` 不让 removed 触发
+失败；`--only-modified` 只让 modified 触发，并只写入 modified 页面，added 页面
+仍保留在报告和完整 baseline 中。`--fail-on-change` 在存在有效变化时以退出码 `3`
+结束；报告和 baseline 仍已成功写入。首次 baseline 和未命中触发条件时退出 `0`。
+
+```bash
+deepseek-crawl crawl monitor status \
+  .deepseek-crawl/monitor/deepseek-guides \
+  --json
+
+deepseek-crawl crawl monitor reset \
+  .deepseek-crawl/monitor/deepseek-guides \
+  --json
+```
+
+`status` 只读；`reset` 会取得单写者锁并删除 baseline，下一次运行重新初始化。
+同一 monitor 目录只允许一个 writer；失效 PID 锁可自动恢复。Monitor 是 CLI 工作流，
+不增加 MCP 工具。
 
 可恢复 Crawl：
 

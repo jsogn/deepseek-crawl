@@ -1,7 +1,7 @@
 ---
 
 name: deepseek-crawl
-description: Use DeepSeek's official Search and Fetch APIs through the deepseek-crawl CLI for live web search, reading a known URL, mapping a site, or bounded same-origin crawling. Prefer this CLI-first workflow for AI web tasks; not for local files, browser interaction, login, or Firecrawl API compatibility.
+description: Use DeepSeek's official Search and Fetch APIs through the deepseek-crawl CLI for live web search, reading a known URL, mapping a site, bounded same-origin crawling, or scheduled page-change checks. Prefer this CLI-first workflow for AI web tasks; not for local files, browser interaction, login, or Firecrawl API compatibility.
 allowed-tools:
 
 - Bash(deepseek-crawl *)
@@ -41,6 +41,8 @@ run `deepseek-crawl setup skills` to install it into the common
 4. **Known URL list** — feed Map JSON into Batch Fetch.
 5. **Several pages in one section or docs set** — inspect a `crawl --plan-only`
    result, then use a bounded `crawl` or Batch Fetch.
+6. **Recurring changes in a bounded Crawl scope** — use `crawl monitor` as a
+   one-shot workflow and schedule it externally.
 
 Do not Crawl when Search results or one Fetch already answer the request. Map
 first when the likely URL is within a known site. Prefer Map followed by Batch
@@ -246,6 +248,41 @@ Read `changes.added`, `changes.modified`, `changes.unchanged`, and
 `changes.removed`. `--changed-only` writes only added/modified page files while
 the report still includes all fetched pages. This version still reads or
 cache-resolves pages to calculate content hashes.
+
+For recurring checks, persist the comparison in a monitor state directory:
+
+```bash
+deepseek-crawl crawl monitor "<section-url>" \
+  --monitor-dir .deepseek-crawl/monitor/site-section \
+  --max-depth 1 \
+  --max-pages 20 \
+  --include-paths "/docs/*" \
+  --cache-ttl 3600 \
+  --fail-on-change \
+  -o .deepseek-crawl/monitor/site-section-runs \
+  --json
+```
+
+Monitor runs exactly once and exits; schedule it with cron, CI, or Agent
+Automation. The first run creates a baseline. Later runs write a new timestamped
+report under `--output` and rotate `state.json` only after publication.
+`--fail-on-change` exits `3` when an effective change is found.
+
+The first run fixes the seed and crawl scope in state; later runs reuse those
+options. Reset before intentionally changing the scope. By default added,
+modified, and removed pages trigger. `--ignore-removed` excludes removals.
+`--only-modified` triggers and writes only modified pages; added pages remain in
+the report. Inspect state without locking it and reset only when reinitialization
+is intended:
+
+```bash
+deepseek-crawl crawl monitor status .deepseek-crawl/monitor/site-section --json
+deepseek-crawl crawl monitor reset .deepseek-crawl/monitor/site-section --json
+```
+
+Transient page failures and pages not reached in a bounded run keep their last
+known baseline hash. Monitor is CLI-only and does not add an MCP tool. Do not
+invent a daemon: external scheduling owns repetition.
 
 For long Crawls that must survive interruption, use a durable job:
 

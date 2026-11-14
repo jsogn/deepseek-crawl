@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.1 - 2026-11-14
 
 ### Changed
 
@@ -14,6 +14,12 @@
 - Move detailed installation, command, capacity, and deployment guidance behind
   the focused documentation entry points.
 - Update the package description and keywords for clearer npm discovery.
+
+### Testing
+
+- Verify the packaged `llms.txt` Agent installation contract.
+- Verify packaged Firecrawl CLI credential import, private file permissions, and
+  status reporting without billable network requests.
 
 ## 0.14.0 - 2026-11-14
 

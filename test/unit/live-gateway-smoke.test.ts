@@ -24,11 +24,20 @@ describe("live Gateway smoke script", () => {
     expect(result.stdout).toBe("");
   });
 
+  it("requires explicit billable confirmation for the expanded matrix", () => {
+    const result = runScript(["--matrix"]);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("--billable");
+    expect(result.stdout).toBe("");
+  });
+
   it("prints help without reading credentials", () => {
     const result = runScript(["--help"]);
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("--billable");
+    expect(result.stdout).toContain("--matrix");
     expect(result.stderr).toBe("");
   });
 });

@@ -516,4 +516,10 @@ This command performs exactly two single-page `example.com` Scrapes. It refuses
 to run without `--billable`. Credentials come from environment variables or the
 local secure store and are never printed.
 
+Add `--matrix` to include Search and Map, for six bounded operations total:
+
+```bash
+npm run test:live:gateway -- --billable --matrix
+```
+
 The project is licensed under MIT.

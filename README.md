@@ -479,4 +479,10 @@ npm run test:live:gateway -- --billable
 该命令固定执行两次 `example.com` 单页 Scrape；缺少 `--billable` 时会拒绝运行。
 凭据从环境变量或本机 Secure Store 读取，不会输出 Key。
 
+增加 `--matrix` 后会再执行 Search 和 Map，总共 6 个受限操作：
+
+```bash
+npm run test:live:gateway -- --billable --matrix
+```
+
 项目使用 MIT License。

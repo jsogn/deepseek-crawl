@@ -91,6 +91,8 @@ shape.
 Maintainers can run `npm run test:live:gateway -- --billable` from a source
 checkout to verify Firecrawl passthrough and DeepSeek fallback with two
 single-page Scrapes. The command refuses to run without that explicit flag.
+Add `--matrix` to include Search and Map for both providers, for six bounded
+operations total.
 
 DeepSeek Crawl jobs live only in the current gateway process and expire after 24
 hours. Restarting the gateway does not restore them. One gateway process can

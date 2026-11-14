@@ -84,6 +84,7 @@ Firecrawl 功能没有 DeepSeek 等价能力时返回结构化错误，不会伪
 维护者可以在源码仓库运行
 `npm run test:live:gateway -- --billable`，用两次单页 Scrape 验证 Firecrawl
 透传和 DeepSeek fallback。没有这个显式参数时命令会拒绝执行。
+增加 `--matrix` 后会同时验证两种 Provider 的 Search 和 Map，共 6 个受限操作。
 
 DeepSeek Crawl job 只保存在当前网关进程内存中，24 小时后过期；网关重启会使这些
 job 丢失。一个网关进程可以服务本机多个 Firecrawl 客户端。

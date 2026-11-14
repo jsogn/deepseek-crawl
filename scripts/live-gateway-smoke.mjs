@@ -10,17 +10,20 @@ import {
 } from "../dist/index.js";
 
 const TARGET_URL = "https://example.com/";
+const SEARCH_QUERY = "Example Domain";
 const GATEWAY_TOKEN = "live-smoke-gateway-token";
-const SCRAPE_TIMEOUT_MS = 60_000;
+const OPERATION_TIMEOUT_MS = 60_000;
 
 function usage() {
-  return `Usage: npm run test:live:gateway -- --billable
+  return `Usage: npm run test:live:gateway -- --billable [--matrix]
 
-Runs exactly two billable example.com Scrapes through the official Firecrawl SDK:
-one Firecrawl passthrough and one DeepSeek fallback.
+Runs two billable example.com Scrapes through the official Firecrawl SDK: one
+Firecrawl passthrough and one DeepSeek fallback.
 
 Options:
-  --billable   Confirm the two billable provider requests.
+  --billable   Confirm billable provider requests.
+  --matrix     Add Search and Map for both providers. This runs six billable
+               operations in total; DeepSeek Map reads the seed page.
   -h, --help   Show this help without reading credentials.
 `;
 }
@@ -43,13 +46,13 @@ async function withTimeout(promise, label, timeoutMs) {
   }
 }
 
-async function waitForRequestEvent(events, expectedProvider) {
+async function waitForRequestEvent(events, expectedProvider, route) {
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
     const event = events.find(
       (candidate) =>
         candidate.event === "gateway_request" &&
-        candidate.route === "/v2/scrape" &&
+        candidate.route === route &&
         candidate.provider === expectedProvider,
     );
     if (event) {
@@ -57,7 +60,7 @@ async function waitForRequestEvent(events, expectedProvider) {
     }
     await delay(25);
   }
-  throw new Error(`Gateway did not log the ${expectedProvider} Scrape request.`);
+  throw new Error(`Gateway did not log the ${expectedProvider} ${route} request.`);
 }
 
 function staticStore(apiKey) {
@@ -82,39 +85,95 @@ function requireCredential(env, credential, command) {
   return stored;
 }
 
-async function runScrape(server, events, expectedProvider, expectedFallbackReason) {
-  const client = new Firecrawl({
-    apiKey: GATEWAY_TOKEN,
-    apiUrl: server.url.href.replace(/\/$/, ""),
+function validateProviderEvent(events, expectedProvider, route, expectedFallbackReason) {
+  return waitForRequestEvent(events, expectedProvider, route).then((event) => {
+    if (event.status !== 200) {
+      throw new Error(`${expectedProvider} ${route} returned status ${event.status}.`);
+    }
+    if (expectedFallbackReason === undefined) {
+      if (event.fallback) {
+        throw new Error(`${expectedProvider} ${route} unexpectedly used fallback.`);
+      }
+    } else if (!event.fallback || event.fallback_reason !== expectedFallbackReason) {
+      throw new Error(`Unexpected fallback metadata: ${JSON.stringify(event)}`);
+    }
+    return {
+      provider: event.provider,
+      fallback: event.fallback,
+      fallback_reason: event.fallback_reason ?? null,
+      status: event.status,
+      request_id: event.request_id,
+    };
   });
+}
+
+async function runScrape(client, events, expectedProvider, expectedFallbackReason) {
   const result = await withTimeout(
     client.scrape(TARGET_URL, { formats: ["markdown"] }),
     `${expectedProvider} Scrape`,
-    SCRAPE_TIMEOUT_MS,
+    OPERATION_TIMEOUT_MS,
   );
   if (typeof result.markdown !== "string" || !result.markdown.trim()) {
     throw new Error(`${expectedProvider} Scrape returned no Markdown.`);
   }
-
-  const event = await waitForRequestEvent(events, expectedProvider);
-  if (event.status !== 200) {
-    throw new Error(`${expectedProvider} Scrape returned status ${event.status}.`);
-  }
-  if (expectedFallbackReason === undefined) {
-    if (event.fallback) {
-      throw new Error("Firecrawl passthrough unexpectedly used fallback.");
-    }
-  } else if (!event.fallback || event.fallback_reason !== expectedFallbackReason) {
-    throw new Error(`Unexpected fallback metadata: ${JSON.stringify(event)}`);
-  }
-
   return {
-    provider: event.provider,
-    fallback: event.fallback,
-    fallback_reason: event.fallback_reason ?? null,
-    status: event.status,
+    ...(await validateProviderEvent(
+      events,
+      expectedProvider,
+      "/v2/scrape",
+      expectedFallbackReason,
+    )),
     markdown_characters: result.markdown.length,
-    request_id: event.request_id,
+  };
+}
+
+async function runSearch(client, events, expectedProvider, expectedFallbackReason) {
+  const result = await withTimeout(
+    client.search(SEARCH_QUERY, { limit: 1 }),
+    `${expectedProvider} Search`,
+    OPERATION_TIMEOUT_MS,
+  );
+  if (!Array.isArray(result.web) || result.web.length === 0) {
+    throw new Error(`${expectedProvider} Search returned no web results.`);
+  }
+  return {
+    ...(await validateProviderEvent(
+      events,
+      expectedProvider,
+      "/v2/search",
+      expectedFallbackReason,
+    )),
+    result_count: result.web.length,
+  };
+}
+
+async function runMap(client, events, expectedProvider, expectedFallbackReason) {
+  const result = await withTimeout(
+    client.map(TARGET_URL, { limit: 1 }),
+    `${expectedProvider} Map`,
+    OPERATION_TIMEOUT_MS,
+  );
+  if (!Array.isArray(result.links) || result.links.length === 0) {
+    throw new Error(`${expectedProvider} Map returned no links.`);
+  }
+  return {
+    ...(await validateProviderEvent(events, expectedProvider, "/v2/map", expectedFallbackReason)),
+    link_count: result.links.length,
+  };
+}
+
+async function runProviderSmoke(server, events, expectedProvider, expectedFallbackReason, matrix) {
+  const client = new Firecrawl({
+    apiKey: GATEWAY_TOKEN,
+    apiUrl: server.url.href.replace(/\/$/, ""),
+  });
+  if (!matrix) {
+    return runScrape(client, events, expectedProvider, expectedFallbackReason);
+  }
+  return {
+    search: await runSearch(client, events, expectedProvider, expectedFallbackReason),
+    map: await runMap(client, events, expectedProvider, expectedFallbackReason),
+    scrape: await runScrape(client, events, expectedProvider, expectedFallbackReason),
   };
 }
 
@@ -146,7 +205,7 @@ async function main() {
     process.stdout.write(usage());
     return 0;
   }
-  const unknown = args.filter((argument) => argument !== "--billable");
+  const unknown = args.filter((argument) => argument !== "--billable" && argument !== "--matrix");
   if (unknown.length > 0) {
     process.stderr.write(`Unknown option: ${unknown[0]}\n${usage()}`);
     return 2;
@@ -155,6 +214,7 @@ async function main() {
     process.stderr.write(`Refusing billable requests without --billable.\n${usage()}`);
     return 2;
   }
+  const matrix = args.includes("--matrix");
 
   const firecrawlApiKey = requireCredential(
     process.env,
@@ -170,7 +230,9 @@ async function main() {
   });
 
   process.stderr.write(
-    "Billable requests: one Firecrawl Scrape and one DeepSeek Fetch fallback.\n",
+    matrix
+      ? "Billable requests: Search, Map, and Scrape through Firecrawl and DeepSeek fallback (six operations).\n"
+      : "Billable requests: one Firecrawl Scrape and one DeepSeek Fetch fallback.\n",
   );
   const summary = {};
 
@@ -179,10 +241,12 @@ async function main() {
     deepseekClient,
   });
   try {
-    summary.firecrawl = await runScrape(
+    summary.firecrawl = await runProviderSmoke(
       firecrawlGateway.server,
       firecrawlGateway.events,
       "firecrawl",
+      undefined,
+      matrix,
     );
   } finally {
     await firecrawlGateway.server.close();
@@ -193,11 +257,12 @@ async function main() {
     deepseekClient,
   });
   try {
-    summary.deepseek = await runScrape(
+    summary.deepseek = await runProviderSmoke(
       fallbackGateway.server,
       fallbackGateway.events,
       "deepseek",
       "no_firecrawl_credential",
+      matrix,
     );
   } finally {
     await fallbackGateway.server.close();

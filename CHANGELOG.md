@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Make the DeepSeek Crawl Skill description provider-neutral: it applies only
+  when the user or workflow selects DeepSeek, without ranking other providers.
+
 ## 0.11.0 - 2026-11-14
 
 ### Added

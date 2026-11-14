@@ -74,7 +74,8 @@ request should retry Firecrawl.
 Gateway Provider requests and background Crawl jobs have separate global limits.
 Retained Crawl jobs and serialized result bytes are also bounded. Capacity first
 evicts the oldest terminal job. Keep these limits bounded when one gateway
-shares Provider rate limits or runs on a memory-constrained host.
+shares Provider rate limits or runs on a memory-constrained host. The retained
+job limit must be at least as large as the active Crawl job limit.
 
 Remote mode uses fixed port `8787`:
 
@@ -91,6 +92,7 @@ Every gateway response includes `x-request-id`. JSON request logs exclude
 credentials, bodies, query strings, and full target URLs. Authentication
 failures are rate-limited and concurrent requests are bounded.
 Foreground DeepSeek fallback work is cancelled when its HTTP client disconnects;
+Crawl work cancelled before it starts is never sent to the Provider, while
 completed Crawl-create responses leave their background jobs running normally.
 
 Do not use the SDK WebSocket `Watcher` against this gateway. It intentionally

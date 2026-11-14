@@ -199,8 +199,10 @@ returns provider keys or user content.
 Use `--max-retained-crawl-bytes <bytes>` or
 `DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES` to tune the retained document budget.
 The oldest terminal Crawl job is evicted first when task-count or byte capacity
-is full. An active job that would exceed the global byte budget fails without
-retaining that page.
+is full. Before an active job exceeds the global byte budget, reclaimable
+terminal pages are evicted. It fails only when active jobs hold the remaining
+budget, and never retains the rejected page. `--max-retained-crawl-jobs` must be
+greater than or equal to `--max-crawl-jobs`.
 
 Every response includes `x-request-id`. CLI request logs are one JSON object on
 stderr with normalized route, status, duration, provider, and fallback reason.

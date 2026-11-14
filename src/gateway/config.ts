@@ -259,6 +259,11 @@ export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConf
     "Gateway maximum retained Crawl jobs",
     GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlJobs,
   );
+  if (maxRetainedCrawlJobs < maxActiveCrawlJobs) {
+    throw new Error(
+      "Gateway maximum retained Crawl jobs must be greater than or equal to maximum active Crawl jobs.",
+    );
+  }
   const maxRetainedCrawlBytes = parseByteLimit(
     options.maxRetainedCrawlBytes ?? env.DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES,
   );

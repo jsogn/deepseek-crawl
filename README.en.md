@@ -374,7 +374,10 @@ The corresponding `DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS`,
 containers and systemd. When either retained capacity is full, the gateway
 evicts the oldest terminal job first. A new job is rejected only when running
 jobs still consume all capacity. A running job that would cross the global
-document budget fails cleanly without retaining the out-of-budget page.
+document budget evicts reclaimable terminal pages first. It fails only when
+active jobs consume the remaining budget and never retains the out-of-budget
+page. `max-retained-crawl-jobs` must be greater than or equal to
+`max-crawl-jobs`.
 
 Other terminals and scripts can discover the selected endpoint:
 

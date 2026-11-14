@@ -95,6 +95,7 @@ interface CrawlJob {
   data: IndexedCrawlDocument[];
   errors: FirecrawlCrawlError[];
   controller: AbortController;
+  signal: AbortSignal;
   done: Promise<void>;
   bytes: number;
 }
@@ -154,13 +155,20 @@ export class CrawlJobManager {
       options.maxRetainedJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlJobs;
     this.#maxRetainedBytes =
       options.maxRetainedBytes ?? GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlBytes;
+    if (this.#maxRetainedJobs < this.#maxRunningJobs) {
+      throw new Error(
+        "Maximum retained Crawl jobs must be greater than or equal to maximum running Crawl jobs.",
+      );
+    }
   }
 
   create(
     input: unknown,
     client: DeepSeekGateway,
     reader: MapSitemapReader,
+    startSignal?: AbortSignal,
   ): { success: true; id: string; url: string } {
+    startSignal?.throwIfAborted();
     const parsed = crawlInputSchema.parse(input);
     if (!formatsAreMarkdownOnly(parsed.scrapeOptions?.formats)) {
       throw new UnsupportedFallbackFeatureError(
@@ -191,18 +199,19 @@ export class CrawlJobManager {
       this.#jobs.size >= this.#maxRetainedJobs ||
       this.#retainedBytes >= this.#maxRetainedBytes
     ) {
-      const terminal = [...this.#jobs.values()].find((job) => job.status !== "scraping");
-      if (!terminal) {
+      if (!this.#evictOldestTerminal()) {
         throw new GatewayCapacityError("Gateway Crawl job storage is full.", {
           code: "crawl_job_capacity_reached",
           statusCode: 503,
         });
       }
-      this.#deleteJob(terminal.id);
     }
     const generatedId = this.#idFactory();
     const id = generatedId.startsWith("dsc_") ? generatedId : `dsc_${generatedId}`;
     const controller = new AbortController();
+    const signal = startSignal
+      ? AbortSignal.any([controller.signal, startSignal])
+      : controller.signal;
     const createdAt = this.#now();
     const job: CrawlJob = {
       id,
@@ -215,58 +224,58 @@ export class CrawlJobManager {
       data: [],
       errors: [],
       controller,
+      signal,
       done: Promise.resolve(),
       bytes: 0,
     };
     this.#jobs.set(id, job);
 
     const sitemapMode = parsed.sitemap ?? "include";
-    job.done = executeCrawl(
-      client,
-      { url },
-      {
-        maxDepth: Math.min(parsed.maxDiscoveryDepth ?? 2, 5),
-        maxPages: Math.min(parsed.limit ?? 100, 100),
-        concurrency: Math.min(parsed.maxConcurrency ?? 2, 5),
-        delayMs: Math.min(Math.round((parsed.delay ?? 0) * 1000), 5000),
-        discoveryLimit: 10_000,
-        pageContentLimit: 1_000_000,
-        includePaths: parsed.includePaths ?? [],
-        excludePaths: parsed.excludePaths ?? [],
-        ignoreQueryParameters: parsed.ignoreQueryParameters ?? false,
-        sitemapMode,
-        sitemapReader: reader,
-      },
-      async (page) => {
-        if (job.status !== "scraping" || this.#jobs.get(job.id) !== job) {
-          throw job.controller.signal.reason ?? new Error("Crawl job is no longer active.");
-        }
-        const document: FirecrawlCrawlDocument = {
-          markdown: page.content,
-          metadata: {
-            title: page.title,
-            sourceURL: page.url,
-            url: page.url,
+    job.done = new Promise<void>((resolve) => setImmediate(resolve))
+      .then(() => {
+        job.signal.throwIfAborted();
+        return executeCrawl(
+          client,
+          { url },
+          {
+            maxDepth: Math.min(parsed.maxDiscoveryDepth ?? 2, 5),
+            maxPages: Math.min(parsed.limit ?? 100, 100),
+            concurrency: Math.min(parsed.maxConcurrency ?? 2, 5),
+            delayMs: Math.min(Math.round((parsed.delay ?? 0) * 1000), 5000),
+            discoveryLimit: 10_000,
+            pageContentLimit: 1_000_000,
+            includePaths: parsed.includePaths ?? [],
+            excludePaths: parsed.excludePaths ?? [],
+            ignoreQueryParameters: parsed.ignoreQueryParameters ?? false,
+            sitemapMode,
+            sitemapReader: reader,
           },
-        };
-        const bytes = storedDocumentBytes(document);
-        if (this.#retainedBytes + bytes > this.#maxRetainedBytes) {
-          throw new GatewayCapacityError("Gateway Crawl data storage is full.", {
-            code: "crawl_data_capacity_reached",
-            statusCode: 503,
-          });
-        }
-        job.data.push({
-          index: page.index,
-          document,
-        });
-        job.bytes += bytes;
-        this.#retainedBytes += bytes;
-        job.completed += 1;
-        job.total = Math.max(job.total, job.completed);
-      },
-      job.controller.signal,
-    )
+          async (page) => {
+            if (job.status !== "scraping" || this.#jobs.get(job.id) !== job) {
+              throw job.signal.reason ?? new Error("Crawl job is no longer active.");
+            }
+            const document: FirecrawlCrawlDocument = {
+              markdown: page.content,
+              metadata: {
+                title: page.title,
+                sourceURL: page.url,
+                url: page.url,
+              },
+            };
+            const bytes = storedDocumentBytes(document);
+            this.#ensurePageCapacity(bytes, job);
+            job.data.push({
+              index: page.index,
+              document,
+            });
+            job.bytes += bytes;
+            this.#retainedBytes += bytes;
+            job.completed += 1;
+            job.total = Math.max(job.total, job.completed);
+          },
+          job.signal,
+        );
+      })
       .then((result) => {
         job.status = "completed";
         job.completed = result.pages.length;
@@ -280,7 +289,7 @@ export class CrawlJobManager {
         }));
       })
       .catch((error: unknown) => {
-        job.status = job.controller.signal.aborted ? "cancelled" : "failed";
+        job.status = job.signal.aborted ? "cancelled" : "failed";
         job.completedAt = this.#now().toISOString();
         if (job.status === "failed") {
           job.errors.push({
@@ -392,5 +401,36 @@ export class CrawlJobManager {
     this.#jobs.delete(id);
     this.#retainedBytes = Math.max(0, this.#retainedBytes - job.bytes);
     return true;
+  }
+
+  #evictOldestTerminal(): boolean {
+    const terminal = [...this.#jobs.values()].find((job) => job.status !== "scraping");
+    return terminal ? this.#deleteJob(terminal.id) : false;
+  }
+
+  #ensurePageCapacity(bytes: number, currentJob: CrawlJob): void {
+    const required = this.#retainedBytes + bytes - this.#maxRetainedBytes;
+    if (required <= 0) {
+      return;
+    }
+    const terminalJobs = [...this.#jobs.values()].filter(
+      (job) => job.id !== currentJob.id && job.status !== "scraping",
+    );
+    const reclaimable = terminalJobs.reduce((total, job) => total + job.bytes, 0);
+    if (reclaimable < required) {
+      throw new GatewayCapacityError("Gateway Crawl data storage is full.", {
+        code: "crawl_data_capacity_reached",
+        statusCode: 503,
+      });
+    }
+
+    let reclaimed = 0;
+    for (const job of terminalJobs) {
+      this.#deleteJob(job.id);
+      reclaimed += job.bytes;
+      if (reclaimed >= required) {
+        return;
+      }
+    }
   }
 }

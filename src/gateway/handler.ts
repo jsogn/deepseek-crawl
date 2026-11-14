@@ -183,7 +183,7 @@ async function executeFallback(
     case "map":
       return firecrawlMapFallback(parseJsonBody(body), client(), await reader(), signal);
     case "crawl-create":
-      return crawlJobs.create(parseJsonBody(body), client(), await reader());
+      return crawlJobs.create(parseJsonBody(body), client(), await reader(), signal);
     case "crawl-status": {
       const status = crawlJobs.status(route.id);
       if (!status) {

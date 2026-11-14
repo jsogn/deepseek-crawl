@@ -335,7 +335,7 @@ Options:
   --max-crawl-jobs <1..1000>
                       Concurrent Crawl jobs (default: 10)
   --max-retained-crawl-jobs <1..1000>
-                      Retained Crawl jobs (default: 100)
+                      Retained Crawl jobs, at least max-crawl-jobs (default: 100)
   --max-retained-crawl-bytes <bytes>
                       Retained Crawl data (default: 256 MiB)
   --remote            Enable authenticated remote mode (fixed port 8787)

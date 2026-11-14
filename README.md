@@ -348,7 +348,8 @@ deepseek-crawl gateway \
 `DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS`、`DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES`，
 可用于容器和 systemd。任务数或字节容量满时，网关先淘汰最旧的终态任务；如果容量
 仍被运行中任务占满，新任务返回容量错误。单个运行中任务若会使全局文档预算越界，
-会以失败终态停止且不保留越界页面。
+会先淘汰可回收的终态页面；只有运行中任务本身占用全部预算时才会失败，且不会保留
+越界页面。`max-retained-crawl-jobs` 必须大于或等于 `max-crawl-jobs`。
 
 其他终端或脚本可以发现当前实际地址：
 

@@ -236,9 +236,10 @@ arguments.
 The retained byte budget counts serialized Crawl documents, including Markdown
 and metadata. When a job-count or byte threshold is reached, the oldest terminal
 job is evicted first. Capacity remains unavailable only while active jobs hold
-it. A running job that would exceed the global byte budget ends in a failed
-state without retaining the rejected page. Expiration and eviction release the
-accounted bytes immediately.
+it. A running job that would exceed the global byte budget evicts reclaimable
+terminal pages before failing; it retains no rejected page. Expiration and
+eviction release the accounted bytes immediately. The retained job limit must
+be greater than or equal to the active Crawl job limit.
 
 Clients use the `FIRECRAWL_API_URL` printed at startup to reach the gateway. The
 gateway does not read `FIRECRAWL_API_URL`; it reads only

@@ -28,6 +28,16 @@ const reader = {
 };
 
 describe("CrawlJobManager", () => {
+  it("rejects a retained job capacity below the running job limit", () => {
+    expect(
+      () =>
+        new CrawlJobManager({
+          maxRunningJobs: 2,
+          maxRetainedJobs: 1,
+        }),
+    ).toThrow(/retained.*running|running.*retained/i);
+  });
+
   it("completes a DeepSeek-backed Firecrawl crawl job", async () => {
     const manager = new CrawlJobManager({
       now: () => new Date("2026-11-14T00:00:00.000Z"),
@@ -108,6 +118,36 @@ describe("CrawlJobManager", () => {
     expect(manager.status("dsc_cancel")).toMatchObject({
       status: "cancelled",
       creditsUsed: 0,
+    });
+  });
+
+  it("does not start a crawl when its start signal aborts after creation", async () => {
+    let calls = 0;
+    const manager = new CrawlJobManager({ idFactory: () => "dsc_start_abort" });
+    const controller = new AbortController();
+
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          calls += 1;
+          return { title: "Example", content: "# Example" };
+        },
+      },
+      reader,
+      controller.signal,
+    );
+    controller.abort(new Error("Create response disconnected."));
+    await manager.waitForIdle("dsc_start_abort");
+
+    expect(calls).toBe(0);
+    expect(manager.status("dsc_start_abort")).toMatchObject({
+      status: "cancelled",
+      completed: 0,
+      data: [],
     });
   });
 
@@ -208,6 +248,7 @@ describe("CrawlJobManager", () => {
     let index = 0;
     const manager = new CrawlJobManager({
       idFactory: () => `dsc_retained_${++index}`,
+      maxRunningJobs: 1,
       maxRetainedJobs: 1,
     });
     manager.create(
@@ -282,6 +323,43 @@ describe("CrawlJobManager", () => {
     });
   });
 
+  it("evicts terminal pages when the next page would exceed the byte budget", async () => {
+    let index = 0;
+    const manager = new CrawlJobManager({
+      idFactory: () => `dsc_bytes_reclaim_${++index}`,
+      maxRunningJobs: 4,
+      maxRetainedJobs: 100,
+      maxRetainedBytes: 629,
+    });
+    const byteGateway: DeepSeekGateway = {
+      async search() {
+        throw new Error("Unexpected Search call.");
+      },
+      async fetch() {
+        return { title: "Example", content: "x".repeat(100) };
+      },
+    };
+
+    for (let job = 1; job <= 3; job += 1) {
+      manager.create(
+        { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+        byteGateway,
+        reader,
+      );
+      await manager.waitForIdle(`dsc_bytes_reclaim_${job}`);
+    }
+
+    expect(manager.status("dsc_bytes_reclaim_1")).toBeUndefined();
+    expect(manager.status("dsc_bytes_reclaim_2")).toMatchObject({
+      status: "completed",
+      completed: 1,
+    });
+    expect(manager.status("dsc_bytes_reclaim_3")).toMatchObject({
+      status: "completed",
+      completed: 1,
+    });
+  });
+
   it("releases retained byte capacity when a job expires", async () => {
     let current = new Date("2026-11-14T00:00:00.000Z");
     let index = 0;
@@ -314,14 +392,14 @@ describe("CrawlJobManager", () => {
     });
   });
 
-  it("rejects retained capacity when every job is still active", async () => {
+  it("rejects a new crawl when every retained slot is still active", async () => {
     const manager = new CrawlJobManager({
       idFactory: (() => {
         let index = 0;
         return () => `dsc_retained_active_${++index}`;
       })(),
       maxRunningJobs: 2,
-      maxRetainedJobs: 1,
+      maxRetainedJobs: 2,
     });
     const client: DeepSeekGateway = {
       async search() {
@@ -339,6 +417,11 @@ describe("CrawlJobManager", () => {
       client,
       reader,
     );
+    manager.create(
+      { url: "https://example.com/", limit: 1, maxDiscoveryDepth: 0, sitemap: "skip" },
+      client,
+      reader,
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(() =>
@@ -350,7 +433,9 @@ describe("CrawlJobManager", () => {
     ).toThrow(GatewayCapacityError);
 
     manager.cancel("dsc_retained_active_1");
+    manager.cancel("dsc_retained_active_2");
     await manager.waitForIdle("dsc_retained_active_1");
+    await manager.waitForIdle("dsc_retained_active_2");
   });
 
   it("does not account pages from a removed job after its Provider call returns", async () => {
@@ -399,7 +484,7 @@ describe("CrawlJobManager", () => {
     let index = 0;
     const manager = new CrawlJobManager({
       idFactory: () => `dsc_removed_${++index}`,
-      maxRunningJobs: 3,
+      maxRunningJobs: 1,
       maxRetainedJobs: 1,
       maxRetainedBytes: 360,
     });

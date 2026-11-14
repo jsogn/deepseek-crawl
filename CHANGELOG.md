@@ -15,6 +15,11 @@
   client disconnects.
 - Prevent retained Crawl jobs from exhausting process memory for 24 hours and
   fail jobs cleanly when their next page would exceed the global byte budget.
+- Cancel Crawl work whose creation signal aborts before Provider execution.
+- Reclaim terminal Crawl pages when the next page would otherwise hit the byte
+  budget, avoiding soft capacity lockout.
+- Reject Crawl capacity configurations whose retained job limit is below the
+  active job limit.
 
 ## 0.13.0 - 2026-11-14
 

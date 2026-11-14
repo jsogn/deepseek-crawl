@@ -176,6 +176,17 @@ describe("loadGatewayConfig", () => {
     });
   });
 
+  it("requires retained Crawl capacity to cover active Crawl jobs", () => {
+    expect(() =>
+      loadGatewayConfig({
+        maxActiveCrawlJobs: 4,
+        maxRetainedCrawlJobs: 2,
+        env: {},
+        credentialStores: {},
+      }),
+    ).toThrow(/retained.*active|active.*retained/i);
+  });
+
   it.each([
     "DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS",
     "DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS",

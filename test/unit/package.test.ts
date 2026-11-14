@@ -86,6 +86,7 @@ describe("package documentation", () => {
       "deepseek-crawl gateway",
       "test:live:gateway",
       "--matrix",
+      "--crawl",
       "auth set firecrawl",
       "auth import firecrawl",
       "--remote",

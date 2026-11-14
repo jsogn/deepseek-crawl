@@ -485,4 +485,13 @@ npm run test:live:gateway -- --billable
 npm run test:live:gateway -- --billable --matrix
 ```
 
+增加 `--crawl` 后会验证两次最小 Crawl，固定
+`limit=1`、`maxDiscoveryDepth=0`、`sitemap=skip`：
+
+```bash
+npm run test:live:gateway -- --billable --crawl
+```
+
+`--matrix --crawl` 可以组合，总计 8 个受限操作。
+
 项目使用 MIT License。

@@ -93,6 +93,8 @@ checkout to verify Firecrawl passthrough and DeepSeek fallback with two
 single-page Scrapes. The command refuses to run without that explicit flag.
 Add `--matrix` to include Search and Map for both providers, for six bounded
 operations total.
+Add `--crawl` to include one-page Crawls with `limit=1`,
+`maxDiscoveryDepth=0`, and Sitemap discovery disabled.
 
 DeepSeek Crawl jobs live only in the current gateway process and expire after 24
 hours. Restarting the gateway does not restore them. One gateway process can

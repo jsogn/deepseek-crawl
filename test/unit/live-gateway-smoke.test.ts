@@ -32,12 +32,21 @@ describe("live Gateway smoke script", () => {
     expect(result.stdout).toBe("");
   });
 
+  it("requires explicit billable confirmation for the bounded Crawl", () => {
+    const result = runScript(["--crawl"]);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("--billable");
+    expect(result.stdout).toBe("");
+  });
+
   it("prints help without reading credentials", () => {
     const result = runScript(["--help"]);
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("--billable");
     expect(result.stdout).toContain("--matrix");
+    expect(result.stdout).toContain("--crawl");
     expect(result.stderr).toBe("");
   });
 });

@@ -522,4 +522,13 @@ Add `--matrix` to include Search and Map, for six bounded operations total:
 npm run test:live:gateway -- --billable --matrix
 ```
 
+Add `--crawl` to verify two minimal Crawls with `limit=1`,
+`maxDiscoveryDepth=0`, and `sitemap=skip`:
+
+```bash
+npm run test:live:gateway -- --billable --crawl
+```
+
+`--matrix --crawl` combines both for eight bounded operations total.
+
 The project is licensed under MIT.

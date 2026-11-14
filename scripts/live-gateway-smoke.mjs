@@ -13,9 +13,10 @@ const TARGET_URL = "https://example.com/";
 const SEARCH_QUERY = "Example Domain";
 const GATEWAY_TOKEN = "live-smoke-gateway-token";
 const OPERATION_TIMEOUT_MS = 60_000;
+const CRAWL_TIMEOUT_MS = 120_000;
 
 function usage() {
-  return `Usage: npm run test:live:gateway -- --billable [--matrix]
+  return `Usage: npm run test:live:gateway -- --billable [--matrix] [--crawl]
 
 Runs two billable example.com Scrapes through the official Firecrawl SDK: one
 Firecrawl passthrough and one DeepSeek fallback.
@@ -24,6 +25,8 @@ Options:
   --billable   Confirm billable provider requests.
   --matrix     Add Search and Map for both providers. This runs six billable
                operations in total; DeepSeek Map reads the seed page.
+  --crawl      Add one minimal Crawl for both providers. Crawl uses limit=1,
+               maxDiscoveryDepth=0, and skips Sitemap discovery.
   -h, --help   Show this help without reading credentials.
 `;
 }
@@ -162,19 +165,90 @@ async function runMap(client, events, expectedProvider, expectedFallbackReason) 
   };
 }
 
-async function runProviderSmoke(server, events, expectedProvider, expectedFallbackReason, matrix) {
+async function pollCrawlStatus(client, id, expectedProvider) {
+  const deadline = Date.now() + CRAWL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const status = await client.getCrawlStatus(id);
+    if (status.status !== "scraping") {
+      return status;
+    }
+    await delay(250);
+  }
+  throw new Error(`${expectedProvider} Crawl did not reach a terminal status.`);
+}
+
+async function runCrawl(client, events, expectedProvider, expectedFallbackReason) {
+  const started = await withTimeout(
+    client.startCrawl(TARGET_URL, {
+      limit: 1,
+      maxDiscoveryDepth: 0,
+      sitemap: "skip",
+    }),
+    `${expectedProvider} Crawl create`,
+    OPERATION_TIMEOUT_MS,
+  );
+  if (!started.id) {
+    throw new Error(`${expectedProvider} Crawl returned no job ID.`);
+  }
+  const created = await validateProviderEvent(
+    events,
+    expectedProvider,
+    "/v2/crawl",
+    expectedFallbackReason,
+  );
+  const status = await pollCrawlStatus(client, started.id, expectedProvider);
+  if (status.status !== "completed") {
+    throw new Error(`${expectedProvider} Crawl ended with status ${status.status}.`);
+  }
+  if (!Array.isArray(status.data) || status.data.length === 0) {
+    throw new Error(`${expectedProvider} Crawl returned no pages.`);
+  }
+  const statusEvent = await validateProviderEvent(
+    events,
+    expectedProvider,
+    "/v2/crawl/:id",
+    expectedFallbackReason === undefined ? undefined : "local_crawl_job",
+  );
+  const errors = await withTimeout(
+    client.getCrawlErrors(started.id),
+    `${expectedProvider} Crawl errors`,
+    OPERATION_TIMEOUT_MS,
+  );
+  if (errors.errors.length !== 0 || errors.robotsBlocked.length !== 0) {
+    throw new Error(`${expectedProvider} Crawl reported errors.`);
+  }
+
+  return {
+    ...created,
+    crawl_status: status.status,
+    page_count: status.data.length,
+    status_request_id: statusEvent.request_id,
+    page_error_count: errors.errors.length,
+    robots_blocked_count: errors.robotsBlocked.length,
+  };
+}
+
+async function runProviderSmoke(server, events, expectedProvider, expectedFallbackReason, options) {
   const client = new Firecrawl({
     apiKey: GATEWAY_TOKEN,
     apiUrl: server.url.href.replace(/\/$/, ""),
   });
-  if (!matrix) {
+  if (!options.matrix && !options.crawl) {
     return runScrape(client, events, expectedProvider, expectedFallbackReason);
   }
-  return {
-    search: await runSearch(client, events, expectedProvider, expectedFallbackReason),
-    map: await runMap(client, events, expectedProvider, expectedFallbackReason),
-    scrape: await runScrape(client, events, expectedProvider, expectedFallbackReason),
-  };
+  const summary = options.matrix
+    ? {
+        search: await runSearch(client, events, expectedProvider, expectedFallbackReason),
+        map: await runMap(client, events, expectedProvider, expectedFallbackReason),
+        scrape: await runScrape(client, events, expectedProvider, expectedFallbackReason),
+      }
+    : {
+        scrape: await runScrape(client, events, expectedProvider, expectedFallbackReason),
+      };
+  if (options.crawl) {
+    summary.crawl = await runCrawl(client, events, expectedProvider, expectedFallbackReason);
+  }
+  return summary;
 }
 
 async function startSmokeGateway({ firecrawlApiKey, deepseekClient }) {
@@ -205,7 +279,9 @@ async function main() {
     process.stdout.write(usage());
     return 0;
   }
-  const unknown = args.filter((argument) => argument !== "--billable" && argument !== "--matrix");
+  const unknown = args.filter(
+    (argument) => argument !== "--billable" && argument !== "--matrix" && argument !== "--crawl",
+  );
   if (unknown.length > 0) {
     process.stderr.write(`Unknown option: ${unknown[0]}\n${usage()}`);
     return 2;
@@ -215,6 +291,7 @@ async function main() {
     return 2;
   }
   const matrix = args.includes("--matrix");
+  const crawl = args.includes("--crawl");
 
   const firecrawlApiKey = requireCredential(
     process.env,
@@ -229,10 +306,9 @@ async function main() {
     fetchImpl: fetch,
   });
 
+  const operationCount = 2 + (matrix ? 4 : 0) + (crawl ? 2 : 0);
   process.stderr.write(
-    matrix
-      ? "Billable requests: Search, Map, and Scrape through Firecrawl and DeepSeek fallback (six operations).\n"
-      : "Billable requests: one Firecrawl Scrape and one DeepSeek Fetch fallback.\n",
+    `Billable requests: ${operationCount} bounded provider operations through Firecrawl and DeepSeek fallback.\n`,
   );
   const summary = {};
 
@@ -246,7 +322,7 @@ async function main() {
       firecrawlGateway.events,
       "firecrawl",
       undefined,
-      matrix,
+      { matrix, crawl },
     );
   } finally {
     await firecrawlGateway.server.close();
@@ -262,7 +338,7 @@ async function main() {
       fallbackGateway.events,
       "deepseek",
       "no_firecrawl_credential",
-      matrix,
+      { matrix, crawl },
     );
   } finally {
     await fallbackGateway.server.close();

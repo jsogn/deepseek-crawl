@@ -11,8 +11,8 @@
 - Add `auth import firecrawl` to copy an existing Firecrawl CLI credential into
   the private DeepSeek Crawl credential store with a masked hint.
 - Add an explicit opt-in live Gateway smoke command that verifies Scrape, plus
-  optional Search and Map matrix coverage, for Firecrawl passthrough and
-  DeepSeek fallback through the official SDK.
+  optional Search/Map matrix and bounded Crawl coverage, for Firecrawl
+  passthrough and DeepSeek fallback through the official SDK.
 - Add `gateway url`, `gateway status`, `/healthz`, and multi-instance runtime
   discovery with stale-state cleanup.
 - Forward common Firecrawl requests to the Firecrawl upstream while preserving

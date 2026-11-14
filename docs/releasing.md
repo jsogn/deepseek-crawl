@@ -29,8 +29,8 @@ GitHub relationship from the existing package settings.
 5. Create and push the matching annotated tag:
 
    ```bash
-   git tag -a v0.9.0 -m "deepseek-crawl v0.9.0"
-   git push origin v0.9.0
+   git tag -a v0.10.0 -m "deepseek-crawl v0.10.0"
+   git push origin v0.10.0
    ```
 
 6. The Release workflow validates the tag, runs the full verification suite,
@@ -40,7 +40,7 @@ GitHub relationship from the existing package settings.
 7. Confirm the registry and provenance:
 
    ```bash
-   npm view deepseek-crawl@0.9.0 version dist.integrity dist.attestations
+   npm view deepseek-crawl@0.10.0 version dist.integrity dist.attestations
    ```
 
 Do not publish from a local machine with a classic npm token. Pushing the tag is

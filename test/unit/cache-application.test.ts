@@ -101,7 +101,7 @@ describe("cache-aware application results", () => {
     const result = await executeCrawlRetry(
       await cachedGateway(fetch, cache),
       {
-        version: 1,
+        version: 2,
         seed_url: "https://example.com/",
         settings: {
           max_depth: 2,

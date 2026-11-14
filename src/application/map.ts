@@ -182,7 +182,7 @@ export async function executeMap(
 
   const sitemapReadable =
     sitemapResult.status === "fulfilled" &&
-    (sitemapResult.value.urls.length > 0 || sitemapResult.value.warnings.length === 0);
+    (sitemapResult.value.entries.length > 0 || sitemapResult.value.warnings.length === 0);
   const seedReadable = seedPageResult.status === "fulfilled";
   if (!sitemapReadable && !seedReadable) {
     const sitemapDiagnostic =
@@ -207,9 +207,9 @@ export async function executeMap(
 
   if (sitemapResult.status === "fulfilled") {
     warnings.push(...sitemapResult.value.warnings);
-    for (const url of sitemapResult.value.urls) {
-      if (sameOrigin(url, seed)) {
-        candidateCollector.add(url, "sitemap");
+    for (const entry of sitemapResult.value.entries) {
+      if (sameOrigin(entry.url, seed)) {
+        candidateCollector.add(entry.url, "sitemap");
       }
     }
   } else {

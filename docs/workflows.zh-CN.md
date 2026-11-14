@@ -188,8 +188,8 @@ Sitemap URL 从深度 1 开始，并遵守相同的 origin、路径、query、�
 Crawl 先写隐藏 staging 目录，成功后整体发布。`-o` 目标不能已存在。SIGINT 会
 中止请求、清理 staging，并以退出码 `130` 结束。
 
-`crawl.json` 保存设置、统计、失败、warnings、页面来源、`content_hash` 和稳定
-页面路径，不重复保存正文。
+`crawl.json` 使用 schema v2，保存设置、统计、失败、warnings、页面来源、
+`content_hash`、`sitemap_lastmod` 和稳定页面路径，不重复保存正文。
 
 ## 增量对比
 
@@ -201,8 +201,9 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
   -o .deepseek-crawl/crawl-deepseek-guides-changes
 ```
 
-`--baseline` 可以指向旧 `crawl.json` 或包含该文件的目录。`content_hash` 是
-DeepSeek 原始 Markdown 在本地截断前计算的 SHA-256。
+`--baseline` 可以指向 schema v2 的 `crawl.json` 或包含该文件的目录。v1 报告会
+被明确拒绝，不提供迁移兼容。`content_hash` 是 DeepSeek 原始 Markdown 在本地
+截断前计算的 SHA-256。
 
 `changes` 包括 `added`、`modified`、`unchanged`、`removed`。`--changed-only`
 只写新增和修改页面；未变化页面仍保留在报告和统计中。
@@ -213,8 +214,8 @@ DeepSeek 原始 Markdown 在本地截断前计算的 SHA-256。
 报告跳过数量，页面仍出现在 `changes.unchanged` 中且不写页面文件。
 
 更新、倒退、缺失或无效的 `lastmod` 都会正常读取页面。中间层页面也不会跳过，因为
-其正文可能包含更深层链接。旧 baseline 没有 `sitemap_lastmod` 时保持原有读取行为；
-使用新版本生成一次报告后，后续运行才具备该优化。
+其正文可能包含更深层链接。v2 baseline 允许单页缺少 `sitemap_lastmod`，该页正常
+读取；页面摘要本身是必填结构。
 
 ## 持久化 Change Monitor
 
@@ -232,8 +233,9 @@ deepseek-crawl crawl monitor "https://api-docs.deepseek.com/guides/" \
   --json
 ```
 
-状态目录保存 baseline、抓取范围和最近结果。首次成功运行只建立 baseline。后续运行
-创建新的时间戳输出目录，发布成功后才原子轮换 `state.json`。
+状态目录保存 schema v2 baseline、抓取范围和最近结果。首次成功运行只建立 baseline。
+后续运行创建新的时间戳输出目录，发布成功后才原子轮换 `state.json`。v1 state 会被
+拒绝，必须 reset 后重新初始化。
 
 首次运行固化 seed、深度、页数、过滤器、Sitemap 和并发参数。需要改变抓取范围时，
 先执行 reset，再重新初始化。
@@ -272,9 +274,9 @@ deepseek-crawl crawl resume \
   -o .deepseek-crawl/crawl-deepseek-guides
 ```
 
-`--job-dir` 保存版本化 `job.json`、页面、frontier、失败和 `writer.lock`。每个页面
-完成后原子 checkpoint。中断不会删除 job；resume 跳过已完成的 seed、Sitemap 发现
-和页面，只继续未完成工作。
+`--job-dir` 保存 schema v2 的 `job.json`、页面、frontier、失败和 `writer.lock`。
+每个页面完成后原子 checkpoint。中断不会删除 job；resume 跳过已完成的 seed、
+Sitemap 发现和页面，只继续未完成工作。v1 job 会被拒绝。
 
 `--job-dir` 暂不能与 `--plan-only`、`--baseline` 或 Retry 组合使用。
 

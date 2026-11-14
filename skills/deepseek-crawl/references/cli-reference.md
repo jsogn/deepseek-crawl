@@ -250,6 +250,9 @@ The seed is depth `0`. CLI Crawl merges same-origin Sitemap URLs with Markdown
 links from DeepSeek Fetch, remains inside the exact origin, processes
 deterministic depth layers, and records partial page failures.
 
+Crawl reports use schema v2. Baselines require version 2 with complete page
+metadata; version 1 reports are rejected without migration support.
+
 Sitemap modes:
 
 - `include`: merge Sitemap URLs and seed-page Markdown links.
@@ -305,9 +308,9 @@ deepseek-crawl crawl <url> \
   -o changes
 ```
 
-The baseline can be a prior `crawl.json` or its containing Crawl directory. A
-baseline must contain valid SHA-256 `content_hash` values; older reports without
-hashes are rejected.
+The baseline can be a schema v2 `crawl.json` or its containing Crawl directory.
+It must contain version 2 complete page metadata and valid SHA-256
+`content_hash` values. Version 1 reports are rejected.
 
 `content_hash` covers the raw DeepSeek Markdown before local truncation.
 `--changed-only` requires `--baseline` and writes only added or modified pages.
@@ -325,7 +328,7 @@ unchanged in the report, and `stats.sitemap_lastmod_skipped` reports the count.
 
 Pages with newer, older, missing, or invalid `lastmod` values are fetched.
 Intermediate pages are always fetched because their body can reveal deeper
-links. Sitemap `skip` mode and baselines created without `sitemap_lastmod` do not
+links. Sitemap `skip` mode and individual pages without `sitemap_lastmod` do not
 use this optimization.
 
 ### Change Monitor
@@ -347,7 +350,7 @@ deepseek-crawl crawl monitor "https://example.com/docs/" \
 
 Schedule the same one-shot command with cron, CI, a system timer, or Agent
 Automation. The state directory contains `state.json` and a transient
-`writer.lock`.
+`writer.lock`. Monitor state uses schema v2; version 1 state must be reset.
 
 Behavior:
 
@@ -396,9 +399,10 @@ pages/
 writer.lock
 ```
 
-`job.json` is checkpointed after seed discovery and after each page. It records
-the crawl options, counters, seen URLs, source provenance, frontier, active
-layer, pages, failures, warnings, and next index.
+`job.json` uses schema v2 and is checkpointed after seed discovery and after each
+page. It records the crawl options, counters, seen URLs, source provenance,
+frontier, active layer, pages, failures, warnings, and next index. Version 1 jobs
+are rejected.
 
 Resume:
 

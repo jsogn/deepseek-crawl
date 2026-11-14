@@ -221,7 +221,7 @@ export async function executeCrawlRetry(
 
   const cacheStats = cacheStatsFor(client);
   return {
-    version: 1,
+    version: 2,
     seed_url: seed.href,
     started_at: startedAt,
     finished_at: now().toISOString(),

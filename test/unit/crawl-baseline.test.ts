@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { compareCrawlBaseline, parseCrawlBaseline } from "../../src/crawl/baseline.js";
-import type { CrawlPageSummary } from "../../src/crawl/types.js";
+import type { CrawlBaselinePage, CrawlPageSummary } from "../../src/crawl/types.js";
 
 const hashA = "a".repeat(64);
 const hashB = "b".repeat(64);
 const hashC = "c".repeat(64);
+
+function baselinePage(url: string, contentHash: string): CrawlBaselinePage {
+  return {
+    url,
+    title: url,
+    depth: 1,
+    sources: ["markdown"],
+    content_length: 10,
+    content_hash: contentHash,
+    content_truncated: false,
+  };
+}
 
 function page(url: string, hash: string, status: "added" | "modified" | "unchanged") {
   return {
@@ -21,26 +33,26 @@ function page(url: string, hash: string, status: "added" | "modified" | "unchang
 }
 
 describe("Crawl baseline", () => {
-  it("validates and indexes content hashes", () => {
+  it("requires version 2 and indexes complete baseline pages", () => {
     const baseline = parseCrawlBaseline(
       {
-        version: 1,
+        version: 2,
         pages: [
-          { url: "https://example.com/a", content_hash: hashA },
-          { url: "https://example.com/b", content_hash: hashB },
+          baselinePage("https://example.com/a", hashA),
+          baselinePage("https://example.com/b", hashB),
         ],
       },
       "previous/crawl.json",
     );
 
     expect(baseline.source).toBe("previous/crawl.json");
-    expect(baseline.hashes.get("https://example.com/a")).toBe(hashA);
+    expect(baseline.pages.get("https://example.com/a")?.content_hash).toBe(hashA);
   });
 
-  it("preserves page metadata and Sitemap lastmod for safe fetch skipping", () => {
+  it("preserves required page metadata and optional Sitemap lastmod", () => {
     const baseline = parseCrawlBaseline(
       {
-        version: 1,
+        version: 2,
         pages: [
           {
             url: "https://example.com/a",
@@ -57,7 +69,7 @@ describe("Crawl baseline", () => {
       "previous/crawl.json",
     );
 
-    expect(baseline.pages?.get("https://example.com/a")).toEqual({
+    expect(baseline.pages.get("https://example.com/a")).toEqual({
       url: "https://example.com/a",
       title: "Page A",
       depth: 1,
@@ -69,14 +81,23 @@ describe("Crawl baseline", () => {
     });
   });
 
-  it("rejects duplicate, malformed, or missing content hashes", () => {
+  it("rejects version 1, incomplete pages, duplicate URLs, and malformed hashes", () => {
     expect(() =>
       parseCrawlBaseline(
         {
           version: 1,
+          pages: [baselinePage("https://example.com/a", hashA)],
+        },
+        "crawl.json",
+      ),
+    ).toThrow(/version/i);
+    expect(() =>
+      parseCrawlBaseline(
+        {
+          version: 2,
           pages: [
-            { url: "https://example.com/a", content_hash: hashA },
-            { url: "https://example.com/a", content_hash: hashB },
+            baselinePage("https://example.com/a", hashA),
+            baselinePage("https://example.com/a", hashB),
           ],
         },
         "crawl.json",
@@ -84,23 +105,32 @@ describe("Crawl baseline", () => {
     ).toThrow(/duplicate/i);
     expect(() =>
       parseCrawlBaseline(
-        { version: 1, pages: [{ url: "https://example.com/a", content_hash: "bad" }] },
+        {
+          version: 2,
+          pages: [{ ...baselinePage("https://example.com/a", hashA), content_hash: "bad" }],
+        },
         "crawl.json",
       ),
     ).toThrow(/invalid/i);
     expect(() =>
-      parseCrawlBaseline({ version: 1, pages: [{ url: "https://example.com/a" }] }, "crawl.json"),
+      parseCrawlBaseline(
+        {
+          version: 2,
+          pages: [{ url: "https://example.com/a", content_hash: hashA }],
+        },
+        "crawl.json",
+      ),
     ).toThrow(/invalid/i);
   });
 
   it("classifies added, modified, unchanged, and removed pages", () => {
     const baseline = parseCrawlBaseline(
       {
-        version: 1,
+        version: 2,
         pages: [
-          { url: "https://example.com/a", content_hash: hashA },
-          { url: "https://example.com/b", content_hash: hashB },
-          { url: "https://example.com/c", content_hash: hashC },
+          baselinePage("https://example.com/a", hashA),
+          baselinePage("https://example.com/b", hashB),
+          baselinePage("https://example.com/c", hashC),
         ],
       },
       "crawl.json",

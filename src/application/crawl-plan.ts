@@ -150,8 +150,10 @@ export async function executeCrawlPlan(
         if (discovery) {
           warnings.push(...discovery.warnings);
           sitemapTruncated = discovery.truncated;
-          const sitemapUrls = discovery.urls
-            .map((url) => canonicalizeCrawlUrl(url, undefined, limits.ignoreQueryParameters))
+          const sitemapUrls = discovery.entries
+            .map((entry) =>
+              canonicalizeCrawlUrl(entry.url, undefined, limits.ignoreQueryParameters),
+            )
             .filter((url): url is URL => url !== undefined);
           sitemapCandidates = new Set(
             sitemapUrls

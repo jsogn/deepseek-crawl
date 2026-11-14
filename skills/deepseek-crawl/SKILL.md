@@ -249,8 +249,8 @@ Read `changes.added`, `changes.modified`, `changes.unchanged`, and
 the report still includes all pages. A deepest-frontier Sitemap page with the
 same valid `lastmod` as its stored baseline may be reused without a fetch;
 `stats.sitemap_lastmod_skipped` reports this. Newer, older, missing, or invalid
-lastmod values, intermediate pages, and baselines without lastmod are fetched
-normally.
+lastmod values, intermediate pages, and v2 baseline pages without lastmod are
+fetched normally.
 
 For recurring checks, persist the comparison in a monitor state directory:
 

@@ -26,7 +26,7 @@ const crawlRetryFailureSchema = retryAttemptSchema.extend({
 });
 
 const crawlRetryReportSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   seed_url: z.string(),
   settings: z.object({
     max_depth: z.number().int(),

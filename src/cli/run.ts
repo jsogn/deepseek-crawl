@@ -727,10 +727,10 @@ function monitorHasChanges(
 }
 
 function rotatedMonitorBaseline(
-  previous: readonly CrawlMonitorState["baseline"][number][],
+  previous: readonly CrawlBaselinePage[],
   result: CrawlRunResult,
   changes: CrawlChanges,
-): CrawlMonitorState["baseline"] {
+): CrawlBaselinePage[] {
   const baseline = new Map(previous.map((page) => [page.url, page]));
   for (const page of changes.removed) {
     baseline.delete(page.url);
@@ -751,42 +751,8 @@ function rotatedMonitorBaseline(
     });
   }
   return [...baseline.values()]
-    .map((page) => ({
-      ...page,
-      ...(page.sources === undefined ? {} : { sources: [...page.sources] }),
-    }))
+    .map((page) => ({ ...page, sources: [...page.sources] }))
     .sort((left, right) => left.url.localeCompare(right.url));
-}
-
-function monitorBaselinePages(
-  entries: CrawlMonitorState["baseline"],
-): ReadonlyMap<string, CrawlBaselinePage> {
-  const pages = new Map<string, CrawlBaselinePage>();
-  for (const entry of entries) {
-    if (
-      entry.title === undefined ||
-      entry.depth === undefined ||
-      entry.sources === undefined ||
-      entry.content_length === undefined ||
-      entry.content_truncated === undefined
-    ) {
-      continue;
-    }
-    pages.set(entry.url, {
-      url: entry.url,
-      title: entry.title,
-      depth: entry.depth,
-      sources: [...entry.sources],
-      content_length: entry.content_length,
-      content_hash: entry.content_hash,
-      content_truncated: entry.content_truncated,
-      ...(entry.content_original_length === undefined
-        ? {}
-        : { content_original_length: entry.content_original_length }),
-      ...(entry.sitemap_lastmod === undefined ? {} : { sitemap_lastmod: entry.sitemap_lastmod }),
-    });
-  }
-  return pages;
 }
 
 function monitorRunId(date: Date): string {
@@ -899,8 +865,7 @@ async function runCrawlMonitor(
         const baseline = previousState
           ? {
               source: join(monitor.directory, "state.json"),
-              hashes: new Map(previousState.baseline.map((page) => [page.url, page.content_hash])),
-              pages: monitorBaselinePages(previousState.baseline),
+              pages: new Map(previousState.baseline.map((page) => [page.url, page])),
             }
           : undefined;
         result = await executeCrawl(
@@ -943,7 +908,7 @@ async function runCrawlMonitor(
         const output = await writer.finish(result);
 
         const nextState: CrawlMonitorState = {
-          version: 1,
+          version: 2,
           seed_url: result.seed_url,
           options,
           baseline: rotatedMonitorBaseline(previousState?.baseline ?? [], result, changes),

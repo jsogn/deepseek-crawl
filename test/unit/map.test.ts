@@ -15,7 +15,7 @@ function reader(result: {
 }) {
   return {
     read: vi.fn(async (_seed: URL, _options: SitemapReadOptions) => ({
-      urls: result.urls,
+      entries: result.urls.map((url) => ({ url })),
       warnings: result.warnings ?? [],
       truncated: result.truncated ?? false,
     })),

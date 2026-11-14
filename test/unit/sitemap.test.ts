@@ -38,7 +38,10 @@ describe("SitemapReader", () => {
 
     const result = await reader.read(new URL("https://example.com/docs"), options);
 
-    expect(result.urls.map(String)).toEqual(["https://example.com/a", "https://example.com/b"]);
+    expect(result.entries.map((entry) => entry.url.href)).toEqual([
+      "https://example.com/a",
+      "https://example.com/b",
+    ]);
     expect(result.warnings).toEqual([]);
     expect(result.truncated).toBe(false);
   });
@@ -79,7 +82,10 @@ describe("SitemapReader", () => {
 
     const result = await reader.read(new URL("https://example.com/"), options);
 
-    expect(result.urls.map(String)).toEqual(["https://example.com/a", "https://example.com/b"]);
+    expect(result.entries.map((entry) => entry.url.href)).toEqual([
+      "https://example.com/a",
+      "https://example.com/b",
+    ]);
     expect(calls).toEqual([
       "https://example.com/sitemap.xml",
       "https://example.com/sitemap-pages.xml",
@@ -101,7 +107,7 @@ describe("SitemapReader", () => {
 
     const result = await reader.read(new URL("https://example.com/"), options);
 
-    expect(result.urls).toHaveLength(2);
+    expect(result.entries.map((entry) => entry.url)).toHaveLength(2);
     expect(calls.filter((url) => url === "https://example.com/sitemap.xml")).toHaveLength(1);
   });
 
@@ -126,7 +132,7 @@ describe("SitemapReader", () => {
     });
 
     expect(calls).toHaveLength(2);
-    expect(result.urls.map(String)).toEqual(["https://example.com/page-0"]);
+    expect(result.entries.map((entry) => entry.url.href)).toEqual(["https://example.com/page-0"]);
     expect(result.truncated).toBe(true);
     expect(result.warnings.map((warning) => warning.code)).toContain("sitemap_limit_reached");
   });
@@ -170,7 +176,10 @@ describe("SitemapReader", () => {
       maxCandidates: 2,
     });
 
-    expect(result.urls.map(String)).toEqual(["https://example.com/a", "https://example.com/c"]);
+    expect(result.entries.map((entry) => entry.url.href)).toEqual([
+      "https://example.com/a",
+      "https://example.com/c",
+    ]);
     expect(result.truncated).toBe(true);
     expect(result.warnings.map((warning) => warning.code)).toContain("sitemap_limit_reached");
   });
@@ -191,7 +200,7 @@ describe("SitemapReader", () => {
       maxCandidates: 12_000,
     });
 
-    expect(result.urls).toHaveLength(10_000);
+    expect(result.entries.map((entry) => entry.url)).toHaveLength(10_000);
     expect(result.truncated).toBe(true);
     expect(result.warnings.map((warning) => warning.code)).toContain("sitemap_limit_reached");
   });
@@ -227,7 +236,7 @@ describe("SitemapReader", () => {
 
     const result = await reader.read(new URL("https://example.com/"), options);
 
-    expect(result.urls).toEqual([]);
+    expect(result.entries.map((entry) => entry.url)).toEqual([]);
     expect(result.warnings).toEqual([expect.objectContaining({ code: "sitemap_invalid" })]);
   });
 
@@ -240,7 +249,7 @@ describe("SitemapReader", () => {
 
     const result = await reader.read(new URL("https://example.com/"), options);
 
-    expect(result.urls).toEqual([]);
+    expect(result.entries.map((entry) => entry.url)).toEqual([]);
     expect(result.warnings).toEqual([expect.objectContaining({ code: "sitemap_unavailable" })]);
   });
 
@@ -261,7 +270,7 @@ describe("SitemapReader", () => {
 
     const result = await reader.read(new URL("https://example.com/"), options);
 
-    expect(result.urls).toHaveLength(2);
+    expect(result.entries.map((entry) => entry.url)).toHaveLength(2);
     expect(result.warnings.map((warning) => warning.code)).toContain("sitemap_unavailable");
   });
 
@@ -282,7 +291,7 @@ describe("SitemapReader", () => {
 
     const result = await reader.read(new URL("https://example.com/"), options);
 
-    expect(result.urls.map(String)).toEqual(["https://example.com/a"]);
+    expect(result.entries.map((entry) => entry.url.href)).toEqual(["https://example.com/a"]);
     expect(calls).not.toContain("https://other.example/sitemap.xml");
   });
 
@@ -312,7 +321,7 @@ describe("SitemapReader", () => {
 
     const result = await reader.read(new URL("https://example.com/"), options);
 
-    expect(result.urls.map(String)).toEqual([
+    expect(result.entries.map((entry) => entry.url.href)).toEqual([
       "https://example.com/a",
       "https://example.com/b",
       "https://example.com/shared",

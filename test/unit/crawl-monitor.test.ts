@@ -78,7 +78,7 @@ function monitorArguments(monitorDir: string, runsDir: string, extra: string[] =
 
 function storedState(overrides: Partial<CrawlMonitorState> = {}): CrawlMonitorState {
   return {
-    version: 1,
+    version: 2,
     seed_url: "https://example.com/",
     options: {
       maxDepth: 2,
@@ -90,7 +90,17 @@ function storedState(overrides: Partial<CrawlMonitorState> = {}): CrawlMonitorSt
       ignoreQueryParameters: false,
       sitemapMode: "skip",
     },
-    baseline: [{ url: "https://example.com/", content_hash: "a".repeat(64) }],
+    baseline: [
+      {
+        url: "https://example.com/",
+        title: "Seed",
+        depth: 0,
+        sources: ["seed_url"],
+        content_length: 4,
+        content_hash: "a".repeat(64),
+        content_truncated: false,
+      },
+    ],
     last_run_at: RUN_AT.toISOString(),
     last_run_id: "run-1",
     last_output: "/tmp/run-1",
@@ -137,7 +147,10 @@ describe("CrawlMonitorStore", () => {
     const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-monitor-store-"));
     const directory = join(root, "monitor");
     await mkdir(directory);
-    await writeFile(join(directory, "state.json"), JSON.stringify({ version: 2 }));
+    await writeFile(
+      join(directory, "state.json"),
+      JSON.stringify({ ...storedState(), version: 1 }),
+    );
 
     await expect(CrawlMonitorStore.open(directory)).rejects.toThrow(/version|invalid/i);
     await expect(lstat(join(directory, "writer.lock"))).rejects.toMatchObject({ code: "ENOENT" });
@@ -158,7 +171,7 @@ describe("Crawl monitor CLI", () => {
           }
         : { title: url, content: url.endsWith("/same") ? "same" : changedContent },
     );
-    const reader = { read: vi.fn(async () => ({ urls: [], warnings: [], truncated: false })) };
+    const reader = { read: vi.fn(async () => ({ entries: [], warnings: [], truncated: false })) };
 
     const firstDependencies = dependencies(client, reader);
     expect(await runCli(monitorArguments(monitorDir, runsDir), firstDependencies.deps)).toBe(0);
@@ -231,7 +244,6 @@ describe("Crawl monitor CLI", () => {
     });
     const reader = {
       read: vi.fn(async () => ({
-        urls: [new URL(childUrl)],
         entries: [{ url: new URL(childUrl), lastmod }],
         warnings: [],
         truncated: false,
@@ -276,9 +288,9 @@ describe("Crawl monitor CLI", () => {
     const client = crawlClient(async () => ({ title: "Seed", content: "No links" }));
     const read = vi
       .fn()
-      .mockResolvedValueOnce({ urls: [], warnings: [], truncated: false })
+      .mockResolvedValueOnce({ entries: [], warnings: [], truncated: false })
       .mockResolvedValue({
-        urls: [new URL("https://example.com/new")],
+        entries: [{ url: new URL("https://example.com/new") }],
         warnings: [],
         truncated: false,
       });
@@ -335,11 +347,11 @@ describe("Crawl monitor CLI", () => {
     const read = vi
       .fn()
       .mockResolvedValueOnce({
-        urls: [new URL("https://example.com/old")],
+        entries: [{ url: new URL("https://example.com/old") }],
         warnings: [],
         truncated: false,
       })
-      .mockResolvedValue({ urls: [], warnings: [], truncated: false });
+      .mockResolvedValue({ entries: [], warnings: [], truncated: false });
     const reader = { read };
     const arguments_ = [
       "crawl",
@@ -391,7 +403,7 @@ describe("Crawl monitor CLI", () => {
       }
       return { title: "Child", content: "child body" };
     });
-    const reader = { read: vi.fn(async () => ({ urls: [], warnings: [], truncated: false })) };
+    const reader = { read: vi.fn(async () => ({ entries: [], warnings: [], truncated: false })) };
 
     expect(
       await runCli(monitorArguments(monitorDir, runsDir), dependencies(client, reader).deps),
@@ -421,7 +433,7 @@ describe("Crawl monitor CLI", () => {
     const monitorDir = join(root, "state");
     const runsDir = join(root, "runs");
     const client = crawlClient(async () => ({ title: "Seed", content: "No links" }));
-    const reader = { read: vi.fn(async () => ({ urls: [], warnings: [], truncated: false })) };
+    const reader = { read: vi.fn(async () => ({ entries: [], warnings: [], truncated: false })) };
     const args = [
       "crawl",
       "monitor",
@@ -462,7 +474,7 @@ describe("Crawl monitor CLI", () => {
       }
       return { title: "Child", content: "child" };
     });
-    const reader = { read: vi.fn(async () => ({ urls: [], warnings: [], truncated: false })) };
+    const reader = { read: vi.fn(async () => ({ entries: [], warnings: [], truncated: false })) };
     const firstArguments = [
       "crawl",
       "monitor",
@@ -509,7 +521,7 @@ describe("Crawl monitor CLI", () => {
     const monitorDir = join(root, "state");
     const runsDir = join(root, "runs");
     const client = crawlClient(async () => ({ title: "Seed", content: "No links" }));
-    const reader = { read: vi.fn(async () => ({ urls: [], warnings: [], truncated: false })) };
+    const reader = { read: vi.fn(async () => ({ entries: [], warnings: [], truncated: false })) };
     expect(
       await runCli(
         [
@@ -555,7 +567,7 @@ describe("Crawl monitor CLI", () => {
     const monitorDir = join(root, "state");
     const runsDir = join(root, "runs");
     const client = crawlClient(async () => Promise.reject(new Error("seed failed")));
-    const reader = { read: vi.fn(async () => ({ urls: [], warnings: [], truncated: false })) };
+    const reader = { read: vi.fn(async () => ({ entries: [], warnings: [], truncated: false })) };
     const invocation = dependencies(client, reader);
 
     expect(
@@ -587,7 +599,7 @@ describe("Crawl monitor CLI", () => {
     const monitorDir = join(root, "state");
     const runsDir = join(root, "runs");
     const client = crawlClient(async () => ({ title: "Seed", content: "No links" }));
-    const reader = { read: vi.fn(async () => ({ urls: [], warnings: [], truncated: false })) };
+    const reader = { read: vi.fn(async () => ({ entries: [], warnings: [], truncated: false })) };
     const active = await CrawlMonitorStore.open(monitorDir);
     const invocation = dependencies(client, reader);
 

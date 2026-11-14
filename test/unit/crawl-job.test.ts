@@ -7,7 +7,7 @@ import type { CrawlCheckpointState, CrawlRunResult } from "../../src/crawl/types
 
 function state(overrides: Partial<CrawlCheckpointState> = {}): CrawlCheckpointState {
   return {
-    version: 1,
+    version: 2,
     status: "running",
     seed_url: "https://example.com/",
     started_at: "2026-11-14T01:00:00.000Z",
@@ -30,6 +30,7 @@ function state(overrides: Partial<CrawlCheckpointState> = {}): CrawlCheckpointSt
       limitReached: false,
       discoveryLimitReached: false,
       sitemapCandidates: 0,
+      sitemapLastmodSkipped: 0,
     },
     seen: ["https://example.com/"],
     sources: [{ url: "https://example.com/", sources: ["seed_url"] }],
@@ -56,7 +57,7 @@ function state(overrides: Partial<CrawlCheckpointState> = {}): CrawlCheckpointSt
 function result(): CrawlRunResult {
   const s = state();
   return {
-    version: 1,
+    version: 2,
     seed_url: s.seed_url,
     started_at: s.started_at,
     finished_at: "2026-11-14T01:00:02.000Z",
@@ -74,6 +75,7 @@ function result(): CrawlRunResult {
       content_truncated: 0,
       limit_reached: false,
       discovery_limit_reached: false,
+      sitemap_lastmod_skipped: 0,
     },
     pages: s.pages,
     failures: [],
@@ -128,7 +130,7 @@ describe("CrawlJobStore", () => {
     const root = await mkdtemp(join(tmpdir(), "deepseek-crawl-job-"));
     const directory = join(root, "job");
     const job = await CrawlJobStore.create(directory);
-    await job.checkpoint(state({ version: 2 as 1 }));
+    await job.checkpoint(state({ version: 1 as unknown as 2 }));
     await job.release();
 
     await expect(CrawlJobStore.open(directory)).rejects.toThrow(/job|version|invalid/i);

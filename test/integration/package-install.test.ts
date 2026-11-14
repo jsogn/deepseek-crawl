@@ -17,8 +17,8 @@ describe("published package", () => {
     });
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Installed deepseek-crawl@0.9.0 from its package tarball.");
-    expect(result.stdout).toContain("Installed CLI version: 0.9.0");
+    expect(result.stdout).toContain("Installed deepseek-crawl@0.10.0 from its package tarball.");
+    expect(result.stdout).toContain("Installed CLI version: 0.10.0");
     expect(result.stdout).toContain("Installed Skill setup command is available.");
     expect(result.stderr).toBe("");
   }, 120_000);

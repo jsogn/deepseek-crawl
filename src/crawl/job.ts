@@ -33,7 +33,7 @@ const pageSchema = z.object({
 });
 
 const stateSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   status: z.enum(["running", "interrupted", "completed"]),
   seed_url: z.string().url(),
   started_at: z.string(),
@@ -56,7 +56,7 @@ const stateSchema = z.object({
     limitReached: z.boolean(),
     discoveryLimitReached: z.boolean(),
     sitemapCandidates: z.number().int().nonnegative(),
-    sitemapLastmodSkipped: z.number().int().nonnegative().optional(),
+    sitemapLastmodSkipped: z.number().int().nonnegative(),
   }),
   seen: z.array(z.string().url()),
   sources: z.array(z.object({ url: z.string().url(), sources: z.array(sourceSchema) })),

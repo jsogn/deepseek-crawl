@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.10.0 - 2026-11-14
+
+### Breaking
+
+- Crawl reports and baselines require schema version 2 with complete page
+  metadata; version 1 baselines are rejected.
+- Crawl Monitor state and resumable job checkpoints require schema version 2;
+  version 1 state is rejected.
+- Sitemap readers return only `entries`; the duplicate `urls`/`entries` shape is
+  removed.
+
+### Changed
+
+- Baseline comparison uses one required page map instead of parallel hash-only
+  and metadata compatibility structures.
+
 ## 0.9.0 - 2026-11-14
 
 ### Added

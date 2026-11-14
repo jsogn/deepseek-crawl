@@ -157,7 +157,7 @@ const crawlFailureOutputSchema = z.object({
 });
 
 const crawlOutputSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   seed_url: z.string(),
   started_at: z.string(),
   finished_at: z.string(),

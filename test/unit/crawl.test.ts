@@ -3,7 +3,7 @@ import { executeCrawl, normalizeCrawlOptions } from "../../src/application/crawl
 import { executeCrawlPlan } from "../../src/application/crawl-plan.js";
 import { executeCrawlRetry } from "../../src/application/crawl-retry.js";
 import { contentHash } from "../../src/content/hash.js";
-import type { CrawlCheckpointState } from "../../src/crawl/types.js";
+import type { CrawlBaselinePage, CrawlCheckpointState } from "../../src/crawl/types.js";
 import { DeepSeekError } from "../../src/deepseek/errors.js";
 
 const options = {
@@ -14,6 +14,18 @@ const options = {
   discoveryLimit: 100,
   pageContentLimit: 1000,
 };
+
+function baselinePage(url: string, contentHash: string): CrawlBaselinePage {
+  return {
+    url,
+    title: url,
+    depth: url === "https://example.com/" ? 0 : 1,
+    sources: ["markdown"],
+    content_length: 10,
+    content_hash: contentHash,
+    content_truncated: false,
+  };
+}
 
 function client() {
   return {
@@ -59,11 +71,17 @@ describe("executeCrawl", () => {
         maxPages: 3,
         baseline: {
           source: "previous/crawl.json",
-          hashes: new Map([
-            ["https://example.com/", contentHash(seedContent)],
-            ["https://example.com/a", contentHash(aContent)],
-            ["https://example.com/b", contentHash("old")],
-            ["https://example.com/removed", contentHash("removed")],
+          pages: new Map([
+            [
+              "https://example.com/",
+              baselinePage("https://example.com/", contentHash(seedContent)),
+            ],
+            ["https://example.com/a", baselinePage("https://example.com/a", contentHash(aContent))],
+            ["https://example.com/b", baselinePage("https://example.com/b", contentHash("old"))],
+            [
+              "https://example.com/removed",
+              baselinePage("https://example.com/removed", contentHash("removed")),
+            ],
           ]),
         },
         changedOnly: true,
@@ -121,7 +139,6 @@ describe("executeCrawl", () => {
         sitemapMode: "include",
         sitemapReader: {
           read: vi.fn(async () => ({
-            urls: [new URL(childUrl)],
             entries: [{ url: new URL(childUrl), lastmod: childLastmod }],
             warnings: [],
             truncated: false,
@@ -129,7 +146,6 @@ describe("executeCrawl", () => {
         },
         baseline: {
           source: "previous/crawl.json",
-          hashes: new Map([[childUrl, childHash]]),
           pages: new Map([
             [
               childUrl,
@@ -190,7 +206,6 @@ describe("executeCrawl", () => {
         sitemapMode: "include",
         sitemapReader: {
           read: vi.fn(async () => ({
-            urls: [new URL(childUrl)],
             entries: [
               {
                 url: new URL(childUrl),
@@ -203,7 +218,6 @@ describe("executeCrawl", () => {
         },
         baseline: {
           source: "previous/crawl.json",
-          hashes: new Map([[childUrl, childHash]]),
           pages: new Map([
             [
               childUrl,
@@ -255,7 +269,6 @@ describe("executeCrawl", () => {
         sitemapMode: "include",
         sitemapReader: {
           read: vi.fn(async () => ({
-            urls: [new URL(childUrl)],
             entries: [{ url: new URL(childUrl), lastmod: sameLastmod }],
             warnings: [],
             truncated: false,
@@ -263,7 +276,6 @@ describe("executeCrawl", () => {
         },
         baseline: {
           source: "previous/crawl.json",
-          hashes: new Map([[childUrl, childHash]]),
           pages: new Map([
             [
               childUrl,
@@ -307,7 +319,6 @@ describe("executeCrawl", () => {
         sitemapMode: "include",
         sitemapReader: {
           read: vi.fn(async () => ({
-            urls: [new URL(childUrl)],
             entries: [{ url: new URL(childUrl), lastmod: sameLastmod }],
             warnings: [],
             truncated: false,
@@ -315,7 +326,6 @@ describe("executeCrawl", () => {
         },
         baseline: {
           source: "previous/crawl.json",
-          hashes: new Map([[childUrl, childHash]]),
           pages: new Map([
             [
               childUrl,
@@ -359,7 +369,10 @@ describe("executeCrawl", () => {
   it("resumes an interrupted active layer without refetching the seed or Sitemap", async () => {
     const reader = {
       read: vi.fn(async () => ({
-        urls: [new URL("https://example.com/a"), new URL("https://example.com/b")],
+        entries: [
+          { url: new URL("https://example.com/a") },
+          { url: new URL("https://example.com/b") },
+        ],
         warnings: [],
         truncated: false,
       })),
@@ -635,14 +648,14 @@ describe("executeCrawl", () => {
   it("merges Sitemap candidates with Markdown links", async () => {
     const reader = {
       read: vi.fn(async (_seed: URL, _options: unknown, _signal?: AbortSignal) => ({
-        urls: [
-          new URL("https://example.com/"),
-          new URL("https://example.com/docs/a"),
-          new URL("https://example.com/docs/b"),
-          new URL("https://example.com/blog/post"),
-          new URL("https://other.example/docs/a"),
-          new URL("https://example.com/docs/private/x"),
-          new URL("https://example.com/docs/a?utm_source=sitemap"),
+        entries: [
+          { url: new URL("https://example.com/") },
+          { url: new URL("https://example.com/docs/a") },
+          { url: new URL("https://example.com/docs/b") },
+          { url: new URL("https://example.com/blog/post") },
+          { url: new URL("https://other.example/docs/a") },
+          { url: new URL("https://example.com/docs/private/x") },
+          { url: new URL("https://example.com/docs/a?utm_source=sitemap") },
         ],
         warnings: [{ code: "sitemap_invalid" as const, message: "child Sitemap was invalid" }],
         truncated: false,
@@ -704,7 +717,7 @@ describe("executeCrawl", () => {
         sitemapMode: "only",
         sitemapReader: {
           read: vi.fn(async () => ({
-            urls: [new URL("https://example.com/sitemap-page")],
+            entries: [{ url: new URL("https://example.com/sitemap-page") }],
             warnings: [],
             truncated: false,
           })),
@@ -855,12 +868,12 @@ describe("executeCrawlPlan", () => {
     }));
     const sitemapReader = {
       read: vi.fn(async () => ({
-        urls: [
-          new URL("https://example.com/"),
-          new URL("https://example.com/docs/a"),
-          new URL("https://example.com/docs/b"),
-          new URL("https://example.com/docs/private/x"),
-          new URL("https://example.com/blog"),
+        entries: [
+          { url: new URL("https://example.com/") },
+          { url: new URL("https://example.com/docs/a") },
+          { url: new URL("https://example.com/docs/b") },
+          { url: new URL("https://example.com/docs/private/x") },
+          { url: new URL("https://example.com/blog") },
         ],
         warnings: [{ code: "sitemap_invalid" as const, message: "one child Sitemap failed" }],
         truncated: false,
@@ -984,7 +997,10 @@ describe("executeCrawlPlan", () => {
         sitemapMode: "include",
         sitemapReader: {
           read: vi.fn(async () => ({
-            urls: [new URL("https://example.com/b"), new URL("https://example.com/c")],
+            entries: [
+              { url: new URL("https://example.com/b") },
+              { url: new URL("https://example.com/c") },
+            ],
             warnings: [],
             truncated: false,
           })),
@@ -1099,7 +1115,7 @@ describe("executeCrawlRetry", () => {
       content: `content:${url}`,
     }));
     const report = {
-      version: 1,
+      version: 2,
       seed_url: "https://example.com/",
       settings: {
         max_depth: 3,
@@ -1169,7 +1185,7 @@ describe("executeCrawlRetry", () => {
       },
     ]);
     expect(result).toMatchObject({
-      version: 1,
+      version: 2,
       seed_url: "https://example.com/",
       settings: {
         max_depth: 3,
@@ -1224,7 +1240,7 @@ describe("executeCrawlRetry", () => {
         ),
       },
       {
-        version: 1,
+        version: 2,
         seed_url: "https://example.com/",
         settings: {
           max_depth: 2,
@@ -1274,7 +1290,7 @@ describe("executeCrawlRetry", () => {
     const result = await executeCrawlRetry(
       { search: vi.fn(), fetch },
       {
-        version: 1,
+        version: 2,
         seed_url: "https://example.com/",
         settings: {
           max_depth: 2,
@@ -1328,7 +1344,7 @@ describe("executeCrawlRetry", () => {
     const result = await executeCrawlRetry(
       { search: vi.fn(), fetch },
       {
-        version: 1,
+        version: 2,
         seed_url: "https://example.com/",
         settings: {
           max_depth: 2,
@@ -1375,7 +1391,7 @@ describe("executeCrawlRetry", () => {
       executeCrawlRetry(
         { search: vi.fn(), fetch },
         {
-          version: 1,
+          version: 2,
           seed_url: "https://example.com/",
           settings: {
             max_depth: 2,

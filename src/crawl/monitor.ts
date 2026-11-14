@@ -9,11 +9,11 @@ const contentVersionSchema = z.object({
   content_hash: z.string().regex(/^[a-f0-9]{64}$/),
 });
 const monitorBaselineEntrySchema = contentVersionSchema.extend({
-  title: z.string().optional(),
-  depth: z.number().int().min(0).max(5).optional(),
-  sources: z.array(z.enum(["seed_url", "markdown", "sitemap"])).optional(),
-  content_length: z.number().int().min(0).optional(),
-  content_truncated: z.boolean().optional(),
+  title: z.string(),
+  depth: z.number().int().min(0).max(5),
+  sources: z.array(z.enum(["seed_url", "markdown", "sitemap"])),
+  content_length: z.number().int().min(0),
+  content_truncated: z.boolean(),
   content_original_length: z.number().int().min(0).optional(),
   sitemap_lastmod: z.string().optional(),
 });
@@ -40,7 +40,7 @@ const baselineSchema = z.array(monitorBaselineEntrySchema).superRefine((pages, c
   }
 });
 const stateSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   seed_url: z.string().url(),
   options: z.object({
     maxDepth: z.number().int().min(0).max(5),

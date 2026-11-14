@@ -27,7 +27,7 @@ function page(overrides: Partial<CrawlPage> = {}): CrawlPage {
 
 function result(overrides: Partial<CrawlRunResult> = {}): CrawlRunResult {
   return {
-    version: 1,
+    version: 2,
     seed_url: "https://example.com/",
     started_at: "2026-11-13T00:00:00.000Z",
     finished_at: "2026-11-13T00:00:01.000Z",

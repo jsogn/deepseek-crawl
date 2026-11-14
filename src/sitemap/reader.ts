@@ -39,8 +39,7 @@ export interface SitemapReadOptions {
 }
 
 export interface SitemapDiscovery {
-  urls: URL[];
-  entries?: CrawlSitemapEntry[];
+  entries: CrawlSitemapEntry[];
   warnings: MapWarning[];
   truncated: boolean;
 }
@@ -469,7 +468,6 @@ export class SitemapReader {
       left.href < right.href ? -1 : left.href > right.href ? 1 : 0,
     );
     return {
-      urls: sortedUrls,
       entries: sortedUrls.map((url) => {
         const lastmod = lastmods.get(url.href);
         return {

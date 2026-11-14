@@ -32,8 +32,7 @@ export interface CrawlSitemapReader {
     options: { maxDocuments: number; maxCandidates: number },
     signal?: AbortSignal,
   ): Promise<{
-    urls: URL[];
-    entries?: CrawlSitemapEntry[];
+    entries: CrawlSitemapEntry[];
     warnings: MapWarning[];
     truncated: boolean;
   }>;
@@ -81,8 +80,7 @@ export interface CrawlOptions {
 
 export interface CrawlBaseline {
   source: string;
-  hashes: ReadonlyMap<string, string>;
-  pages?: ReadonlyMap<string, CrawlBaselinePage>;
+  pages: ReadonlyMap<string, CrawlBaselinePage>;
 }
 
 export interface CrawlBaselinePage {
@@ -116,7 +114,7 @@ export interface CrawlCheckpointCounters {
   limitReached: boolean;
   discoveryLimitReached: boolean;
   sitemapCandidates: number;
-  sitemapLastmodSkipped?: number;
+  sitemapLastmodSkipped: number;
 }
 
 export interface CrawlCheckpointSource {
@@ -133,7 +131,7 @@ export interface CrawlCheckpointActiveLayer {
 }
 
 export interface CrawlCheckpointState {
-  version: 1;
+  version: 2;
   status: CrawlJobStatus;
   seed_url: string;
   started_at: string;
@@ -254,7 +252,7 @@ export interface CrawlFailure {
 }
 
 export interface CrawlRunResult {
-  version: 1;
+  version: 2;
   seed_url: string;
   started_at: string;
   finished_at: string;
@@ -310,25 +308,15 @@ export interface CrawlChanges {
 }
 
 export interface CrawlMonitorState {
-  version: 1;
+  version: 2;
   seed_url: string;
   options: CrawlCheckpointOptions;
-  baseline: CrawlMonitorBaselineEntry[];
+  baseline: CrawlBaselinePage[];
   last_run_at: string;
   last_run_id: string;
   last_output: string;
   last_changes: CrawlChanges;
   last_has_changes: boolean;
-}
-
-export interface CrawlMonitorBaselineEntry extends CrawlContentVersion {
-  title?: string;
-  depth?: number;
-  sources?: CrawlPageSource[];
-  content_length?: number;
-  content_truncated?: boolean;
-  content_original_length?: number;
-  sitemap_lastmod?: string;
 }
 
 export interface CrawlMonitorInfo {

@@ -66,7 +66,11 @@ function dependencies(
 
 function sitemap(urls: URL[] = []) {
   return {
-    read: vi.fn(async () => ({ urls, warnings: [], truncated: false })),
+    read: vi.fn(async () => ({
+      entries: urls.map((url) => ({ url })),
+      warnings: [],
+      truncated: false,
+    })),
   };
 }
 
@@ -102,7 +106,7 @@ describe("runCli", () => {
   it("renders deduplicated Map URLs in sorted human order", async () => {
     const sitemapReader = {
       read: vi.fn(async () => ({
-        urls: [new URL("https://example.com/a")],
+        entries: [{ url: new URL("https://example.com/a") }],
         warnings: [],
         truncated: false,
       })),
@@ -154,7 +158,7 @@ describe("runCli", () => {
   it("forwards Map search and returns only matching URLs", async () => {
     const sitemapReader = {
       read: vi.fn(async () => ({
-        urls: [new URL("https://example.com/docs/guide")],
+        entries: [{ url: new URL("https://example.com/docs/guide") }],
         warnings: [],
         truncated: false,
       })),
@@ -184,7 +188,7 @@ describe("runCli", () => {
     const output = join(root, "urls.json");
     await writeFile(output, "original", "utf8");
     const sitemapReader = {
-      read: vi.fn(async () => ({ urls: [], warnings: [], truncated: false })),
+      read: vi.fn(async () => ({ entries: [], warnings: [], truncated: false })),
     };
     const mapClient = {
       search: vi.fn(),
@@ -766,12 +770,44 @@ describe("runCli", () => {
     await writeFile(
       join(baseline, "crawl.json"),
       JSON.stringify({
-        version: 1,
+        version: 2,
         pages: [
-          { url: "https://example.com/", content_hash: contentHash(seedContent) },
-          { url: "https://example.com/same", content_hash: contentHash("same") },
-          { url: "https://example.com/changed", content_hash: contentHash("old") },
-          { url: "https://example.com/removed", content_hash: contentHash("removed") },
+          {
+            url: "https://example.com/",
+            title: "Seed",
+            depth: 0,
+            sources: ["seed_url"],
+            content_length: seedContent.length,
+            content_hash: contentHash(seedContent),
+            content_truncated: false,
+          },
+          {
+            url: "https://example.com/same",
+            title: "Same",
+            depth: 1,
+            sources: ["markdown"],
+            content_length: 4,
+            content_hash: contentHash("same"),
+            content_truncated: false,
+          },
+          {
+            url: "https://example.com/changed",
+            title: "Changed",
+            depth: 1,
+            sources: ["markdown"],
+            content_length: 3,
+            content_hash: contentHash("old"),
+            content_truncated: false,
+          },
+          {
+            url: "https://example.com/removed",
+            title: "Removed",
+            depth: 1,
+            sources: ["markdown"],
+            content_length: 7,
+            content_hash: contentHash("removed"),
+            content_truncated: false,
+          },
         ],
       }),
     );
@@ -993,7 +1029,7 @@ describe("runCli", () => {
     await writeFile(
       reportPath,
       JSON.stringify({
-        version: 1,
+        version: 2,
         seed_url: "https://example.com/",
         settings: {
           max_depth: 2,

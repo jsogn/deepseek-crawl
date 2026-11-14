@@ -50,7 +50,7 @@ async function connectedServer() {
         _seedUrl: URL,
         _options: SitemapReadOptions,
         _signal?: AbortSignal,
-      ): Promise<SitemapDiscovery> => ({ urls: [], warnings: [], truncated: false }),
+      ): Promise<SitemapDiscovery> => ({ entries: [], warnings: [], truncated: false }),
     ),
   };
   const server = createMcpServer({ client: gateway, sitemapReader });
@@ -149,7 +149,7 @@ describe("MCP server", () => {
   it("merges Map sources and returns compact structured results", async () => {
     const { client, gateway, sitemapReader } = await connectedServer();
     sitemapReader.read.mockResolvedValueOnce({
-      urls: [new URL("https://example.com/a")],
+      entries: [{ url: new URL("https://example.com/a") }],
       warnings: [],
       truncated: false,
     });
@@ -185,10 +185,9 @@ describe("MCP server", () => {
   it("uses the MCP Map default limit of 100", async () => {
     const { client, sitemapReader } = await connectedServer();
     sitemapReader.read.mockResolvedValueOnce({
-      urls: Array.from(
-        { length: 150 },
-        (_, index) => new URL(`https://example.com/page-${String(index).padStart(3, "0")}`),
-      ),
+      entries: Array.from({ length: 150 }, (_, index) => ({
+        url: new URL(`https://example.com/page-${String(index).padStart(3, "0")}`),
+      })),
       warnings: [],
       truncated: false,
     });
@@ -205,9 +204,9 @@ describe("MCP server", () => {
   it("passes optional Map search through MCP without adding tools", async () => {
     const { client, gateway, sitemapReader } = await connectedServer();
     sitemapReader.read.mockResolvedValueOnce({
-      urls: [
-        new URL("https://example.com/docs/reference"),
-        new URL("https://example.com/blog/post"),
+      entries: [
+        { url: new URL("https://example.com/docs/reference") },
+        { url: new URL("https://example.com/blog/post") },
       ],
       warnings: [],
       truncated: false,
@@ -252,7 +251,7 @@ describe("MCP server", () => {
   it("returns Map partial-source warnings with usable URLs", async () => {
     const { client, gateway, sitemapReader } = await connectedServer();
     sitemapReader.read.mockResolvedValueOnce({
-      urls: [],
+      entries: [],
       warnings: [
         {
           code: "sitemap_invalid",
@@ -284,7 +283,7 @@ describe("MCP server", () => {
 
     expect(result.isError).toBeUndefined();
     expect(result.structuredContent).toMatchObject({
-      version: 1,
+      version: 2,
       seed_url: "https://example.com/",
       settings: {
         max_depth: 2,

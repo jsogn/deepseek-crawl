@@ -267,7 +267,7 @@ export async function executeCrawl(
       return Promise.resolve();
     }
     const snapshot: CrawlCheckpointState = {
-      version: 1,
+      version: 2,
       status,
       seed_url: seed.href,
       started_at: startedAt,
@@ -334,7 +334,7 @@ export async function executeCrawl(
     try {
       const response = await client.fetch({ url }, crawlSignal);
       const hash = contentHashFor(client, url, response);
-      const previousHash = limits.baseline?.hashes.get(url);
+      const previousHash = limits.baseline?.pages.get(url)?.content_hash;
       const changeStatus = limits.baseline
         ? previousHash === undefined
           ? "added"
@@ -423,13 +423,15 @@ export async function executeCrawl(
           if (discovery) {
             warnings.push(...discovery.warnings);
             discoveryLimitReached = discoveryLimitReached || discovery.truncated;
-            const candidates = discovery.urls
-              .map((url) => canonicalizeCrawlUrl(url, undefined, limits.ignoreQueryParameters))
+            const candidates = discovery.entries
+              .map((entry) =>
+                canonicalizeCrawlUrl(entry.url, undefined, limits.ignoreQueryParameters),
+              )
               .filter(
                 (url): url is URL => url !== undefined && sameOrigin(url, seed) && pathFilter(url),
               );
             sitemapCandidates = new Set(candidates.map((url) => url.href)).size;
-            for (const entry of discovery.entries ?? []) {
+            for (const entry of discovery.entries) {
               const canonical = canonicalizeCrawlUrl(
                 entry.url,
                 undefined,
@@ -521,7 +523,7 @@ export async function executeCrawl(
     for (let index = 0; index < selected.length; index += 1) {
       const url = selected[index] ?? "";
       const pageIndex = selectedIndexes[index] ?? 0;
-      const baselinePage = limits.baseline?.pages?.get(url);
+      const baselinePage = limits.baseline?.pages.get(url);
       const currentLastmod = sitemapLastmods.get(url);
       const canSkip =
         limits.changedOnly === true &&
@@ -622,7 +624,7 @@ export async function executeCrawl(
   const cacheStats = cacheStatsFor(client);
   const changes = limits.baseline ? compareCrawlBaseline(pages, seen, limits.baseline) : undefined;
   const result: CrawlRunResult = {
-    version: 1,
+    version: 2,
     seed_url: seed.href,
     started_at: startedAt,
     finished_at: now().toISOString(),

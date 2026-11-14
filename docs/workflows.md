@@ -166,8 +166,9 @@ Output is atomic:
 ```
 
 The destination must not exist. SIGINT aborts requests, removes staging, and exits
-with code `130`. `crawl.json` stores settings, stats, failures, warnings, sources,
-content hashes, and stable page paths without duplicating page bodies.
+with code `130`. `crawl.json` uses schema v2 and stores settings, stats, failures,
+warnings, sources, content hashes, `sitemap_lastmod`, and stable page paths
+without duplicating page bodies.
 
 ## Incremental comparison
 
@@ -179,9 +180,10 @@ deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
   -o .deepseek-crawl/crawl-deepseek-guides-changes
 ```
 
-`--baseline` accepts a previous `crawl.json` or its directory. Changes are `added`,
-`modified`, `unchanged`, or `removed`. `--changed-only` writes added and modified
-pages only; unchanged pages remain in the report and baseline.
+`--baseline` accepts a schema v2 `crawl.json` or its directory. Version 1 reports
+are rejected without migration support. Changes are `added`, `modified`,
+`unchanged`, or `removed`. `--changed-only` writes added and modified pages only;
+unchanged pages remain in the report and baseline.
 
 With a baseline and `--changed-only`, a deepest-frontier page discovered by
 Sitemap can reuse its baseline hash and summary without a DeepSeek Fetch when its
@@ -191,8 +193,8 @@ page file is written.
 
 Newer, older, missing, or invalid `lastmod` values always fetch the page.
 Intermediate pages are not skipped because their body may contain deeper links.
-Older baselines without `sitemap_lastmod` retain the previous behavior; generate
-one report with this version before benefiting from later skips.
+A v2 baseline may omit `sitemap_lastmod` for an individual page, which forces
+that page to be fetched; the page summary itself is required.
 
 ## Persistent Change Monitor
 
@@ -211,9 +213,10 @@ deepseek-crawl crawl monitor "https://api-docs.deepseek.com/guides/" \
   --json
 ```
 
-The first successful run creates the baseline. Later runs create timestamped output
-directories and atomically rotate `state.json` only after publishing succeeds.
-Scope parameters are fixed after initialization; reset before changing them.
+The first successful run creates the schema v2 baseline. Later runs create
+timestamped output directories and atomically rotate `state.json` only after
+publishing succeeds. Version 1 state is rejected and must be reset. Scope
+parameters are fixed after initialization; reset before changing them.
 
 ```bash
 deepseek-crawl crawl monitor status \
@@ -247,9 +250,10 @@ deepseek-crawl crawl resume \
   -o .deepseek-crawl/crawl-deepseek-guides
 ```
 
-`--job-dir` stores versioned `job.json`, pages, frontier, failures, and
-`writer.lock`. Checkpoints are atomic. Resume skips completed discovery and pages.
-It cannot currently combine with `--plan-only`, `--baseline`, or Retry.
+`--job-dir` stores schema v2 `job.json`, pages, frontier, failures, and
+`writer.lock`. Checkpoints are atomic. Resume skips completed discovery and
+pages. Version 1 jobs are rejected. It cannot combine with `--plan-only`,
+`--baseline`, or Retry.
 
 ## Retry failed Crawl pages
 

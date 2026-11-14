@@ -28,6 +28,7 @@ describe("published package", () => {
     expect(result.stdout).toContain("Installed Skill setup command is available.");
     expect(result.stdout).toContain("Installed Batch Fetch job commands are available.");
     expect(result.stdout).toContain("Installed Firecrawl-compatible gateway command is available.");
+    expect(result.stdout).toContain("Verified packaged llms.txt Agent install contract.");
     expect(result.stdout).toContain(
       "Verified packaged init with environment credentials and a copied Skill.",
     );
@@ -37,6 +38,9 @@ describe("published package", () => {
     );
     if (process.platform !== "darwin") {
       expect(result.stdout).toContain("Verified packaged init with a piped API key.");
+      expect(result.stdout).toContain(
+        "Verified packaged Firecrawl CLI credential import without billable requests.",
+      );
     }
     expect(result.stderr).toBe("");
   }, 120_000);

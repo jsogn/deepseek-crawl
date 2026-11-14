@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -85,7 +85,15 @@ function isolatedEnvironment(home, baseUrl, apiKey) {
     Object.entries(process.env).filter(
       ([name]) =>
         !name.startsWith("DEEPSEEK_") &&
-        !["HOME", "USERPROFILE", "XDG_CONFIG_HOME", "CODEX_HOME", "NODE_OPTIONS"].includes(name),
+        !name.startsWith("FIRECRAWL_") &&
+        ![
+          "HOME",
+          "USERPROFILE",
+          "XDG_CONFIG_HOME",
+          "CODEX_HOME",
+          "GATEWAY_API_KEY",
+          "NODE_OPTIONS",
+        ].includes(name),
     ),
   );
   return {
@@ -100,6 +108,99 @@ function isolatedEnvironment(home, baseUrl, apiKey) {
     ...(apiKey === undefined ? {} : { DEEPSEEK_API_KEY: apiKey }),
     NO_COLOR: "1",
   };
+}
+
+async function verifyAgentInstallGuide(installedRoot) {
+  const guide = await readFile(join(installedRoot, "llms.txt"), "utf8");
+  for (const required of [
+    "# DeepSeek Crawl",
+    "## Agent install contract",
+    "deepseek-crawl gateway install",
+    "deepseek-crawl init",
+    "Do not publish the npm package",
+    "Ask for explicit confirmation before any request that may be billable",
+    "deepseek-crawl gateway uninstall",
+  ]) {
+    if (!guide.includes(required)) {
+      throw new Error(`Packaged llms.txt is missing required installation guidance: ${required}`);
+    }
+  }
+}
+
+function firecrawlCredentialPath(home) {
+  switch (process.platform) {
+    case "darwin":
+      return join(home, "Library", "Application Support", "firecrawl-cli", "credentials.json");
+    case "win32":
+      return join(home, "AppData", "Roaming", "firecrawl-cli", "credentials.json");
+    default:
+      return join(home, ".config", "firecrawl-cli", "credentials.json");
+  }
+}
+
+async function verifyPackagedFirecrawlImport(binary, consumerRoot, temporaryRoot, probe) {
+  if (process.platform === "darwin") {
+    return false;
+  }
+
+  const home = join(temporaryRoot, "home-firecrawl-import");
+  const firecrawlCredential = "fc-firecrawl-cli-test-key";
+  const firecrawlCredentialFile = firecrawlCredentialPath(home);
+  await mkdir(dirname(firecrawlCredentialFile), { recursive: true, mode: 0o700 });
+  await writeFile(
+    firecrawlCredentialFile,
+    `${JSON.stringify({
+      apiKey: firecrawlCredential,
+      apiUrl: "https://api.firecrawl.dev",
+    })}\n`,
+    { mode: 0o600 },
+  );
+
+  probe.requests.length = 0;
+  const importedResult = await runOk(
+    process.execPath,
+    [binary, "auth", "import", "firecrawl", "--json"],
+    consumerRoot,
+    {
+      env: isolatedEnvironment(home, probe.baseUrl),
+    },
+  );
+  const imported = parseJsonOutput(importedResult, "Packaged Firecrawl credential import");
+  if (
+    imported.imported !== true ||
+    imported.credential !== "firecrawl" ||
+    imported.source !== "firecrawl-cli" ||
+    imported.backend !== "file" ||
+    imported.replaced !== false ||
+    imported.environment_override !== false
+  ) {
+    throw new Error("Packaged Firecrawl credential import did not report the expected result.");
+  }
+  assertNoSecret(importedResult.stdout, firecrawlCredential, "Firecrawl import stdout");
+  assertNoSecret(importedResult.stderr, firecrawlCredential, "Firecrawl import stderr");
+
+  const storedPath = join(home, ".config", "deepseek-crawl", "credentials.json");
+  const storedStat = await stat(storedPath);
+  const stored = JSON.parse(await readFile(storedPath, "utf8"));
+  if (stored.firecrawl_api_key !== firecrawlCredential || (storedStat.mode & 0o777) !== 0o600) {
+    throw new Error("Packaged Firecrawl credential import did not store the key safely.");
+  }
+
+  const statusResult = await runOk(
+    process.execPath,
+    [binary, "auth", "status", "firecrawl", "--json"],
+    consumerRoot,
+    {
+      env: isolatedEnvironment(home, probe.baseUrl),
+    },
+  );
+  const status = parseJsonOutput(statusResult, "Packaged Firecrawl credential status");
+  if (status.configured !== true || status.source !== "file" || status.backend !== "file") {
+    throw new Error("Packaged Firecrawl credential status did not report the stored credential.");
+  }
+  assertNoSecret(statusResult.stdout, firecrawlCredential, "Firecrawl status stdout");
+  assertReadOnlyProbe(probe.requests);
+  return true;
 }
 
 async function startProbeServer() {
@@ -300,6 +401,7 @@ try {
   if (!/^name:\s*deepseek-crawl\s*$/m.test(skill)) {
     throw new Error("Installed package does not contain the deepseek-crawl Agent Skill.");
   }
+  await verifyAgentInstallGuide(installedRoot);
 
   const setupHelp = (
     await runOk(process.execPath, [binary, "setup", "skills", "--help"], consumerRoot)
@@ -328,17 +430,27 @@ try {
 
   probe = await startProbeServer();
   const initChecks = await verifyPackagedInit(binary, consumerRoot, temporaryRoot, probe);
+  const firecrawlImportVerified = await verifyPackagedFirecrawlImport(
+    binary,
+    consumerRoot,
+    temporaryRoot,
+    probe,
+  );
 
   console.log(`Installed ${packageJson.name}@${packageJson.version} from its package tarball.`);
   console.log(`Installed CLI version: ${version}`);
   console.log("Installed Skill setup command is available.");
   console.log("Installed Batch Fetch job commands are available.");
   console.log("Installed Firecrawl-compatible gateway command is available.");
+  console.log("Verified packaged llms.txt Agent install contract.");
   console.log("Verified packaged init with environment credentials and a copied Skill.");
   console.log("Verified packaged init conflict handling with --force.");
   console.log("Verified packaged init JSON failure without a billable request.");
   if (initChecks.pipedKeyVerified) {
     console.log("Verified packaged init with a piped API key.");
+  }
+  if (firecrawlImportVerified) {
+    console.log("Verified packaged Firecrawl CLI credential import without billable requests.");
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

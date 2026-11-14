@@ -5,214 +5,75 @@
 面向 AI Agent 的 **CLI-first** 网页搜索、页面读取、URL Map 和受限 Crawl 工具，
 底层使用 DeepSeek 官方 Search 与 Fetch API。
 
-默认工作流：
+当前版本：`0.8.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
+[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.8.0)
 
 ```text
 Agent → deepseek-crawl CLI → DeepSeek API → 文件/JSON → Agent
 ```
 
-仓库内置 `deepseek-crawl` Agent Skill，指导 AI 按以下顺序选择最小能力：
+它用于替代 Firecrawl 的常见 Search、Scrape、Map 和 Crawl 能力，**不是**
+Firecrawl API 或 SDK 兼容层。MCP 为可选接口；日常 Agent 使用优先选择 CLI + Skill。
 
-1. 不知道 URL：使用 `search`。
-2. 已知 URL：使用 `fetch`。
-3. 已知站点但不知道具体页面：使用 `map --search`。
-4. 确实需要批量读取文档或站点区域：使用受限 `crawl`。
+## 核心原则
 
-本项目用于替代 Firecrawl 的常见 Search、Scrape、Map 和 Crawl 能力，**不是**
-Firecrawl API 或 SDK 兼容层。
+- **使用最小能力**：已知 URL 时读取页面，不要先 Crawl 整站。
+- **结果写给 Agent**：默认输出 Markdown，结构化结果可输出 JSON 或写入文件。
+- **范围可控**：origin、路径、深度、页数、并发和请求间隔都有硬限制。
+- **有失败记录**：部分失败保留成功页面、错误、来源、hash 和稳定路径。
+- **本地优先**：没有远程存储、无遥测；缓存和续跑状态保存在本机。
 
-MCP 为可选项，主要保留给无法执行 CLI 的客户端。日常 Agent 使用应优先选择
-CLI + Skill。
+## 60 秒上手
 
-## 当前版本
-
-`0.8.0` 提供：
-
-- CLI-first 的 Search、Fetch、Map 和 Crawl。
-- CLI Crawl 默认合并 Sitemap 与种子页 Markdown 发现，不再只依赖页面内链接。
-- 自带 Agent Skill，包含命令路由、输出组织和安全边界。
-- `setup skills` 一键安装到通用或指定 Agent 目录。
-- `map --search` URL 筛选。
-- Map JSON 直接驱动的批量 Fetch，以及逐页失败记录。
-- Crawl 路径 include/exclude 和 query 参数去重。
-- Crawl Plan 预览初始 frontier，避免在确认 URL 列表前读取所有子页面。
-- Batch Fetch 和 Crawl 可从既有报告只重试失败项，避免重复读取成功页面。
-- Fetch、Batch、Crawl、Plan 和 Retry 可共享显式 TTL 的本地页面缓存。
-- Fetch、Batch 和 Crawl 输出稳定 `content_hash`，Crawl 可对比 baseline 只写变更页面。
-- Crawl 支持 durable job、逐页 checkpoint、`crawl resume` 和 `crawl status`。
-- Crawl Change Monitor 持久化 baseline，一次运行生成一份增量报告，可交给 cron、CI 或 Agent Automation 定时调度。
-- macOS Keychain 或其他平台私有文件凭据存储。
-- `auth set`、`auth status`、`auth remove`。
-- 可选的四个 MCP 工具。
-- 公网 Sitemap 访问、DNS 固定、NAT64/Teredo 防护和同源重定向验证。
-- 确定性 Crawl、失败记录和原子输出。
-
-项目使用 MIT License。
-
-## 环境要求
-
-- Node.js 22.12 或更高版本。
-- DeepSeek API Key：<https://platform.deepseek.com/api_keys>。
-- 能访问 DeepSeek；CLI Map 和 Crawl 还需要直接访问目标站点的 Sitemap。
-
-## 安装
-
-从 GitHub 安装：
+需要 Node.js 22.12 或更高版本，以及
+[DeepSeek API Key](https://platform.deepseek.com/api_keys)。
 
 ```bash
-npm install -g github:jsogn/deepseek-crawl
+npm install -g deepseek-crawl
 deepseek-crawl setup skills
 deepseek-crawl auth set
 deepseek-crawl doctor
+deepseek-crawl fetch "https://api-docs.deepseek.com/" \
+  -o .deepseek-crawl/deepseek-api-home.md
 ```
 
-npm registry 发布后也可以使用：
-
-```bash
-npm install -g deepseek-crawl@0.8.0
-```
-
-本地开发：
-
-```bash
-npm install
-npm run build
-npm link
-deepseek-crawl setup skills
-```
-
-## API 凭据
-
-只需要配置一次：
-
-```bash
-deepseek-crawl auth set
-```
-
-CLI 使用隐藏终端输入，或从 stdin 读取 Key，不接受 Key 作为命令行参数。
-
-存储位置：
-
-- macOS：Keychain，service 为 `deepseek-crawl`。
-- Linux 和其他平台：
-  `$XDG_CONFIG_HOME/deepseek-crawl/credentials.json` 或
-  `~/.config/deepseek-crawl/credentials.json`，权限为 `0600`。
-
-查看或删除：
+`auth set` 通过隐藏终端输入 API Key。也可以使用 `DEEPSEEK_API_KEY` 环境变量。
+macOS Keychain 保存凭据；其他平台使用权限为 `0600` 的私有文件。
 
 ```bash
 deepseek-crawl auth status --json
 deepseek-crawl auth remove
 ```
 
-凭据优先级：
+`doctor` 不调用计费接口；`doctor --live` 会执行一次计费 Search。
 
-1. `DEEPSEEK_API_KEY` 环境变量。
-2. CLI 保存的凭据。
-3. 未配置错误。
-
-`auth status` 只报告来源和存储后端，不输出 Key。
-
-## Agent Skill
-
-Skill 位于：
-
-```text
-skills/deepseek-crawl/
-```
-
-默认安装到通用 Agent Skills 目录：
+从 GitHub 安装或进行本地开发：
 
 ```bash
-deepseek-crawl setup skills
+npm install -g github:jsogn/deepseek-crawl
+
+npm install
+npm run build
+npm link
 ```
 
-创建：
+## 选择正确的命令
 
-```text
-~/.agents/skills/deepseek-crawl
-```
+| 你知道什么？               | 使用                          | 原因                           |
+| -------------------------- | ----------------------------- | ------------------------------ |
+| 不知道相关 URL             | `search <query>`              | 先发现相关页面                 |
+| 已知一个页面 URL           | `fetch <url>`                 | 只读取该页面                   |
+| 知道站点，但不知道具体页面 | `map <url> [--search <text>]` | 发现并筛选同源 URL             |
+| 已有一批明确 URL           | `fetch --input <path>`        | 批量读取，避免二次发现         |
+| 需要遍历一个文档区域       | `crawl <url> -o <dir>`        | 有界发现和读取页面             |
+| 需要持续检测变化           | `crawl monitor`               | 持久化 baseline 并生成增量报告 |
 
-安装到当前项目：
+先运行 `map --search` 再批量 Fetch，通常比直接 Crawl 更省请求。只有确实需要
+链接或 Sitemap 发现时才升级到 Crawl。
 
-```bash
-deepseek-crawl setup skills --project
-```
+## 核心命令
 
-只安装到指定 Agent：
-
-```bash
-deepseek-crawl setup skills --agent codex
-deepseek-crawl setup skills --agent claude-code,cursor
-deepseek-crawl setup skills --agent all
-```
-
-默认使用绝对软链接。可以改用复制，并且只应在确认替换现有 Skill 时使用
-`--force`：
-
-```bash
-deepseek-crawl setup skills --copy
-deepseek-crawl setup skills --force
-```
-
-安装 Skill 不需要 DeepSeek API Key。
-
-也可以使用通用生态安装器：
-
-```bash
-npx skills add jsogn/deepseek-crawl --skill deepseek-crawl
-```
-
-安装后请开启新的 Agent 会话，使 Skill 被重新发现。
-
-## 前置检查
-
-以下命令不会产生 DeepSeek 计费请求：
-
-```bash
-deepseek-crawl doctor --json
-```
-
-`doctor --live` 会执行一次计费 Search。
-
-## CLI
-
-```text
-deepseek-crawl search <query> [options]
-deepseek-crawl fetch <url> [options]
-deepseek-crawl map <url> [--search <text>] [options]
-deepseek-crawl crawl <url> -o <dir> [options]
-deepseek-crawl crawl resume <job-dir> -o <dir> [options]
-deepseek-crawl crawl status <job-dir> [--json]
-deepseek-crawl crawl monitor <url> --monitor-dir <dir> -o <runs-dir> [options]
-deepseek-crawl crawl monitor status <monitor-dir> [--json]
-deepseek-crawl crawl monitor reset <monitor-dir> [--json]
-deepseek-crawl doctor [--live] [--json]
-deepseek-crawl setup skills [options]
-deepseek-crawl auth set
-deepseek-crawl auth status [--json]
-deepseek-crawl auth remove [--json]
-deepseek-crawl cache clear [--json]
-deepseek-crawl mcp
-```
-
-所有命令支持 `--help`，可执行文件支持 `--version`。
-
-## Search
-
-```text
-deepseek-crawl search <query>
-  [--count <1..50>]
-  [--content]
-  [--max-content-chars <0..1000000>]
-  [--ori-question <text>]
-  [--localization <ip>]
-  [--json]
-  [--output, -o <path>]
-```
-
-人类可读输出默认每条内容的截断上限为 4,000 字符。`--json` 默认保留完整
-API 内容；显式提供 `--max-content-chars` 时按其限制。
+### Search
 
 ```bash
 deepseek-crawl search "DeepSeek API changes" \
@@ -221,78 +82,22 @@ deepseek-crawl search "DeepSeek API changes" \
   -o .deepseek-crawl/search-deepseek-changes.json
 ```
 
-## Fetch
+常用选项包括 `--content`、`--max-content-chars`、`--ori-question` 和
+`--localization`。人类可读输出默认限制每条内容 4,000 字符。
 
-```text
-deepseek-crawl fetch <url>
-  [--max-chars <0..1000000>]
-  [--cache-ttl <1..31536000>]
-  [--fresh]
-  [--json]
-  [--output, -o <path>]
-```
-
-人类可读输出默认截断到 30,000 字符。`-o` 默认写入 Markdown；与 `--json`
-一起使用时写入结构化 JSON。
+### Fetch
 
 ```bash
 deepseek-crawl fetch "https://api-docs.deepseek.com/" \
   -o .deepseek-crawl/deepseek-api-home.md
 ```
 
-缓存默认关闭。重复研究同一页面时显式启用 TTL：
+`-o` 默认写 Markdown；与 `--json` 一起使用时写结构化 JSON。人类可读输出默认
+截断到 30,000 字符。重复读取时可添加 `--cache-ttl 3600`，`--fresh` 强制刷新。
+
+批量读取明确 URL：
 
 ```bash
-deepseek-crawl fetch "https://api-docs.deepseek.com/" \
-  --cache-ttl 3600 \
-  --json
-
-deepseek-crawl fetch "https://api-docs.deepseek.com/" \
-  --cache-ttl 3600 \
-  --fresh \
-  --json
-```
-
-`--cache-ttl` 单位为秒，范围 1–31,536,000；`--fresh` 强制调用 API 并刷新缓存。
-只缓存成功 Fetch 响应。`retrieved_from: api|cache` 表示页面来源；Batch、Crawl、
-Plan 和 Retry 还会在 `stats` 中提供 `cache_hits`、`cache_misses` 和
-`cache_errors`。
-
-缓存命中在进入网络 scheduler 前解析，不应用 API 的 `--delay-ms` 和网络并发等待；
-只有 cache miss 会进入 DeepSeek 请求限速。
-
-默认缓存目录：
-
-- macOS：`~/Library/Caches/deepseek-crawl`。
-- 其他平台：`$XDG_CACHE_HOME/deepseek-crawl` 或 `~/.cache/deepseek-crawl`。
-- 可用 `DEEPSEEK_CACHE_DIR` 覆盖。
-
-缓存目录权限为 `0700`，文件为 `0600`。清理：
-
-```bash
-deepseek-crawl cache clear --json
-```
-
-批量读取已知 URL：
-
-```text
-deepseek-crawl fetch --input <path|->
-  --output-dir <dir>
-  [--concurrency <1..5>]
-  [--delay-ms <0..5000>]
-  [--max-chars <0..1000000>]
-  [--cache-ttl <1..31536000>]
-  [--fresh]
-  [--json]
-```
-
-`--input` 可以直接读取 Map JSON，也支持 URL 字符串数组、包含 `url` 字段的对象
-数组，以及逐行 URL 文本。`-` 表示从 stdin 读取。输出目录不能已存在。
-
-```bash
-deepseek-crawl map "https://api-docs.deepseek.com/" \
-  --search guides --json -o .deepseek-crawl/map-docs.json
-
 deepseek-crawl fetch \
   --input .deepseek-crawl/map-docs.json \
   --output-dir .deepseek-crawl/pages-docs \
@@ -300,44 +105,10 @@ deepseek-crawl fetch \
   --delay-ms 250
 ```
 
-输出包含 `fetch.json` 和稳定的 `pages/*.md`。部分失败不会丢弃成功页面；全部
-失败时仍会发布诊断报告，但命令退出码为 `1`。
+`--input` 支持 Map JSON、URL 数组、包含 `url` 字段的对象数组和逐行 URL 文本。
+完整输入格式、缓存和失败重试见下方工作流指南。
 
-只重试上次失败的 URL：
-
-```bash
-deepseek-crawl fetch \
-  --retry-failed .deepseek-crawl/pages-docs/fetch.json \
-  --output-dir .deepseek-crawl/pages-docs-retry \
-  --concurrency 3 \
-  --delay-ms 250 \
-  --cache-ttl 3600 \
-  --json
-```
-
-Retry 会读取既有 `fetch.json`，忽略已成功页面，只请求可规范化的失败 URL。输出仍
-写入一个全新的目录，并保留 `retry_of`、原始索引和上次失败原因；无效 URL 会进入
-`retry_of.skipped`，重复失败计入 `retry_of.deduplicated`。
-
-## Map
-
-```text
-deepseek-crawl map <url> [--search <text>]
-  [--limit <1..1000>]
-  [--json]
-  [--output, -o <path>]
-```
-
-Map 合并：
-
-1. `/sitemap.xml` 及嵌套 Sitemap 中的同源 URL。
-2. DeepSeek Fetch 返回的种子页 Markdown 中的同源链接。
-
-`--search` 对规范化后的 URL 做大小写不敏感的包含匹配，并在应用 `limit`
-之前过滤。使用 `--search` 时，所有返回 URL 都必须匹配，种子 URL 不会强制保留；
-没有匹配属于成功空结果。
-
-不提供 `--search` 时，种子 URL 始终保留。默认 limit 为 500。
+### Map
 
 ```bash
 deepseek-crawl map "https://api-docs.deepseek.com/" \
@@ -346,329 +117,111 @@ deepseek-crawl map "https://api-docs.deepseek.com/" \
   -o .deepseek-crawl/map-deepseek-docs.json
 ```
 
-警告会写入 stderr，并保留在 JSON 中。Sitemap 和种子页任一来源可用时，Map 仍可
-返回部分结果。
+Map 合并同源 Sitemap URL 与种子页 Markdown 链接。`--search` 在应用 `limit` 前对
+规范化 URL 做大小写不敏感匹配。Map JSON 可直接作为 Batch Fetch 输入。
 
-## Crawl
-
-```text
-deepseek-crawl crawl <url> -o <dir>
-  [--max-depth <0..5>]
-  [--max-pages <1..100>]
-  [--concurrency <1..5>]
-  [--delay-ms <0..5000>]
-  [--include-paths <patterns>]
-  [--exclude-paths <patterns>]
-  [--ignore-query-parameters]
-  [--sitemap <include|only|skip>]
-  [--plan-only]
-  [--cache-ttl <1..31536000>]
-  [--fresh]
-  [--baseline <crawl.json|dir>]
-  [--changed-only]
-  [--job-dir <dir>]
-  [--json]
-```
-
-默认参数：
-
-- 深度：2
-- 最大页数：20
-- 并发：2
-- 请求启动间隔：250 ms
-- Sitemap：`include`
-
-种子页深度为 0。Crawl 按确定性的深度层遍历，移除重复规范化 URL，严格限制在
-种子页的 origin 内，并记录部分页面失败。CLI Crawl 会通过 Sitemap 辅助发现
-页面，因此即使 DeepSeek 返回的 Markdown 没有链接，也能遍历文档站点。
-
-Sitemap 模式：
-
-- `include`（默认）：合并 Sitemap URL 和种子页 Markdown 链接。
-- `only`：只使用 Sitemap URL，忽略种子页 Markdown 链接。
-- `skip`：只使用 Markdown 链接，恢复 `0.6.0` 行为。
-
-Sitemap URL 从深度 1 开始，并遵守相同的 origin、路径、query、深度、页数和发现
-数量限制。Sitemap 读取失败会产生 `sitemap_unavailable` 或已有 Map 警告，Crawl
-继续使用可用来源；种子页读取失败仍是致命错误。
-
-大面积 Crawl 之前可以先生成初始发现计划：
-
-```bash
-deepseek-crawl crawl "https://api-docs.deepseek.com/" \
-  --plan-only \
-  --max-depth 1 \
-  --max-pages 20 \
-  --include-paths "/guides/*" \
-  -o .deepseek-crawl/deepseek-guides-plan.json
-```
-
-Plan 只读取种子页和 Sitemap，不读取任何已发现子页面。`--output` 此时是单个 JSON
-文件路径，目标不能已存在。计划中的 `urls` 是限制后选中的子页面，可直接作为
-Batch Fetch 的输入；`deferred` 说明被页数限制延后的 URL，`filtered` 说明因
-cross-origin、路径过滤或发现数量限制而省略的 URL。Plan 描述初始深度 1
-frontier，不代表递归发现全部深层 URL。
-
-链接非常密集时，Plan 只保留 discovery limit 加 1,000 条诊断候选。超出窗口后不再
-保存明细，只设置 `diagnostics_truncated`；此时统计描述保留窗口，不保证全量精确。
+### Crawl
 
 ```bash
 deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
   --max-depth 1 \
-  --max-pages 5 \
+  --max-pages 10 \
   --include-paths "/guides/*" \
-  --exclude-paths "/guides/private/*" \
-  --ignore-query-parameters \
-  --sitemap include \
   -o .deepseek-crawl/crawl-deepseek-guides
 ```
 
-路径匹配针对 URL pathname：
+`deepseek-crawl crawl <url> -o <dir>` 默认深度 `2`、最多 20 页、并发 `2`。
+CLI 默认合并 Sitemap 和 Markdown 发现，并限制在种子页的 exact origin。
 
-- 不含通配符时按路径段前缀匹配，例如 `/docs` 匹配 `/docs/start`。
-- `*` 匹配任意字符，`?` 匹配单个字符。
-- include 为 OR；任一 exclude 命中时优先排除。
-- 种子页始终读取，不会因路径过滤被拒绝。
-- `--ignore-query-parameters` 在去重和 Fetch 前移除 query。
+输出目录包含 `crawl.json` 和稳定命名的 `pages/*.md`。目录先写 staging，成功后
+整体发布；SIGINT 会清理 staging 并以 `130` 退出。
 
-输出：
+路径过滤、Plan、增量对比、Change Monitor、断点续跑和失败重试：
+
+[批量读取与 Crawl 工作流](https://github.com/jsogn/deepseek-crawl/blob/main/docs/workflows.zh-CN.md)
+
+## 常见任务
+
+| 任务                                                | 入口                              |
+| --------------------------------------------------- | --------------------------------- |
+| 先确认一个文档区域有哪些页面                        | `crawl --plan-only`               |
+| 比较两次抓取并只写变化页面                          | `crawl --baseline --changed-only` |
+| 定时监控文档变化                                    | `crawl monitor`                   |
+| 中断后继续长任务                                    | `crawl resume`                    |
+| 只重试失败页面                                      | Batch Retry 或 Crawl Retry        |
+| 使用 `--include-paths` / `--exclude-paths` 控制范围 | Crawl 工作流指南                  |
+| 使用 `--ignore-query-parameters` 去重               | Crawl 工作流指南                  |
+
+## Agent 集成
+
+仓库内置 Skill：
 
 ```text
-.deepseek-crawl/crawl-deepseek-guides/
-  crawl.json
-  pages/
-    0001-page.md
-    0002-example-docs.md
+skills/deepseek-crawl/
 ```
 
-`-o` 目标不能已存在。Crawl 先写隐藏临时目录，成功后一次性发布完整目录。
-SIGINT 会中止请求、清理 staging，并以代码 `130` 退出。
-
-`crawl.json` 包含设置、统计、失败记录、内容截断元数据、`warnings`、Sitemap
-候选数量、每页 `sources`、`content_hash` 和稳定页面路径，不重复保存正文。页面来源会区分
-`seed_url`、`markdown` 和 `sitemap`。已知 URL 列表优先使用
-`map --search` 后接批量 Fetch；需要遍历一个文档区域时再使用 Crawl，可减少不必
-要的整站发现开销。
-
-增量对比：
+安装到默认的 `~/.agents/skills/deepseek-crawl`：
 
 ```bash
-deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
-  --baseline .deepseek-crawl/crawl-deepseek-guides/crawl.json \
-  --changed-only \
-  --cache-ttl 3600 \
-  -o .deepseek-crawl/crawl-deepseek-guides-changes
+deepseek-crawl setup skills
 ```
 
-`--baseline` 可以指向旧 `crawl.json`，也可以指向包含该文件的 Crawl 输出目录。
-`content_hash` 是 DeepSeek 原始 Markdown 内容的 SHA-256，在本地字符截断前计算。
-结果 `changes` 分为 `added`、`modified`、`unchanged`、`removed`；`removed`
-表示 baseline URL 没有出现在当前发现范围中。
-
-`--changed-only` 只写入新增和修改页面。未变化页面仍保留在报告和统计中，但
-`pages[].written` 为 `false` 且没有 `path`。第一版增量 Crawl 仍会读取页面内容
-或命中缓存后计算 hash；Sitemap `lastmod` 跳过请求属于下一阶段优化。
-
-定时 Change Monitor：
+也可以安装到当前项目或指定 Agent：
 
 ```bash
-deepseek-crawl crawl monitor "https://api-docs.deepseek.com/guides/" \
-  --monitor-dir .deepseek-crawl/monitor/deepseek-guides \
-  --max-depth 1 \
-  --max-pages 20 \
-  --include-paths "/guides/*" \
-  --cache-ttl 3600 \
-  --fail-on-change \
-  -o .deepseek-crawl/monitor/deepseek-guides-runs \
-  --json
+deepseek-crawl setup skills --project
+deepseek-crawl setup skills --agent codex
+deepseek-crawl setup skills --agent claude-code,cursor
+deepseek-crawl setup skills --agent all
 ```
 
-Monitor 本身只运行一次并退出，不启动后台进程。用 cron、CI、系统定时器或
-Agent Automation 重复执行同一工作流即可。状态目录持久保存最近一次成功
-baseline、抓取范围和上次结果：
-
-```text
-.deepseek-crawl/monitor/deepseek-guides/
-  state.json
-  writer.lock
-```
-
-首次成功运行只建立 baseline，不报告变化。后续每次运行自动用持久化 baseline
-对比，并在 `-o` 下创建新的时间戳目录，例如
-`.deepseek-crawl/monitor/deepseek-guides-runs/20261114T010203456Z/`，不会覆盖旧
-报告。输出发布成功后才会原子轮换 `state.json`。失败或本轮未读取的旧页面保留
-上次已知 hash，避免临时抓取失败被误报为 removed。
-
-首次运行会固化 seed、深度、页数、过滤器、Sitemap 模式和并发等抓取范围参数；
-后续运行从 `state.json` 复用这些参数，避免范围变化制造虚假变更。需要改变范围时，
-先执行 reset，再重新初始化。`--cache-ttl`、`--fresh` 和触发选项仍按每次命令传入。
-
-默认将 added、modified、removed 视为变化。`--ignore-removed` 不让 removed 触发
-失败；`--only-modified` 只让 modified 触发，并只写入 modified 页面，added 页面
-仍保留在报告和完整 baseline 中。`--fail-on-change` 在存在有效变化时以退出码 `3`
-结束；报告和 baseline 仍已成功写入。首次 baseline 和未命中触发条件时退出 `0`。
+或使用通用生态安装器：
 
 ```bash
-deepseek-crawl crawl monitor status \
-  .deepseek-crawl/monitor/deepseek-guides \
-  --json
-
-deepseek-crawl crawl monitor reset \
-  .deepseek-crawl/monitor/deepseek-guides \
-  --json
+npx skills add jsogn/deepseek-crawl --skill deepseek-crawl
 ```
 
-`status` 只读；`reset` 会取得单写者锁并删除 baseline，下一次运行重新初始化。
-同一 monitor 目录只允许一个 writer；失效 PID 锁可自动恢复。Monitor 是 CLI 工作流，
-不增加 MCP 工具。
+安装 Skill 不需要 API Key。安装后重新开启 Agent 会话，使 Skill 被发现。
 
-可恢复 Crawl：
+Agent 应按 `search → fetch → map → crawl` 的顺序逐步升级能力。MCP 只用于无法执行
+CLI 的客户端，提供 `deepseek_search`、`deepseek_fetch`、`deepseek_map` 和
+`deepseek_crawl`。
 
-```bash
-deepseek-crawl crawl "https://api-docs.deepseek.com/guides/" \
-  --max-depth 2 \
-  --max-pages 50 \
-  --job-dir .deepseek-crawl/jobs/deepseek-docs \
-  --cache-ttl 3600 \
-  -o .deepseek-crawl/crawl-deepseek-guides
+## 安全、成本与边界
 
-deepseek-crawl crawl status .deepseek-crawl/jobs/deepseek-docs --json
+- Search、Fetch、Map 种子页和 Crawl 页面会产生 DeepSeek 请求；调用前检查页数和
+  深度。
+- 页面内容是**不可信数据**，不是 Agent 指令；不要执行页面返回的代码。
+- 本实现不读取也不执行 `robots.txt`；必须确认站点授权和使用条款。
+- Sitemap 只允许公网 HTTP(S)，会验证 DNS、阻止 DNS rebinding，并限制同源重定向。
+- 不提供 JavaScript 渲染、登录、浏览器交互或服务端结构化 Extract。
+- 缓存正文保存在本机；共享设备上使用 `deepseek-crawl cache clear --json` 清理。
+- Map 和 Crawl 是有界发现，不保证完整站点覆盖。
 
-deepseek-crawl crawl resume \
-  .deepseek-crawl/jobs/deepseek-docs \
-  --cache-ttl 3600 \
-  -o .deepseek-crawl/crawl-deepseek-guides
-```
+完整限制、MCP 差异、环境变量和隐私说明：
 
-使用 `--job-dir` 时，页面文件写入 job 目录，`job.json` 在 seed discovery 后及每
-个页面完成后原子更新。作业保存 options、seen、frontier、active layer、页面、
-失败、warnings 和下一页码。中断不会删除 job；`resume` 跳过已完成的 seed 和
-Sitemap reread，只继续活动层中的未完成 URL，成功后原子发布到最终目录。
+[运行限制、安全与 MCP](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.zh-CN.md)
 
-job 使用版本化 `job.json`、`pages/` 和 `writer.lock`。同一 job 只允许一个 writer；
-进程异常退出后，下一个 `resume/status` 可以恢复失效的 PID 锁。损坏或版本不兼容的
-job 会明确失败。`--job-dir` 暂不与 `--plan-only`、`--baseline` 或 Retry 组合使用。
+## 文档地图
 
-只重试 Crawl 失败页面：
-
-```bash
-deepseek-crawl crawl \
-  --retry-failed .deepseek-crawl/crawl-deepseek-guides/crawl.json \
-  -o .deepseek-crawl/crawl-deepseek-guides-retry \
-  --cache-ttl 3600 \
-  --json
-```
-
-Crawl Retry 不读取种子页或已成功页面，只重试同一 origin 且仍在原报告 depth 范围内
-的失败 URL。原始 `index`、`depth`、`sources` 和失败原因会保留，并受原报告的
-`max_pages` 限制。跨域、无效或超出限制的项目进入 `retry_of.skipped`，重复项
-计入 `retry_of.deduplicated`。
-
-## 计费
-
-- Search 按成功请求计费。
-- Fetch 按成功页面请求计费。
-- Map 的种子页通过 DeepSeek Fetch 读取，因此计费。
-- Crawl 对每个成功读取的页面调用 DeepSeek Fetch。
-
-重复执行前应减少 `--limit`、`--max-pages` 或深度。价格和限制请查看
-<https://api-docs.deepseek.com/guides/search/>。
-
-## MCP（可选）
-
-只在调用方无法执行 CLI 时使用：
-
-```bash
-deepseek-crawl mcp
-```
-
-服务暴露四个工具：
-
-- `deepseek_search`
-- `deepseek_fetch`
-- `deepseek_map`
-- `deepseek_crawl`
-
-MCP 不写本地文件。结构化内容有总长度限制，页面正文被视为不可信数据。为保持
-兼容，`0.8.0` 的 MCP Crawl 仍只使用 Markdown 链接；Sitemap 辅助发现仅在 CLI
-提供。失败重试和本地缓存同样只在 CLI 提供。
-
-## 限制
-
-| 范围                     | 硬限制                 |
-| ------------------------ | ---------------------- |
-| DeepSeek Fetch 响应体    | 8 MiB                  |
-| CLI Batch 输入文件/报告  | 8 MiB                  |
-| Batch Fetch URL 数       | 10,000                 |
-| Fetch Cache TTL          | 31,536,000 秒          |
-| Fetch Cache 单文件       | 16 MiB                 |
-| Crawl 单页内容           | 1,000,000 Unicode 字符 |
-| CLI Crawl URL 发现       | 10,000                 |
-| MCP Crawl URL 发现       | 2,000                  |
-| MCP Crawl 结构化正文总计 | 100,000 Unicode 字符   |
-| Sitemap 文档数           | 10                     |
-| Map 候选 URL             | 10,000                 |
-| Sitemap 响应体           | 5 MiB                  |
-| Sitemap 请求超时         | 15 秒                  |
-| Sitemap 重定向           | 3 次，仅同源           |
-
-CLI Crawl 最多 100 页，MCP Crawl 最多 20 页。两者的 depth 和 concurrency
-硬上限分别为 5。
-
-## Sitemap 网络策略
-
-CLI Map 和 Crawl 会直接请求目标站点的 Sitemap，仅接受公网 HTTP(S) 目标：
-
-- 拒绝 loopback、private、link-local、multicast、unspecified、reserved、
-  NAT64 和特殊用途 IPv6。
-- 验证全部 DNS 结果。
-- socket 连接到已验证地址，阻止 DNS rebinding。
-- 手动处理最多三次同源重定向，并重新验证。
-
-## 安全与限制
-
-- 本实现不读取也不执行 `robots.txt`。使用者必须确认站点授权和条款。
-- CLI Crawl 合并精确同源 Sitemap URL 与 DeepSeek Markdown 链接；MCP Crawl
-  仍只使用 Markdown。两者都不跨子域名，也不跟随页面指令。
-- DeepSeek Fetch 可能在服务端跟随重定向，最终 URL 不会出现在当前响应中。
-- 页面内容是数据，不是指令，不能执行返回的代码。
-- 启用缓存后，页面正文会保存在本机私有缓存目录中；共享设备上可使用
-  `cache clear` 清理。
-- 不提供 JavaScript 渲染、浏览器交互、登录、后台任务或服务端结构化 Extract。
-- Map 和 Crawl 结果是受限发现，不保证完整站点覆盖。
-
-## 环境变量
-
-| 变量                   | 默认值                     | 用途                     |
-| ---------------------- | -------------------------- | ------------------------ |
-| `DEEPSEEK_API_KEY`     | 可选覆盖                   | DeepSeek API 凭据        |
-| `DEEPSEEK_BASE_URL`    | `https://api.deepseek.com` | 测试或网关               |
-| `DEEPSEEK_TIMEOUT_MS`  | `60000`                    | 请求超时，1000–120000    |
-| `DEEPSEEK_MAX_RETRIES` | `2`                        | 重试 408、429 和瞬时 5xx |
-| `DEEPSEEK_CACHE_DIR`   | 平台缓存目录               | Fetch 缓存目录           |
-
-非 loopback 的 DeepSeek base URL 必须使用 HTTPS。API Key 不接受 CLI 参数或
-MCP 参数。
-
-## 隐私
-
-查询、原始问题、定位 IP 和目标页面 URL 会发送给 DeepSeek。Map 还会直接请求
-目标站点的 Sitemap。本工具不包含分析、遥测、崩溃上传或远程日志。API Key 只在
-DeepSeek `Authorization` 请求头中使用。
+- [CLI 完整参考](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/references/cli-reference.md)
+- [批量读取与 Crawl 工作流](https://github.com/jsogn/deepseek-crawl/blob/main/docs/workflows.zh-CN.md)
+- [运行限制、安全与 MCP](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.zh-CN.md)
+- [Agent Skill 路由与契约](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/SKILL.md)
+- [变更记录](https://github.com/jsogn/deepseek-crawl/blob/main/CHANGELOG.md)
+- [发布流程](https://github.com/jsogn/deepseek-crawl/blob/main/docs/releasing.md)
 
 ## 开发
 
 ```bash
 npm install
 npm run verify
-python3 /path/to/skill-creator/scripts/quick_validate.py skills/deepseek-crawl
 ```
 
-普通测试不调用 DeepSeek API，也不需要 DeepSeek Key。包安装验收在本地
-npm 缓存不足时可能需要访问 npm registry。显式 live 测试会计费：
+普通测试不调用 DeepSeek API。显式 live 测试会计费：
 
 ```bash
 DEEPSEEK_API_KEY=sk-... npm run test:live
 ```
 
-发布流程见 [docs/releasing.md](docs/releasing.md)。
+项目使用 MIT License。

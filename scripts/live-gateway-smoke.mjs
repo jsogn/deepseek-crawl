@@ -1,19 +1,24 @@
 #!/usr/bin/env node
 
-import { Firecrawl } from "firecrawl";
-import { loadConfig } from "../dist/config.js";
-import {
-  createCredentialStore,
-  DeepSeekClient,
-  loadGatewayConfig,
-  startGatewayServer,
-} from "../dist/index.js";
-
 const TARGET_URL = "https://example.com/";
 const SEARCH_QUERY = "Example Domain";
 const GATEWAY_TOKEN = "live-smoke-gateway-token";
 const OPERATION_TIMEOUT_MS = 60_000;
 const CRAWL_TIMEOUT_MS = 120_000;
+let FirecrawlClient;
+let loadConfig;
+let gatewayApi;
+
+async function loadRuntimeDependencies() {
+  const [firecrawl, config, gateway] = await Promise.all([
+    import("firecrawl"),
+    import("../dist/config.js"),
+    import("../dist/index.js"),
+  ]);
+  FirecrawlClient = firecrawl.Firecrawl;
+  loadConfig = config.loadConfig;
+  gatewayApi = gateway;
+}
 
 function usage() {
   return `Usage: npm run test:live:gateway -- --billable [--matrix] [--crawl]
@@ -81,7 +86,7 @@ function requireCredential(env, credential, command) {
   if (environmentValue) {
     return environmentValue;
   }
-  const stored = createCredentialStore({ env, credential }).get()?.trim();
+  const stored = gatewayApi.createCredentialStore({ env, credential }).get()?.trim();
   if (!stored) {
     throw new Error(`${environmentName} is missing. Run ${command}.`);
   }
@@ -229,7 +234,7 @@ async function runCrawl(client, events, expectedProvider, expectedFallbackReason
 }
 
 async function runProviderSmoke(server, events, expectedProvider, expectedFallbackReason, options) {
-  const client = new Firecrawl({
+  const client = new FirecrawlClient({
     apiKey: GATEWAY_TOKEN,
     apiUrl: server.url.href.replace(/\/$/, ""),
   });
@@ -256,7 +261,7 @@ async function startSmokeGateway({ firecrawlApiKey, deepseekClient }) {
   const env = { ...process.env };
   delete env.FIRECRAWL_API_KEY;
   delete env.GATEWAY_API_KEY;
-  const config = loadGatewayConfig({
+  const config = gatewayApi.loadGatewayConfig({
     env,
     providerMode: "firecrawl-first",
     creditsCooldownMs: 60_000,
@@ -265,7 +270,7 @@ async function startSmokeGateway({ firecrawlApiKey, deepseekClient }) {
       gateway: staticStore(GATEWAY_TOKEN),
     },
   });
-  const server = await startGatewayServer({
+  const server = await gatewayApi.startGatewayServer({
     config,
     env,
     fetchImpl: fetch,
@@ -292,6 +297,7 @@ async function main() {
     process.stderr.write(`Refusing billable requests without --billable.\n${usage()}`);
     return 2;
   }
+  await loadRuntimeDependencies();
   const matrix = args.includes("--matrix");
   const crawl = args.includes("--crawl");
 
@@ -300,9 +306,12 @@ async function main() {
     "firecrawl",
     "deepseek-crawl auth import firecrawl",
   );
-  const deepseekStore = createCredentialStore({ env: process.env, credential: "deepseek" });
+  const deepseekStore = gatewayApi.createCredentialStore({
+    env: process.env,
+    credential: "deepseek",
+  });
   const deepseekRuntime = loadConfig(process.env, deepseekStore);
-  const deepseekClient = new DeepSeekClient({
+  const deepseekClient = new gatewayApi.DeepSeekClient({
     ...deepseekRuntime,
     maxRetries: 0,
     fetchImpl: fetch,

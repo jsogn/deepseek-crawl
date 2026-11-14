@@ -47,7 +47,7 @@ import { formatFetchHuman, formatSearchHuman } from "../output/format.js";
 import { formatMapUrls, formatMapWarnings } from "../output/map.js";
 import { type SkillSetupResult, setupSkills } from "../setup/skills.js";
 import { packageVersion } from "../version.js";
-import { runDoctor } from "./doctor.js";
+import { checkDoctor, runDoctor } from "./doctor.js";
 import { readJsonFileBounded, readStdinBounded, readTextFileBounded } from "./input.js";
 import { CliUsageError, type ParsedCommand, parseCli } from "./parse.js";
 
@@ -91,6 +91,7 @@ Usage:
   deepseek-crawl crawl monitor reset <monitor-dir> [--json]
   deepseek-crawl crawl --retry-failed <crawl.json> -o <dir> [options]
   deepseek-crawl cache clear [--json]
+  deepseek-crawl init [options]
   deepseek-crawl doctor [--live] [--json]
   deepseek-crawl setup skills [options]
   deepseek-crawl auth set
@@ -198,6 +199,22 @@ Monitor options:
   doctor: `Usage: deepseek-crawl doctor [--live] [--json]
 
 Without --live, doctor does not make a billable DeepSeek request.
+`,
+  init: `Usage: deepseek-crawl init [options]
+
+Prompt for a missing API key, install the bundled Agent Skill, and run a
+non-billable doctor check. Existing environment or stored credentials are reused.
+
+Options:
+  --skip-auth
+  --skip-skills
+  --project, -p
+  --agent, -a <agents,codex,claude-code,cursor,all>
+  --copy
+  --force
+  --json
+
+init never makes a billable DeepSeek request.
 `,
   setup: `Usage: deepseek-crawl setup skills [options]
 
@@ -1009,22 +1026,34 @@ function formatSkillSetupHuman(result: SkillSetupResult): string {
   return lines.join("\n");
 }
 
-async function runSetupSkills(
-  command: Extract<ParsedCommand, { kind: "setup-skills" }>,
+async function installBundledSkill(
+  options: {
+    scope: "global" | "project";
+    agents: Extract<ParsedCommand, { kind: "setup-skills" }>["agents"];
+    copy: boolean;
+    force: boolean;
+  },
   deps: CliDependencies,
-) {
+): Promise<SkillSetupResult> {
   const environment = deps.setupEnvironment;
   const packageRoot = environment?.packageRoot ?? fileURLToPath(new URL("../../", import.meta.url));
-  const result = await setupSkills({
-    agents: command.agents,
-    scope: command.scope,
+  return setupSkills({
+    agents: options.agents,
+    scope: options.scope,
     home: environment?.home ?? homedir(),
     cwd: environment?.cwd ?? process.cwd(),
     env: environment?.env ?? deps.env,
     source: join(packageRoot, "skills", "deepseek-crawl"),
-    copy: command.copy,
-    force: command.force,
+    copy: options.copy,
+    force: options.force,
   });
+}
+
+async function runSetupSkills(
+  command: Extract<ParsedCommand, { kind: "setup-skills" }>,
+  deps: CliDependencies,
+) {
+  const result = await installBundledSkill(command, deps);
   deps.stdout.write(
     command.json ? `${JSON.stringify(result, null, 2)}\n` : `${formatSkillSetupHuman(result)}\n`,
   );
@@ -1086,6 +1115,60 @@ async function runAuthRemove(
         : "No stored DeepSeek API key was found.\n",
   );
   return 0;
+}
+
+async function runInit(command: Extract<ParsedCommand, { kind: "init" }>, deps: CliDependencies) {
+  const store = resolvedCredentialStore(deps);
+  let auth = authStatus(deps.env, store);
+  let changed = false;
+  if (!auth.configured && !command.skipAuth) {
+    const secret = await (deps.secretReader ?? readSecret)();
+    store.set(secret);
+    auth = authStatus(deps.env, store);
+    changed = true;
+  }
+
+  const skills = command.skipSkills
+    ? { skipped: true as const }
+    : await installBundledSkill(command, deps);
+  const doctor = await checkDoctor({
+    env: deps.env,
+    credentialStore: store,
+    fetchImpl: deps.fetchImpl,
+    live: false,
+  });
+  const result = {
+    version: 1 as const,
+    ok: doctor.result.ok,
+    auth: {
+      configured: auth.configured,
+      source: auth.source,
+      changed,
+      skipped: command.skipAuth,
+    },
+    skills,
+    doctor: doctor.result,
+  };
+
+  if (command.json) {
+    deps.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  } else {
+    const lines = [
+      result.ok
+        ? "DeepSeek Crawl initialization complete."
+        : "DeepSeek Crawl initialization needs attention.",
+      `Authentication: ${auth.configured ? `configured via ${auth.source}` : "missing"}`,
+    ];
+    if ("installs" in skills) {
+      lines.push(...formatSkillSetupHuman(skills).split("\n"));
+    }
+    lines.push(
+      `Doctor: ${doctor.result.ok ? "passed" : "failed"}`,
+      ...(doctor.result.error ? [`Error: ${doctor.result.error}`] : []),
+    );
+    deps.stdout.write(`${lines.join("\n")}\n`);
+  }
+  return result.ok ? 0 : 1;
 }
 
 export async function runCli(
@@ -1151,6 +1234,8 @@ export async function runCli(
           stdout: deps.stdout,
           stderr: deps.stderr,
         });
+      case "init":
+        return await runInit(command, deps);
       case "mcp": {
         const { runMcpServer } = await import("../mcp/server.js");
         await runMcpServer({

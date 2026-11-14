@@ -115,6 +115,16 @@ export type ParsedCommand =
   | { kind: "cache-clear"; json: boolean }
   | { kind: "doctor"; live: boolean; json: boolean }
   | {
+      kind: "init";
+      skipAuth: boolean;
+      skipSkills: boolean;
+      scope: "global" | "project";
+      agents: SkillAgent[];
+      copy: boolean;
+      force: boolean;
+      json: boolean;
+    }
+  | {
       kind: "setup-skills";
       scope: "global" | "project";
       agents: SkillAgent[];
@@ -699,6 +709,47 @@ export function parseCli(argv: string[]): ParsedCommand {
               live: parsed.values.live ?? false,
               json: parsed.values.json ?? false,
             };
+      }
+      case "init": {
+        const parsed = parseArgs({
+          args,
+          allowPositionals: false,
+          strict: true,
+          options: {
+            "skip-auth": { type: "boolean" },
+            "skip-skills": { type: "boolean" },
+            project: { type: "boolean", short: "p" },
+            agent: { type: "string", short: "a" },
+            copy: { type: "boolean" },
+            force: { type: "boolean" },
+            json: { type: "boolean" },
+            help: { type: "boolean", short: "h" },
+          },
+        });
+        if (parsed.values.help) {
+          return { kind: "help", command: "init" };
+        }
+        if (
+          parsed.values["skip-skills"] &&
+          (parsed.values.project ||
+            parsed.values.agent !== undefined ||
+            parsed.values.copy ||
+            parsed.values.force)
+        ) {
+          throw new CliUsageError(
+            "--project, --agent, --copy, and --force cannot be used with --skip-skills.",
+          );
+        }
+        return {
+          kind: "init",
+          skipAuth: parsed.values["skip-auth"] ?? false,
+          skipSkills: parsed.values["skip-skills"] ?? false,
+          scope: parsed.values.project ? "project" : "global",
+          agents: parseSkillAgents(parsed.values.agent),
+          copy: parsed.values.copy ?? false,
+          force: parsed.values.force ?? false,
+          json: parsed.values.json ?? false,
+        };
       }
       case "setup": {
         if (args[0] === "--help" || args[0] === "-h") {

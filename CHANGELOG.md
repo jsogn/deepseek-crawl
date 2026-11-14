@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add `deepseek-crawl init` to reuse or prompt for credentials, install the
+  bundled Agent Skill, and run one aggregate non-billable doctor check.
+
+### Changed
+
+- Clarify first-run installation and `npx` Skill setup in the bilingual READMEs.
+
 ## 0.10.0 - 2026-11-14
 
 ### Breaking

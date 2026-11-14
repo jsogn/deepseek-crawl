@@ -60,8 +60,7 @@ Node.js 版本管理器，或配置当前用户的 npm global prefix 后再安�
 
 ```bash
 npx -y deepseek-crawl@latest --version
-npx -y deepseek-crawl@latest auth set
-npx -y deepseek-crawl@latest doctor
+npx -y deepseek-crawl@latest init --copy
 ```
 
 作为项目依赖安装后，通过 `npx deepseek-crawl` 调用：
@@ -69,6 +68,7 @@ npx -y deepseek-crawl@latest doctor
 ```bash
 npm install deepseek-crawl
 npx deepseek-crawl --version
+npx deepseek-crawl init --project
 ```
 
 GitHub 安装会跟随 `main`，只建议用于测试未发布改动：
@@ -84,10 +84,42 @@ deepseek-crawl --version
 npm install -g deepseek-crawl@latest
 ```
 
-### 配置 API Key
+### 首次初始化
 
-以下命令以全局安装为例；使用 `npx` 时在前面加上
-`npx -y deepseek-crawl@latest`。
+全局安装后运行：
+
+```bash
+deepseek-crawl init
+```
+
+`init` 会在缺少凭据时通过隐藏输入读取 API Key，安装内置 Agent Skill，并运行一次
+非计费 `doctor`。已有环境变量或本机凭据会直接复用，不会重复询问。
+
+默认安装到 `~/.agents/skills/deepseek-crawl`。安装到当前项目或指定 Agent：
+
+```bash
+deepseek-crawl init --project
+deepseek-crawl init --skip-skills
+deepseek-crawl init --agent codex
+deepseek-crawl init --agent claude-code,cursor
+```
+
+使用 `--json` 可获得单次运行的聚合结果，适合脚本和 Agent：
+
+```bash
+deepseek-crawl init --json
+```
+
+`init` 不会调用计费接口。使用 `npx` 临时运行时建议加 `--copy`，避免 Skill
+链接指向可能被清理的 npx 缓存。使用 `--copy` 的 Skill 需要重新运行
+`init --skip-auth --copy --force` 才能更新。
+
+重新开启 Agent 会话后，Skill 才会被发现。
+
+### 手动管理 API Key
+
+`init` 是普通首次安装的推荐入口。需要单独更换或删除凭据时，以下命令以全局安装
+为例；使用 `npx` 时在前面加上 `npx -y deepseek-crawl@latest`。
 
 ```bash
 deepseek-crawl auth set
@@ -109,7 +141,8 @@ deepseek-crawl auth remove
 deepseek-crawl doctor
 ```
 
-`doctor` 检查配置且不调用计费接口；`doctor --live` 会执行一次计费 Search。
+`init` 已经包含同样的检查。`doctor` 检查配置且不调用计费接口；
+`doctor --live` 会执行一次计费 Search。
 
 ### 第一次请求
 
@@ -121,10 +154,10 @@ deepseek-crawl fetch "https://api-docs.deepseek.com/" \
 ```
 
 这条命令会产生一次 DeepSeek Fetch 请求。需要完全无计费的安装检查时，到此为止，
-只使用 `--version`、`auth status` 和 `doctor`。
+只使用 `--version`、`init`、`auth status` 和 `doctor`。
 
-Agent Skill 安装不是基础 CLI 使用的必需步骤，详见下方的
-[Agent 集成](#agent-集成)。
+`init` 默认安装 Agent Skill；只使用基础 CLI 时可添加 `--skip-skills`。更多安装
+位置和目标见下方 [Agent 集成](#agent-集成)。
 
 ## 选择正确的命令
 
@@ -222,6 +255,9 @@ CLI 默认合并 Sitemap 和 Markdown 发现，并限制在种子页的 exact or
 | 使用 `--ignore-query-parameters` 去重               | Crawl 工作流指南                  |
 
 ## Agent 集成
+
+`deepseek-crawl init` 会一并完成默认 Skill 安装。以下命令用于只安装或重新配置
+Skill：
 
 仓库内置 Skill：
 

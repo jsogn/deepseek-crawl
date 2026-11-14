@@ -8,6 +8,7 @@ describe("deepseek-crawl skill", () => {
     const skill = await readFile(new URL("SKILL.md", root), "utf8");
     expect(skill).toMatch(/^---\s*\nname: deepseek-crawl/m);
     expect(skill).toMatch(/description:/);
+    expect(skill).toContain("deepseek-crawl init");
     expect(skill).toContain("deepseek-crawl doctor --json");
     expect(skill).toContain("references/cli-reference.md");
     expect(skill).toMatch(/MCP is optional/i);

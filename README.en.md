@@ -66,8 +66,7 @@ You can run the same CLI without a global install:
 
 ```bash
 npx -y deepseek-crawl@latest --version
-npx -y deepseek-crawl@latest auth set
-npx -y deepseek-crawl@latest doctor
+npx -y deepseek-crawl@latest init --copy
 ```
 
 After installing it as a project dependency, invoke it through `npx`:
@@ -75,6 +74,7 @@ After installing it as a project dependency, invoke it through `npx`:
 ```bash
 npm install deepseek-crawl
 npx deepseek-crawl --version
+npx deepseek-crawl init --project
 ```
 
 GitHub installation follows `main` and is intended only for testing unreleased
@@ -91,10 +91,44 @@ Upgrade a global installation to the latest npm release:
 npm install -g deepseek-crawl@latest
 ```
 
-### Configure the API key
+### Initialize the CLI
 
-The examples below assume a global install. For `npx`, prefix the command with
-`npx -y deepseek-crawl@latest`.
+After a global install, run:
+
+```bash
+deepseek-crawl init
+```
+
+When credentials are missing, `init` reads the API key through a hidden prompt,
+installs the bundled Agent Skill, and runs one non-billable `doctor` check.
+Existing environment variables or local credentials are reused without prompting.
+
+The default Skill target is `~/.agents/skills/deepseek-crawl`. Install it in the
+current project or select Agents with:
+
+```bash
+deepseek-crawl init --project
+deepseek-crawl init --skip-skills
+deepseek-crawl init --agent codex
+deepseek-crawl init --agent claude-code,cursor
+```
+
+Use `--json` for one aggregate result suitable for scripts and Agents:
+
+```bash
+deepseek-crawl init --json
+```
+
+`init` never calls a billable endpoint. Add `--copy` when using `npx` so the Skill
+does not link to a temporary npx cache. Refresh a copied Skill with
+`init --skip-auth --copy --force`, then start a new Agent session so it is
+discovered.
+
+### Manage authentication manually
+
+`init` is the recommended first-run setup. Use the commands below to replace,
+inspect, or remove credentials separately. They assume a global install; for
+`npx`, prefix them with `npx -y deepseek-crawl@latest`.
 
 ```bash
 deepseek-crawl auth set
@@ -118,8 +152,8 @@ deepseek-crawl auth remove
 deepseek-crawl doctor
 ```
 
-`doctor` checks configuration and makes no billable call. `doctor --live`
-performs one billable Search.
+`init` performs the same check. `doctor` validates configuration without a
+billable call; `doctor --live` performs one billable Search.
 
 ### Make the first request
 
@@ -132,10 +166,11 @@ deepseek-crawl fetch "https://api-docs.deepseek.com/" \
 ```
 
 This command makes one DeepSeek Fetch request. For a fully non-billable install
-check, stop after `--version`, `auth status`, and `doctor`.
+check, stop after `--version`, `init`, `auth status`, and `doctor`.
 
-Installing the Agent Skill is optional and is not required for basic CLI use.
-See [Agent integration](#agent-integration).
+`init` installs the Agent Skill by default; add `--skip-skills` when only the
+basic CLI is needed. See [Agent integration](#agent-integration) for targets and
+manual installation options.
 
 ## Choose the right operation
 
@@ -239,6 +274,9 @@ failed-item retry:
 | Deduplicate with `--ignore-query-parameters`           | Crawl workflow guide              |
 
 ## Agent integration
+
+`deepseek-crawl init` installs the default Skill as part of onboarding. Use the
+commands below to install or reconfigure only the Skill:
 
 The repository bundles the Skill at:
 

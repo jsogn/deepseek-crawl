@@ -352,6 +352,50 @@ describe("parseCli", () => {
     expect(parseCli(["--version"])).toEqual({ kind: "version" });
   });
 
+  it("parses init setup options", () => {
+    expect(parseCli(["init"])).toEqual({
+      kind: "init",
+      skipAuth: false,
+      skipSkills: false,
+      scope: "global",
+      agents: ["agents"],
+      copy: false,
+      force: false,
+      json: false,
+    });
+    expect(
+      parseCli([
+        "init",
+        "--skip-auth",
+        "--project",
+        "--agent",
+        "codex,cursor",
+        "--copy",
+        "--force",
+        "--json",
+      ]),
+    ).toEqual({
+      kind: "init",
+      skipAuth: true,
+      skipSkills: false,
+      scope: "project",
+      agents: ["codex", "cursor"],
+      copy: true,
+      force: true,
+      json: true,
+    });
+    expect(parseCli(["init", "--skip-auth", "--skip-skills"])).toEqual({
+      kind: "init",
+      skipAuth: true,
+      skipSkills: true,
+      scope: "global",
+      agents: ["agents"],
+      copy: false,
+      force: false,
+      json: false,
+    });
+  });
+
   it("parses setup skills defaults and explicit options", () => {
     expect(parseCli(["setup", "skills"])).toEqual({
       kind: "setup-skills",
@@ -459,6 +503,10 @@ describe("parseCli", () => {
     [["auth"], /auth|subcommand/i],
     [["auth", "unknown"], /auth|subcommand/i],
     [["auth", "set", "--json"], /unknown option/i],
+    [["init", "--skip-skills", "--project"], /skip-skills|project/i],
+    [["init", "--skip-skills", "--agent", "codex"], /skip-skills|agent/i],
+    [["init", "--skip-skills", "--copy"], /skip-skills|copy/i],
+    [["init", "--skip-skills", "--force"], /skip-skills|force/i],
     [["unknown"], /unknown command/i],
     [["search", "x", "--unknown"], /unknown option/i],
     [["fetch", "https://example.com", "--cache-ttl", "0"], /cache-ttl/i],

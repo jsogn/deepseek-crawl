@@ -3,6 +3,59 @@
 Use this reference when the Skill needs exact command selection, bounds, output
 behavior, or error handling.
 
+## Initialization
+
+```text
+deepseek-crawl init
+  [--skip-auth]
+  [--skip-skills]
+  [--project, -p]
+  [--agent, -a <agents,codex,claude-code,cursor,all>]
+  [--copy]
+  [--force]
+  [--json]
+```
+
+`init` is the recommended first-run setup. It performs these steps in order:
+
+1. Reuse an environment or stored API key.
+2. Prompt for and store a key only when credentials are missing and
+   `--skip-auth` is absent.
+3. Install or update the bundled Skill unless `--skip-skills` is present.
+4. Run a non-billable `doctor` check.
+
+Defaults:
+
+- Scope: global `~/.agents/skills/deepseek-crawl`.
+- Mode: symlink. Use `--copy` for transient installs such as `npx`.
+- Existing symlink to the same source: unchanged.
+- Existing conflicting destination: error unless `--force`.
+- Exit `0` only when the doctor check passes; `1` for setup or diagnostic
+  failure; `2` for invalid options.
+
+`--project`, `--agent`, `--copy`, and `--force` cannot be combined with
+`--skip-skills`. `init` never enables `doctor --live` and never makes a billable
+DeepSeek request.
+
+`--json` emits one object:
+
+```json
+{
+  "version": 1,
+  "ok": true,
+  "auth": {
+    "configured": true,
+    "source": "environment",
+    "changed": false,
+    "skipped": false
+  },
+  "skills": {},
+  "doctor": {}
+}
+```
+
+When `--skip-skills` is used, `skills` is `{ "skipped": true }`.
+
 ## Prerequisite Check
 
 ```bash
@@ -12,13 +65,16 @@ deepseek-crawl --version
 
 `doctor` does not make a billable request. Never print `DEEPSEEK_API_KEY`.
 
-Required environment:
+Credentials:
 
-- `DEEPSEEK_API_KEY`
-- Optional `DEEPSEEK_BASE_URL`
-- Optional `DEEPSEEK_TIMEOUT_MS`
-- Optional `DEEPSEEK_MAX_RETRIES`
-- Optional `DEEPSEEK_CACHE_DIR`
+- `DEEPSEEK_API_KEY`, or a key stored by `deepseek-crawl init` / `auth set`
+
+Optional environment:
+
+- `DEEPSEEK_BASE_URL`
+- `DEEPSEEK_TIMEOUT_MS`
+- `DEEPSEEK_MAX_RETRIES`
+- `DEEPSEEK_CACHE_DIR`
 
 ## Escalation
 

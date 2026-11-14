@@ -82,6 +82,10 @@ Job 保存原始 source、输出目录、并发、延迟、最大字符数和规
 中断后恢复只请求既不在成功页中、也不在失败项中的 URL。已经失败的页面不会在
 `resume` 中自动重试；完成 final output 后使用 Batch Retry 重试这些页面。
 
+Batch Job 使用 at-least-once 恢复语义。如果进程在 DeepSeek 已成功返回、但本地
+页面或 journal 尚未提交时崩溃，`resume` 可能再次请求同一页面。实现保证最终报告
+与本地页面一致，但不能保证绝对不重复计费。
+
 `fetch status` 不读取 API Key，可安全用于查看进度。`fetch resume` 使用创建 Job
 时固定的范围与设置；可额外指定运行时 `--cache-ttl` / `--fresh`。
 

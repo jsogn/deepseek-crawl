@@ -65,6 +65,11 @@ It does not automatically retry previously failed pages; use Batch Retry after t
 final report is published. `fetch status` reads no API key. `fetch resume` reuses
 the job's fixed settings and may accept runtime `--cache-ttl` / `--fresh`.
 
+Recovery is at-least-once. If the process exits after DeepSeek succeeds but before
+the local page or journal record is committed, resume may request that page again.
+The implementation preserves consistency between the final report and local page
+files, but does not guarantee exactly-once billing.
+
 ### Discover with Map, then read
 
 ```bash

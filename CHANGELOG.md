@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 - 2026-11-14
 
 ### Added
 
@@ -13,6 +13,9 @@
 
 - Make the DeepSeek Crawl Skill description provider-neutral: it applies only
   when the user or workflow selects DeepSeek, without ranking other providers.
+- Harden resumable Batch Fetch recovery with disjoint job/output paths,
+  URL-based request identity, atomic page publication, and an append-only
+  recovery journal.
 
 ## 0.11.0 - 2026-11-14
 

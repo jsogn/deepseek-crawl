@@ -201,6 +201,10 @@ publishes the final output atomically after all pending URLs are attempted.
 Recorded failures are not retried by `resume`; use Batch Retry after the final
 report exists. `status` does not require credentials.
 
+Recovery is at-least-once. A crash after DeepSeek returns but before the local
+page or journal commit may cause resume to request that page again. Local report
+and page consistency is preserved, but billing is not exactly-once.
+
 Input formats:
 
 - Map result JSON containing `urls`.

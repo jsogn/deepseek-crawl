@@ -26,7 +26,7 @@ CLI + Skill。
 
 ## 当前版本
 
-`0.7.0` 提供：
+`0.8.0` 提供：
 
 - CLI-first 的 Search、Fetch、Map 和 Crawl。
 - CLI Crawl 默认合并 Sitemap 与种子页 Markdown 发现，不再只依赖页面内链接。
@@ -69,7 +69,7 @@ deepseek-crawl doctor
 npm registry 发布后也可以使用：
 
 ```bash
-npm install -g deepseek-crawl@0.7.0
+npm install -g deepseek-crawl@0.8.0
 ```
 
 本地开发：
@@ -590,7 +590,7 @@ deepseek-crawl mcp
 - `deepseek_crawl`
 
 MCP 不写本地文件。结构化内容有总长度限制，页面正文被视为不可信数据。为保持
-兼容，`0.7.0` 的 MCP Crawl 仍只使用 Markdown 链接；Sitemap 辅助发现仅在 CLI
+兼容，`0.8.0` 的 MCP Crawl 仍只使用 Markdown 链接；Sitemap 辅助发现仅在 CLI
 提供。失败重试和本地缓存同样只在 CLI 提供。
 
 ## 限制
@@ -669,3 +669,5 @@ python3 /path/to/skill-creator/scripts/quick_validate.py skills/deepseek-crawl
 ```bash
 DEEPSEEK_API_KEY=sk-... npm run test:live
 ```
+
+发布流程见 [docs/releasing.md](docs/releasing.md)。

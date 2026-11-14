@@ -27,7 +27,7 @@ but the CLI plus Skill is the preferred interface.
 
 ## Status
 
-Version `0.7.0` provides:
+Version `0.8.0` provides:
 
 - CLI-first Search, Fetch, Map, and Crawl.
 - Sitemap-assisted Crawl by default, so traversal does not depend on links in
@@ -72,7 +72,7 @@ deepseek-crawl doctor
 After the npm release is available:
 
 ```bash
-npm install -g deepseek-crawl@0.7.0
+npm install -g deepseek-crawl@0.8.0
 ```
 
 From this repository:
@@ -691,7 +691,7 @@ The server exposes exactly four tools:
 `deepseek_crawl` accepts bounded depth, pages, concurrency, delay, and per-page
 character limits. MCP never writes local files.
 
-For compatibility, `0.7.0` MCP Crawl remains Markdown-only. Sitemap-assisted
+For compatibility, `0.8.0` MCP Crawl remains Markdown-only. Sitemap-assisted
 discovery is available only through the CLI. Failed-item retry and local caching
 are also CLI-only.
 
@@ -783,3 +783,5 @@ check is billable:
 ```bash
 DEEPSEEK_API_KEY=sk-... npm run test:live
 ```
+
+See [docs/releasing.md](docs/releasing.md) for the release process.

@@ -1,6 +1,6 @@
 {
   "name": "deepseek-crawl",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "CLI-first AI web search, page reading, mapping, and crawling with optional MCP",
   "type": "module",
   "license": "MIT",
@@ -31,10 +31,15 @@
     "LICENSE",
     "README.md",
     "README.en.md",
+    "CHANGELOG.md",
     "skills"
   ],
   "engines": {
     "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -48,7 +53,10 @@
     "format:check": "biome format .",
     "prepare": "npm run build",
     "prepack": "npm run build",
-    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run typecheck:test && npm test && npm pack --dry-run",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run typecheck:test && npm test && npm run verify:package",
+    "verify:package": "node scripts/verify-package-install.mjs",
+    "check:release": "node scripts/check-release.mjs",
+    "prepublishOnly": "npm run verify && npm run check:release",
     "test:live": "npm run build && node scripts/live-smoke.mjs"
   },
   "dependencies": {

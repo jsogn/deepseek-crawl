@@ -58,18 +58,29 @@ describe("package executable", () => {
 
 describe("package documentation", () => {
   it("offers one-prompt AI installation in both languages", async () => {
-    const [readme, readmeEnglish] = await Promise.all([
+    const [readme, readmeEnglish, agentGuide, packageJson] = await Promise.all([
       readFile(new URL("../../README.md", import.meta.url), "utf8"),
       readFile(new URL("../../README.en.md", import.meta.url), "utf8"),
+      readFile(new URL("../../llms.txt", import.meta.url), "utf8"),
+      readFile(new URL("../../package.json", import.meta.url), "utf8"),
     ]);
 
     expect(readme).toContain("## 让 AI 自己安装");
-    expect(readme).toContain("请阅读 https://github.com/jsogn/deepseek-crawl");
-    expect(readme).toContain("不要发布 npm 包");
+    expect(readme).toContain("https://github.com/jsogn/deepseek-crawl/blob/main/llms.txt");
+    expect(readme).toContain("先了解我的环境并确认可能产生费用的验证");
 
     expect(readmeEnglish).toContain("## Let an AI install it");
-    expect(readmeEnglish).toContain("Read https://github.com/jsogn/deepseek-crawl");
-    expect(readmeEnglish).toContain("do not publish the npm package");
+    expect(readmeEnglish).toContain("https://github.com/jsogn/deepseek-crawl/blob/main/llms.txt");
+    expect(readmeEnglish).toContain(
+      "ask about my environment and confirm any billable verification",
+    );
+
+    expect(agentGuide).toContain("# DeepSeek Crawl");
+    expect(agentGuide).toContain("## Agent install contract");
+    expect(agentGuide).toContain("deepseek-crawl gateway install");
+    expect(agentGuide).toContain("Do not publish");
+    expect(agentGuide).toContain("billable");
+    expect(JSON.parse(packageJson).files).toContain("llms.txt");
   });
 
   it("documents every public CLI and MCP capability", async () => {

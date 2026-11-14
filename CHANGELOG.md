@@ -8,6 +8,9 @@
   DeepSeek-native CLI as two explicit usage paths.
 - Add a copy-paste one-sentence prompt that lets an AI inspect the environment
   and install the appropriate usage path.
+- Add a stable `llms.txt` installation contract with environment checks,
+  credential handling, billable-request confirmation, verification, and cleanup
+  instructions.
 - Move detailed installation, command, capacity, and deployment guidance behind
   the focused documentation entry points.
 - Update the package description and keywords for clearer npm discovery.

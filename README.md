@@ -27,10 +27,11 @@ CLI、Agent Skill 和 MCP 作为 DeepSeek 原生网页工具使用。
 
 ## 让 AI 自己安装
 
-把下面这句话复制给能够执行终端命令的 AI：
+[`llms.txt`](https://github.com/jsogn/deepseek-crawl/blob/main/llms.txt) 包含稳定的
+安装契约、安全规则和验证要求。把下面这句话复制给能够执行终端命令的 AI：
 
 ```text
-请阅读 https://github.com/jsogn/deepseek-crawl 的 README，并按其中步骤在这台电脑上安装和配置 deepseek-crawl：如果本机已有 Firecrawl CLI，就配置为透明的 firecrawl-first 网关，否则配置为 DeepSeek CLI；修改前先检查 Node.js、Firecrawl CLI 和现有配置，保留无关文件及原 Firecrawl API URL，只在必要时通过安全方式向我索取 DeepSeek 或 Firecrawl 密钥且不得回显，完成后运行 doctor 以及对应的 gateway status 或 CLI 验证并如实报告结果，不要发布 npm 包、创建 tag 或 Release。
+请阅读 https://github.com/jsogn/deepseek-crawl/blob/main/llms.txt，先了解我的环境并确认可能产生费用的验证，然后帮我安装和配置 DeepSeek Crawl。
 ```
 
 这段提示允许 AI 安装软件并修改当前用户的 Firecrawl CLI 配置；之后可用
@@ -189,6 +190,7 @@ MCP 只用于无法执行 CLI 的客户端，提供 `deepseek_search`、`deepsee
 - [运行限制、安全、MCP 与网关](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.zh-CN.md)
 - [Docker、systemd 与反向代理部署](https://github.com/jsogn/deepseek-crawl/blob/main/docs/deploying.zh-CN.md)
 - [Agent Skill 路由与契约](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/SKILL.md)
+- [Agent 安装契约（llms.txt）](https://github.com/jsogn/deepseek-crawl/blob/main/llms.txt)
 - [变更记录](https://github.com/jsogn/deepseek-crawl/blob/main/CHANGELOG.md)
 - [发布流程](https://github.com/jsogn/deepseek-crawl/blob/main/docs/releasing.md)
 

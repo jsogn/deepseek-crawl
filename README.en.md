@@ -30,10 +30,12 @@ Current release: `0.14.0` · [npm](https://www.npmjs.com/package/deepseek-crawl)
 
 ## Let an AI install it
 
-Copy this sentence into an AI that can run terminal commands:
+[`llms.txt`](https://github.com/jsogn/deepseek-crawl/blob/main/llms.txt) is the
+stable installation contract with safety and verification rules. Copy this
+sentence into an AI that can run terminal commands:
 
 ```text
-Read https://github.com/jsogn/deepseek-crawl and install and configure deepseek-crawl on this computer by following it: if the Firecrawl CLI is already installed, configure it as a transparent `firecrawl-first` gateway; otherwise configure the DeepSeek CLI; inspect Node.js, the Firecrawl CLI, and existing configuration before modifying anything, preserve unrelated files and the original Firecrawl API URL, ask me for any required DeepSeek or Firecrawl key only through a secure method and never echo it, then run `doctor` plus the relevant `gateway status` or CLI verification and report the actual results, and do not publish the npm package, create tags, or create releases.
+Read https://github.com/jsogn/deepseek-crawl/blob/main/llms.txt, ask about my environment and confirm any billable verification, then install and configure DeepSeek Crawl for me.
 ```
 
 This prompt permits local software installation and changes to the current
@@ -213,6 +215,7 @@ then `crawl`.
 - [Operations, safety, MCP, and gateway](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.md)
 - [Docker, systemd, and reverse-proxy deployment](https://github.com/jsogn/deepseek-crawl/blob/main/docs/deploying.md)
 - [Agent Skill routing and contract](https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/SKILL.md)
+- [Agent installation contract (llms.txt)](https://github.com/jsogn/deepseek-crawl/blob/main/llms.txt)
 - [Changelog](https://github.com/jsogn/deepseek-crawl/blob/main/CHANGELOG.md)
 - [Release process](https://github.com/jsogn/deepseek-crawl/blob/main/docs/releasing.md)
 

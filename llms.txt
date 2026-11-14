@@ -1,0 +1,210 @@
+# DeepSeek Crawl
+
+> DeepSeek Crawl is a Firecrawl-compatible local gateway for common web routes
+> with DeepSeek fallback, plus an Agent-native Search, Fetch, Map, and bounded
+> Crawl CLI. Existing Firecrawl CLI calls can remain unchanged on macOS and
+> Windows, or use an explicit gateway URL on Linux and in containers.
+
+Project: https://github.com/jsogn/deepseek-crawl
+License: MIT
+Package: https://www.npmjs.com/package/deepseek-crawl
+
+## Agent install contract
+
+You may inspect this computer, install DeepSeek Crawl, and configure one usage
+path on the user's behalf. Follow these rules:
+
+1. Ask about the user's environment before changing files or installing
+   software.
+2. Choose exactly one path. If the Firecrawl CLI is already installed, prefer
+   the transparent gateway. Otherwise, prefer the DeepSeek-native CLI unless the
+   user explicitly wants the Firecrawl route.
+3. Preserve unrelated files and configuration. Do not manually rewrite the
+   Firecrawl CLI configuration; let `gateway install` manage it.
+4. Never ask the user to paste a secret into chat. Use the CLI's hidden prompt,
+   an existing environment variable, or the platform credential store. Never
+   print, log, or commit a key.
+5. Ask for explicit confirmation before any request that may be billable.
+6. Do not publish the npm package, create tags or releases, change package
+   versions, or dispatch release workflows.
+7. Report the commands you ran, the actual verification output, and any blocker.
+
+## Inspect first
+
+Check, without printing credentials:
+
+```bash
+node --version
+npm --version
+firecrawl --version
+deepseek-crawl --version
+```
+
+Use the shell syntax native to the current OS. A missing-command error means the
+tool is not installed; it is not a reason to print environment variables.
+
+Requirements:
+
+- Node.js 22.12 or newer.
+- npm.
+- A DeepSeek API key for either path.
+- A Firecrawl CLI and Firecrawl credential only for the transparent gateway
+  path.
+
+Do not use `sudo npm install -g`. Use the user's Node version manager or a
+user-owned npm prefix. Ask before replacing Node.js or making system-level
+changes.
+
+## Path A: transparent Firecrawl gateway
+
+Choose this path when `firecrawl` is already installed and the user wants
+unchanged Firecrawl CLI/Skill calls to keep working.
+
+```bash
+npm install -g deepseek-crawl@latest
+deepseek-crawl --version
+deepseek-crawl init --skip-skills
+deepseek-crawl auth import firecrawl
+deepseek-crawl gateway install
+deepseek-crawl gateway status --json
+```
+
+`deepseek-crawl init --skip-skills` stores the DeepSeek credential and runs a
+non-billable check. `auth import firecrawl` copies an existing Firecrawl CLI
+credential into the DeepSeek Crawl credential store; skip it only when the user
+will provide `FIRECRAWL_API_KEY` or does not need the Firecrawl-first route.
+
+`gateway install`:
+
+- Uses the default `firecrawl-first` provider mode.
+- Starts a managed user service: `launchd` on macOS or Task Scheduler on Windows.
+- Waits for a healthy gateway.
+- Backs up the Firecrawl CLI API URL and points it at the local gateway.
+- Does not modify `hosts`, DNS, system proxy settings, or TLS certificates.
+
+If the user's platform is Linux or the gateway must run in a container, do not
+claim managed lifecycle support. Start the documented foreground or deployment
+mode instead:
+
+```bash
+deepseek-crawl gateway
+```
+
+From another terminal, clients can use:
+
+```bash
+export FIRECRAWL_API_URL="$(deepseek-crawl gateway url)"
+```
+
+## Path B: DeepSeek-native CLI
+
+Choose this path when the Firecrawl CLI is absent or the user wants a standalone
+Agent web-data CLI.
+
+```bash
+npm install -g deepseek-crawl@latest
+deepseek-crawl --version
+deepseek-crawl init
+deepseek-crawl doctor --json
+```
+
+`init` securely stores or reuses the DeepSeek key, installs the bundled Agent
+Skill, and runs one non-billable diagnostic. Start a new Agent session after
+installation so the Skill is discovered.
+
+## Credentials
+
+For non-interactive runs, use a `DEEPSEEK_API_KEY` already provisioned by the
+user's secret manager or process environment. Do not paste a key into a terminal
+command merely to create that environment variable.
+
+Interactive alternatives:
+
+```bash
+deepseek-crawl auth set
+deepseek-crawl auth set firecrawl
+deepseek-crawl auth status --json
+```
+
+If you cannot operate the hidden terminal prompt safely, stop and ask the user
+to run `deepseek-crawl auth set` themselves. Never put a key directly in a shell
+argument, shell history, MCP argument, issue, pull request, or log.
+
+## Verify without billable requests
+
+```bash
+deepseek-crawl --version
+deepseek-crawl doctor --json
+
+# Path A only
+deepseek-crawl gateway status --json
+firecrawl --version
+```
+
+Do not run a live Search, Fetch, Scrape, Map, or Crawl until the user confirms
+that the possible Provider charge is acceptable.
+
+## Optional billable end-to-end check
+
+After explicit confirmation, Path A can use the existing Firecrawl command:
+
+```bash
+firecrawl scrape https://example.com
+```
+
+Path B can verify one Fetch:
+
+```bash
+deepseek-crawl fetch "https://example.com"
+```
+
+Report the actual result and which Provider was expected. Do not describe a
+fallback as successful unless the response actually succeeds.
+
+## Lifecycle and cleanup
+
+```bash
+deepseek-crawl gateway status --json
+deepseek-crawl gateway stop
+deepseek-crawl gateway start
+deepseek-crawl gateway uninstall
+```
+
+- `stop` stops the managed service and restores the saved Firecrawl API URL.
+- `start` starts the service and applies the local gateway URL again.
+- `uninstall` restores Firecrawl configuration and removes managed task, state,
+  and log files.
+
+Before finishing, tell the user that these commands exist and disclose whether
+the managed gateway remains installed and running.
+
+## Compatibility boundaries
+
+- The gateway currently covers common Firecrawl v2 Search, Scrape, Map, and
+  Crawl routes plus local Crawl status, errors, and cancellation.
+- Advanced Firecrawl capabilities may pass through while credits are available.
+  If DeepSeek has no equivalent, fallback returns an explicit error.
+- Markdown is the supported Search, Scrape, and Crawl fallback output. Browser
+  actions, screenshots, and structured Extract are not fully replicated.
+- Managed installation changes only the current user's Firecrawl CLI
+  configuration. A hard-coded SDK `apiUrl` must be changed explicitly.
+- DeepSeek Crawl jobs are process-local and expire after 24 hours.
+
+## Stop conditions
+
+Stop and ask the user when:
+
+- Node.js is older than 22.12 and updating it requires system-level changes.
+- A required credential is unavailable and cannot be entered securely.
+- The user has not approved an optional billable request.
+- The requested operation needs a Firecrawl capability that DeepSeek fallback
+  does not support.
+- Installation would overwrite unrelated configuration.
+
+## References
+
+- README: https://github.com/jsogn/deepseek-crawl/blob/main/README.md
+- CLI reference: https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/references/cli-reference.md
+- Operations and security: https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.md
+- Deployment: https://github.com/jsogn/deepseek-crawl/blob/main/docs/deploying.md
+- Agent Skill: https://github.com/jsogn/deepseek-crawl/blob/main/skills/deepseek-crawl/SKILL.md

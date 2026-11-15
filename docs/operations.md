@@ -94,6 +94,13 @@ DeepSeek fallback covers `POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`,
 `POST /v2/crawl`, and status, errors, and cancellation for local `dsc_` Crawl
 jobs.
 
+Fallback uses a closed capability allowlist. It accepts only options with an
+explicit, semantically faithful DeepSeek mapping. Advanced options such as
+`actions`, waits, DOM filters, browser controls, screenshots, and unsupported
+formats return `400 unsupported_fallback_feature` rather than being silently
+ignored. Firecrawl requests that remain on the upstream path still pass through
+unchanged.
+
 In the default `firecrawl-first` mode, the gateway switches to DeepSeek only
 after a Firecrawl `402`, while exhausted credits are in the short local
 cooldown, or when no Firecrawl credential is configured. `deepseek-first` skips

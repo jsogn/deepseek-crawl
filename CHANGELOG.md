@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Reject unsupported Firecrawl options before DeepSeek fallback instead of
+  silently dropping advanced semantics such as browser actions.
+
 ## 0.14.1 - 2026-11-14
 
 ### Changed

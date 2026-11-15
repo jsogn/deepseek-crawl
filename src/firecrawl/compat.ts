@@ -33,6 +33,7 @@ const searchInputSchema = z
     query: z.string().trim().min(1),
     limit: z.number().int().min(1).max(100).optional(),
     sources: z.array(sourceSchema).optional(),
+    origin: z.string().optional(),
     scrapeOptions: z
       .object({
         formats: z.array(formatSchema).optional(),
@@ -46,6 +47,7 @@ const scrapeInputSchema = z
   .object({
     url: z.string().trim().min(1),
     formats: z.array(formatSchema).optional(),
+    origin: z.string().optional(),
   })
   .passthrough();
 
@@ -54,12 +56,13 @@ const mapInputSchema = z
     url: z.string().trim().min(1),
     search: z.string().trim().min(1).optional(),
     limit: z.number().int().min(1).max(1000).optional(),
+    origin: z.string().optional(),
   })
   .passthrough();
 
-const SEARCH_FALLBACK_KEYS = ["query", "limit", "sources", "scrapeOptions"] as const;
-const SCRAPE_FALLBACK_KEYS = ["url", "formats"] as const;
-const MAP_FALLBACK_KEYS = ["url", "search", "limit"] as const;
+const SEARCH_FALLBACK_KEYS = ["query", "limit", "sources", "scrapeOptions", "origin"] as const;
+const SCRAPE_FALLBACK_KEYS = ["url", "formats", "origin"] as const;
+const MAP_FALLBACK_KEYS = ["url", "search", "limit", "origin"] as const;
 
 export async function firecrawlSearchFallback(
   input: unknown,

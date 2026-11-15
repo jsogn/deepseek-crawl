@@ -27,6 +27,7 @@ const crawlInputSchema = z
     maxConcurrency: z.number().int().min(1).optional(),
     allowExternalLinks: z.boolean().optional(),
     allowSubdomains: z.boolean().optional(),
+    origin: z.string().optional(),
     scrapeOptions: z
       .object({
         formats: z
@@ -60,6 +61,7 @@ const CRAWL_FALLBACK_KEYS = [
   "allowExternalLinks",
   "allowSubdomains",
   "scrapeOptions",
+  "origin",
 ] as const;
 
 export interface CrawlJobManagerOptions {

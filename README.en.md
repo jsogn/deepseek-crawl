@@ -166,6 +166,11 @@ DeepSeek fallback covers `POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`,
 - Advanced Firecrawl capabilities can pass through while credits are available;
   when DeepSeek has no equivalent, the gateway returns an explicit error rather
   than pretending the fallback succeeded.
+- DeepSeek fallback accepts only a closed set of options it can reproduce
+  faithfully. Options such as `actions`, waits, DOM filters, or browser controls
+  return `unsupported_fallback_feature` instead of being silently ignored.
+  Advanced options still pass through unchanged whenever Firecrawl handles the
+  request.
 - Markdown is the supported Scrape, Search, and Crawl fallback output. Browser
   actions, screenshots, structured Extract, and similar capabilities are not
   fully replaceable during fallback.

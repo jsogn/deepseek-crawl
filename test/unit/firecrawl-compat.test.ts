@@ -152,6 +152,32 @@ describe("Firecrawl DeepSeek compatibility", () => {
     ).rejects.toThrow("`ignoreQueryParameters`");
   });
 
+  it("accepts SDK origin metadata and rejects invalid origin types", async () => {
+    await expect(
+      firecrawlScrapeFallback(
+        {
+          url: "https://example.com/",
+          formats: ["markdown"],
+          origin: "js-sdk@4.54.0",
+        },
+        gateway(),
+      ),
+    ).resolves.toMatchObject({
+      success: true,
+      data: { markdown: "# Example" },
+    });
+
+    await expect(
+      firecrawlScrapeFallback(
+        {
+          url: "https://example.com/",
+          origin: {},
+        },
+        gateway(),
+      ),
+    ).rejects.toThrow();
+  });
+
   it("rejects Firecrawl output formats that DeepSeek cannot provide", async () => {
     await expect(
       firecrawlScrapeFallback(

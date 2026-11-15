@@ -71,6 +71,7 @@ Allowed top-level fields:
 - `limit`
 - `sources`
 - `scrapeOptions`
+- `origin`
 
 Allowed `sources` entries:
 
@@ -89,6 +90,7 @@ Allowed top-level fields:
 - `url`
 - `formats`, containing only `markdown` strings or objects containing only
   `type: "markdown"`
+- `origin`
 
 An absent `formats` field remains supported because the current fallback returns
 Markdown by default.
@@ -100,6 +102,7 @@ Allowed top-level fields:
 - `url`
 - `search`
 - `limit`
+- `origin`
 
 ### Crawl
 
@@ -117,6 +120,7 @@ Allowed top-level fields:
 - `allowExternalLinks`
 - `allowSubdomains`
 - `scrapeOptions`
+- `origin`
 
 `allowExternalLinks` and `allowSubdomains` may be absent or `false`. Existing
 behavior rejects `true`.
@@ -131,12 +135,14 @@ All other top-level or nested fields are unsupported for fallback. This includes
 webhooks, screenshots, structured JSON formats, and any future option not
 explicitly added to this matrix.
 
-The official Node SDK sends only caller-provided Scrape options; it does not
-materialize `maxAge`, `onlyMainContent`, `storeInCache`, or similar defaults onto
-the wire. SDK-only options such as `autoResume` are also excluded from the
-request body. Therefore default SDK calls remain compatible with the strict
-allowlist, while an explicitly supplied advanced option fails closed only when
-DeepSeek fallback is selected.
+The official Node SDK automatically stamps a top-level `origin` attribution
+field onto JSON request bodies. `origin` does not change scraping semantics, so
+fallback ignores it after accepting it. The SDK does not materialize `maxAge`,
+`onlyMainContent`, `storeInCache`, or similar defaults onto the wire. SDK-only
+options such as `autoResume` are also excluded from the request body. Therefore
+default SDK calls remain compatible with the strict allowlist, while an
+explicitly supplied advanced option fails closed only when DeepSeek fallback is
+selected.
 
 ## Validation Architecture
 

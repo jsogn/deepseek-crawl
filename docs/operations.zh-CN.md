@@ -90,6 +90,11 @@ WebSocket `Watcher` 不在兼容范围内。网关对 upgrade 请求返回 `426`
 DeepSeek fallback 覆盖 `POST /v2/search`、`POST /v2/scrape`、`POST /v2/map`、
 `POST /v2/crawl`，以及本地 `dsc_` Crawl job 的 status、errors 和取消。
 
+Fallback 使用封闭能力 allowlist，只接受具有明确且语义保真的 DeepSeek 映射的参数。
+`actions`、等待、DOM 筛选、浏览器控制、截图以及不支持的格式等高级选项会返回
+`400 unsupported_fallback_feature`，不会被静默忽略。仍由 Firecrawl 处理的请求
+继续原样透传。
+
 默认 `firecrawl-first` 模式只在 Firecrawl `402`、余额耗尽后的短期熔断状态或
 未配置 Firecrawl 凭据时切换 DeepSeek。`deepseek-first` 的常用路由跳过
 Firecrawl；`no-fallback` 原样返回 Firecrawl 错误。`429`、`401/403`、无效请求

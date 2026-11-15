@@ -203,6 +203,10 @@ Firecrawl connection failures and timeouts before a response return
 Only DeepSeek-equivalent common options are supported on fallback. Markdown is
 the supported Scrape/Search/Crawl output format; browser actions, screenshots,
 structured Extract, external-link Crawl, and subdomain Crawl are rejected.
+Fallback uses a closed allowlist: `actions`, waits, DOM filters, browser controls,
+and any other unmapped option return `400 unsupported_fallback_feature` before a
+DeepSeek call starts. Requests handled by Firecrawl continue to pass through
+unchanged.
 DeepSeek Crawl IDs use the `dsc_` prefix and remain process-local for 24 hours.
 Firecrawl-owned Crawl IDs continue to use the Firecrawl upstream.
 

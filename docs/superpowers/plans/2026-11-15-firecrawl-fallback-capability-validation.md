@@ -335,9 +335,9 @@ import {
 Add constants after the schemas:
 
 ```ts
-const SEARCH_FALLBACK_KEYS = ["query", "limit", "sources", "scrapeOptions"] as const;
-const SCRAPE_FALLBACK_KEYS = ["url", "formats"] as const;
-const MAP_FALLBACK_KEYS = ["url", "search", "limit"] as const;
+const SEARCH_FALLBACK_KEYS = ["query", "limit", "sources", "scrapeOptions", "origin"] as const;
+const SCRAPE_FALLBACK_KEYS = ["url", "formats", "origin"] as const;
+const MAP_FALLBACK_KEYS = ["url", "search", "limit", "origin"] as const;
 ```
 
 At the start of `firecrawlSearchFallback`, immediately after Zod parsing, add:
@@ -487,6 +487,7 @@ const CRAWL_FALLBACK_KEYS = [
   "allowExternalLinks",
   "allowSubdomains",
   "scrapeOptions",
+  "origin",
 ] as const;
 ```
 
@@ -540,7 +541,7 @@ git commit -m "fix: fail closed for unsupported crawl fallback options"
 - Consumes the completed Search, Scrape, Map, and Crawl validation.
 - Produces no runtime API change beyond the specified error behavior.
 
-- [ ] **Step 1: Add a failing integration test for Firecrawl 402 plus `actions`**
+- [x] **Step 1: Add a failing integration test for Firecrawl 402 plus `actions`**
 
 Add near the existing unsupported-feature integration test:
 
@@ -591,7 +592,7 @@ Add near the existing unsupported-feature integration test:
   });
 ```
 
-- [ ] **Step 2: Add failing tests for no-credential, nested Search, and pass-through**
+- [x] **Step 2: Add failing tests for no-credential, nested Search, and pass-through**
 
 Add:
 
@@ -709,7 +710,7 @@ Add:
   });
 ```
 
-- [ ] **Step 3: Run the integration tests**
+- [x] **Step 3: Run the integration tests**
 
 Run:
 
@@ -720,7 +721,7 @@ npm test -- test/integration/firecrawl-gateway.test.ts
 Expected: PASS after the Task 2 and Task 3 integrations. A failure means one
 gateway path bypassed the shared validators and must be fixed before continuing.
 
-- [ ] **Step 4: Update user-facing compatibility documentation**
+- [x] **Step 4: Update user-facing compatibility documentation**
 
 Add this sentence to the Firecrawl compatibility sections in `README.md`:
 
@@ -743,7 +744,7 @@ Add the equivalent operational detail after the fallback-route paragraph in
 fallback compatibility paragraph in
 `skills/deepseek-crawl/references/cli-reference.md`.
 
-- [ ] **Step 5: Add the changelog entry**
+- [x] **Step 5: Add the changelog entry**
 
 At the top of `CHANGELOG.md`, add:
 
@@ -756,7 +757,7 @@ At the top of `CHANGELOG.md`, add:
   silently dropping advanced semantics such as browser actions.
 ```
 
-- [ ] **Step 6: Run the full verification suite**
+- [x] **Step 6: Run the full verification suite**
 
 Run:
 
@@ -767,7 +768,7 @@ npm run verify
 Expected: formatting, linting, source/test type checks, all Vitest tests, package
 creation, and isolated tarball installation all pass.
 
-- [ ] **Step 7: Review the final diff**
+- [x] **Step 7: Review the final diff**
 
 Run:
 
@@ -781,7 +782,7 @@ Expected: only the spec status change, helper, compatibility validation, Crawl
 validation, tests, documentation, and changelog are present; worktree becomes
 clean after the commit.
 
-- [ ] **Step 8: Commit integration and documentation**
+- [x] **Step 8: Commit integration and documentation**
 
 ```bash
 git add README.md README.en.md CHANGELOG.md docs/operations.md \
@@ -795,11 +796,11 @@ git commit -m "test: cover fail-closed Firecrawl fallback"
 
 ## Final Acceptance Checklist
 
-- [ ] Firecrawl-selected requests with advanced options remain unchanged.
-- [ ] DeepSeek fallback rejects all fields outside the explicit matrix.
-- [ ] `actions` never returns DeepSeek-generated success.
-- [ ] Nested Search and Crawl options are checked.
-- [ ] Errors return `400 unsupported_fallback_feature` and a deterministic path.
-- [ ] No DeepSeek client call occurs after capability validation fails.
-- [ ] README and operations docs state the closed-allowlist boundary.
-- [ ] `npm run verify` passes.
+- [x] Firecrawl-selected requests with advanced options remain unchanged.
+- [x] DeepSeek fallback rejects all fields outside the explicit matrix.
+- [x] `actions` never returns DeepSeek-generated success.
+- [x] Nested Search and Crawl options are checked.
+- [x] Errors return `400 unsupported_fallback_feature` and a deterministic path.
+- [x] No DeepSeek client call occurs after capability validation fails.
+- [x] README and operations docs state the closed-allowlist boundary.
+- [x] `npm run verify` passes.

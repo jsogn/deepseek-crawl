@@ -1062,6 +1062,165 @@ describe("Firecrawl-compatible gateway", () => {
     });
   });
 
+  it("does not call DeepSeek when fallback Scrape contains actions", async () => {
+    let deepSeekCalls = 0;
+    let firecrawlCalls = 0;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Fetch call.");
+        },
+      },
+      fetchImpl: async () => {
+        firecrawlCalls += 1;
+        return Response.json({ success: false, error: "Payment required." }, { status: 402 });
+      },
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com/",
+        formats: ["markdown"],
+        actions: [{ type: "click", selector: "#submit" }],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      success: false,
+      error: "DeepSeek fallback does not support Firecrawl option `actions`.",
+      code: "unsupported_fallback_feature",
+    });
+    expect(firecrawlCalls).toBe(1);
+    expect(deepSeekCalls).toBe(0);
+  });
+
+  it("fails closed for Scrape actions without a Firecrawl credential", async () => {
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: {},
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Fetch call.");
+        },
+      },
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com/",
+        actions: [{ type: "click" }],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: "unsupported_fallback_feature",
+      error: "DeepSeek fallback does not support Firecrawl option `actions`.",
+    });
+    expect(deepSeekCalls).toBe(0);
+  });
+
+  it("fails closed for unsupported Search scrape options", async () => {
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: {},
+      deepseekClient: {
+        async search() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          throw new Error("Unexpected Fetch call.");
+        },
+      },
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/search", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: "DeepSeek",
+        scrapeOptions: { formats: ["markdown"], onlyMainContent: true },
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: "unsupported_fallback_feature",
+      error: "DeepSeek fallback does not support Firecrawl option `scrapeOptions.onlyMainContent`.",
+    });
+    expect(deepSeekCalls).toBe(0);
+  });
+
+  it("passes advanced Firecrawl options upstream unchanged", async () => {
+    let upstreamBody = "";
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      deepseekClient: {
+        async search() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Fetch call.");
+        },
+      },
+      fetchImpl: async (_input, init) => {
+        upstreamBody = String(init?.body ?? "");
+        return Response.json({ success: true, data: { markdown: "# Firecrawl" } });
+      },
+    });
+    servers.push(server);
+
+    const body = {
+      url: "https://example.com/",
+      formats: ["markdown"],
+      actions: [{ type: "click", selector: "#submit" }],
+    };
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      data: { markdown: "# Firecrawl" },
+    });
+    expect(upstreamBody).toBe(JSON.stringify(body));
+    expect(deepSeekCalls).toBe(0);
+  });
+
   it("rejects inbound bodies above the configured gateway limit", async () => {
     let upstreamCalls = 0;
     const server = await startGatewayServer({

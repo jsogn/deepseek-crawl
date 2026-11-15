@@ -149,6 +149,9 @@ DeepSeek fallback 覆盖 `POST /v2/search`、`POST /v2/scrape`、`POST /v2/map`�
 
 - 高级 Firecrawl 能力在有额度时可以透传；没有 DeepSeek 等价能力时返回明确错误，
   不会伪装成功。
+- DeepSeek fallback 只接受能够保真的闭集参数；例如 `actions`、等待、DOM 筛选或浏览器
+  选项会返回 `unsupported_fallback_feature`，不会被静默忽略。Firecrawl 正常处理
+  请求时，这些高级选项仍原样透传。
 - Markdown 是 fallback 支持的 Scrape、Search 和 Crawl 输出格式；浏览器动作、
   截图、结构化 Extract 等能力不能在 fallback 中完整替代。
 - 受管理安装只改写当前用户的 Firecrawl CLI 配置，不会自动改写所有 SDK、Skill 或

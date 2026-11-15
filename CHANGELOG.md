@@ -1,20 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.15.0 - 2026-11-15
 
 ### Added
 
 - Use Firecrawl's free Keyless tier as an automatic intermediate provider for
   supported local routes before DeepSeek fallback.
-- Add an explicitly confirmed live Keyless Scrape smoke test that verifies no
-  Authorization header is sent.
-
-## 0.14.2 - 2026-11-15
 
 ### Fixed
 
 - Reject unsupported Firecrawl options before DeepSeek fallback instead of
   silently dropping advanced semantics such as browser actions.
+
+### Testing
+
+- Add an explicitly confirmed live Keyless Scrape smoke test that verifies no
+  Authorization header is sent.
 
 ## 0.14.1 - 2026-11-14
 

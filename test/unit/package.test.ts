@@ -12,7 +12,7 @@ describe("package executable", () => {
       encoding: "utf8",
     });
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("0.14.2");
+    expect(result.stdout.trim()).toBe("0.15.0");
     expect(result.stderr).toBe("");
   });
 
@@ -42,6 +42,7 @@ describe("package executable", () => {
     expect(packageJson.files).toContain("README.en.md");
     expect(packageJson.files).toContain("LICENSE");
     expect(packageJson.description).toMatch(/Firecrawl-compatible/i);
+    expect(packageJson.description).toMatch(/Keyless/i);
     expect(packageJson.description).toMatch(/DeepSeek fallback/i);
     expect(packageJson.description).toMatch(/Agent-native/i);
     expect(packageJson.keywords).toEqual(

@@ -40,7 +40,7 @@
   - `collectUnsupportedSources(sources: readonly (string | Record<string, unknown>)[] | undefined, basePath: string): string[]`
   - `throwForUnsupportedOptions(paths: readonly string[]): void`
 
-- [ ] **Step 1: Write the failing helper tests**
+- [x] **Step 1: Write the failing helper tests**
 
 Create `test/unit/fallback-capabilities.test.ts`:
 
@@ -101,7 +101,7 @@ describe("Firecrawl fallback capability guards", () => {
 });
 ```
 
-- [ ] **Step 2: Run the new unit test and confirm it fails**
+- [x] **Step 2: Run the new unit test and confirm it fails**
 
 Run:
 
@@ -111,7 +111,7 @@ npm test -- test/unit/fallback-capabilities.test.ts
 
 Expected: FAIL because `src/firecrawl/fallback-capabilities.ts` does not exist.
 
-- [ ] **Step 3: Implement the helper module**
+- [x] **Step 3: Implement the helper module**
 
 Create `src/firecrawl/fallback-capabilities.ts`:
 
@@ -195,7 +195,7 @@ export function throwForUnsupportedOptions(paths: readonly string[]): void {
 }
 ```
 
-- [ ] **Step 4: Run the focused test and verify it passes**
+- [x] **Step 4: Run the focused test and verify it passes**
 
 Run:
 
@@ -205,7 +205,7 @@ npm test -- test/unit/fallback-capabilities.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Run formatting, linting, and type checks**
+- [x] **Step 5: Run formatting, linting, and type checks**
 
 Run:
 
@@ -218,7 +218,7 @@ npm run typecheck:test
 
 Expected: all pass.
 
-- [ ] **Step 6: Commit the helper**
+- [x] **Step 6: Commit the helper**
 
 ```bash
 git add src/firecrawl/fallback-capabilities.ts test/unit/fallback-capabilities.test.ts

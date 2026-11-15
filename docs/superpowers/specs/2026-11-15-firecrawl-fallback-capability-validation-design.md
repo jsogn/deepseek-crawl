@@ -2,7 +2,7 @@
 
 Date: 2026-11-15
 
-Status: Pending spec review
+Status: Approved
 
 Target release: next patch release
 

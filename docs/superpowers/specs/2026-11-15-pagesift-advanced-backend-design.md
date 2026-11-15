@@ -386,11 +386,11 @@ Allowed string formats:
 - `rawHtml`
 - `links`
 - `images`
-- `screenshot`
 
-Object formats are rejected in this release. In particular,
-`{"type":"screenshot", ...}` must not be silently reduced to the string
-`screenshot`, because screenshot viewport and full-page options would be lost.
+Object formats and the `screenshot` format string are rejected in this release.
+Screenshots are supported only through the `screenshot` action after live
+PageSift `1.4.2` validation showed that its Scrape format allowlist does not
+include a screenshot format.
 
 Allowed action types:
 

@@ -508,6 +508,7 @@ describe("PageSift advanced capabilities", () => {
 
   it.each([
     [{ url: "https://example.com/", formats: [{ type: "screenshot" }] }, /formats\[0\]/],
+    [{ url: "https://example.com/", formats: ["screenshot"] }, /formats\[0\]/],
     [{ url: "https://example.com/", keepSession: false }, /keepSession/],
     [{ url: "https://example.com/", actions: [{ type: "executeJavascript" }] }, /executeJavascript/],
     [{ url: "https://example.com/", json: {} }, /json/],
@@ -583,7 +584,7 @@ const SCRAPE_KEYS = [
 ] as const;
 
 const INTERACT_KEYS = ["prompt", "actions", "timeout", "origin"] as const;
-const FORMATS = new Set(["markdown", "html", "rawHtml", "links", "images", "screenshot"]);
+const FORMATS = new Set(["markdown", "html", "rawHtml", "links", "images"]);
 const ACTIONS = new Set(["wait", "click", "write", "press", "scroll", "screenshot", "scrape", "pdf"]);
 
 const actionSchema = z.object({ type: z.string() }).passthrough();

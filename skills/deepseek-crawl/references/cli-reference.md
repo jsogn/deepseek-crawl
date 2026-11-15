@@ -240,7 +240,8 @@ unchanged.
 
 An enabled PageSift backend may additionally handle advanced browser Scrape and
 Scrape-bound Interact. Supported Scrape string formats are `markdown`, `html`,
-`rawHtml`, `links`, `images`, and `screenshot`; object formats are rejected.
+`rawHtml`, `links`, and `images`; object formats and the `screenshot` format
+string are rejected. Screenshots are supported through the `screenshot` action.
 Supported actions are `wait`, `click`, `write`, `press`, `scroll`, `screenshot`,
 `scrape`, and `pdf`. `executeJavascript`, JSON extraction, profiles, proxies,
 location, ZDR, Parse, standalone Browser Sandbox, Playwright code, CDP/live

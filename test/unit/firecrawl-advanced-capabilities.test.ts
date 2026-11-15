@@ -8,10 +8,11 @@ describe("PageSift advanced capabilities", () => {
   it("accepts browser Scrape fields and injects keepSession", () => {
     const prepared = preparePageSiftScrape({
       url: "https://example.com/",
-      formats: ["markdown", "screenshot"],
+      formats: ["markdown", "html"],
       actions: [
         { type: "click", selector: "#more" },
         { type: "wait", milliseconds: 100 },
+        { type: "screenshot" },
       ],
       waitFor: 500,
       onlyMainContent: true,
@@ -24,10 +25,11 @@ describe("PageSift advanced capabilities", () => {
 
     expect(prepared.body).toMatchObject({
       keepSession: true,
-      formats: ["markdown", "screenshot"],
+      formats: ["markdown", "html"],
       actions: [
         { type: "click", selector: "#more" },
         { type: "wait", milliseconds: 100 },
+        { type: "screenshot" },
       ],
     });
     expect(JSON.parse(Buffer.from(prepared.serialized).toString("utf8"))).toEqual(prepared.body);
@@ -35,6 +37,7 @@ describe("PageSift advanced capabilities", () => {
 
   it.each([
     [{ url: "https://example.com/", formats: [{ type: "screenshot" }] }, /formats\[0\]/],
+    [{ url: "https://example.com/", formats: ["screenshot"] }, /formats\[0\]/],
     [{ url: "https://example.com/", keepSession: false }, /keepSession/],
     [
       { url: "https://example.com/", actions: [{ type: "executeJavascript" }] },

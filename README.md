@@ -130,6 +130,7 @@ PageSift，`gateway stop` 和 `gateway uninstall` 也不会管理该外部服务
 Browser Sandbox、Playwright code、CDP/live view、JSON 提取、Extract、Agent、
 Monitor、Batch Scrape 或 Parse。PageSift 不可用或能力不匹配时明确失败，不会静默
 降低为 DeepSeek 结果。`gateway install --no-advanced` 可撤销此配置。
+截图只能通过 `actions` 中的 `screenshot` 获取，不能作为单独的 format。
 
 ## 路线 B：直接使用 DeepSeek CLI
 

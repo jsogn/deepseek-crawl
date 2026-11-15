@@ -17,7 +17,7 @@ const SCRAPE_KEYS = [
 ] as const;
 
 const INTERACT_KEYS = ["prompt", "actions", "timeout", "origin"] as const;
-const FORMATS = new Set(["markdown", "html", "rawHtml", "links", "images", "screenshot"]);
+const FORMATS = new Set(["markdown", "html", "rawHtml", "links", "images"]);
 const ACTIONS = new Set([
   "wait",
   "click",

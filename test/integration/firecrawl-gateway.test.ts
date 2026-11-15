@@ -265,7 +265,7 @@ describe("Firecrawl-compatible gateway", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: "https://example.com/",
-        formats: ["markdown", "screenshot"],
+        formats: ["markdown", "html"],
         actions: [{ type: "click", selector: "#more" }],
       }),
     });
@@ -283,7 +283,7 @@ describe("Firecrawl-compatible gateway", () => {
         authorization: null,
         body: {
           url: "https://example.com/",
-          formats: ["markdown", "screenshot"],
+          formats: ["markdown", "html"],
           actions: [{ type: "click", selector: "#more" }],
           keepSession: true,
         },

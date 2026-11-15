@@ -112,7 +112,8 @@ The only advanced fallback routes are:
   PageSift.
 
 Supported Scrape formats are the string formats `markdown`, `html`, `rawHtml`,
-`links`, `images`, and `screenshot`. Object formats are rejected. Supported
+`links`, and `images`. Object formats and the `screenshot` format string are
+rejected. Screenshots are supported through the `screenshot` action. Supported
 actions are `wait`, `click`, `write`, `press`, `scroll`, `screenshot`, `scrape`,
 and `pdf`. `executeJavascript`, JSON extraction, profiles, proxies, location,
 ZDR, Parse, standalone Browser Sandbox, Playwright code, CDP, live view, Extract,

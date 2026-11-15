@@ -147,6 +147,7 @@ Playwright code, CDP/live view, JSON extraction, Extract, Agent, Monitor, Batch
 Scrape, or Parse. When PageSift is unavailable or cannot preserve semantics, the
 Gateway fails explicitly instead of silently returning a DeepSeek result. Use
 `gateway install --no-advanced` to disable the configured backend.
+Screenshots are available through the `screenshot` action, not as a format.
 
 ## Path B: Use the DeepSeek CLI directly
 

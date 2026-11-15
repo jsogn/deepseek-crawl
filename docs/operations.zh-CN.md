@@ -106,11 +106,12 @@ deepseek-crawl gateway install --no-advanced
 - 带封闭浏览器能力 allowlist 的 `POST /v2/scrape`。
 - PageSift 创建的 `ps_` 会话的 `POST` / `DELETE /v2/scrape/:id/interact`。
 
-Scrape 只接受字符串格式 `markdown`、`html`、`rawHtml`、`links`、`images` 和
-`screenshot`，拒绝对象格式。支持的 action 为 `wait`、`click`、`write`、
-`press`、`scroll`、`screenshot`、`scrape` 和 `pdf`。`executeJavascript`、JSON
-提取、profile、proxy、location、ZDR、Parse、独立 Browser Sandbox、Playwright
-code、CDP、live view、Extract、Agent、Monitor 和 Batch Scrape 不在本期范围。
+Scrape 只接受字符串格式 `markdown`、`html`、`rawHtml`、`links` 和 `images`；
+拒绝对象格式和 `screenshot` 字符串格式。截图只能通过 `screenshot` action 获取。
+支持的 action 为 `wait`、`click`、`write`、`press`、`scroll`、`screenshot`、
+`scrape` 和 `pdf`。`executeJavascript`、JSON 提取、profile、proxy、location、
+ZDR、Parse、独立 Browser Sandbox、Playwright code、CDP、live view、Extract、
+Agent、Monitor 和 Batch Scrape 不在本期范围。
 
 PageSift Scrape 返回 `ps_` 加 32 位小写 hex 的公共 ID。网关最多保存 1,000 个活动
 映射，TTL 从创建时开始计 10 分钟，读取不会续期；网关重启会丢失映射。响应缓冲上限

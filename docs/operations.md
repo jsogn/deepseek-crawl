@@ -94,7 +94,12 @@ deepseek-crawl gateway install --no-advanced
 `gateway install --advanced`. Non-loopback backends require HTTPS and a PageSift
 credential. Use `PAGESIFT_API_KEY` for foreground processes; managed services
 require `deepseek-crawl auth set pagesift` because the background service does
-not inherit the installer shell.
+not inherit the installer shell. The advanced URL must not point to the Gateway
+itself.
+`no-fallback` mode cannot enable PageSift.
+
+Compatibility is tested against PageSift `1.4.2`. PageSift `/healthz` exposes no
+version, so the Gateway cannot pin or verify the remote version at runtime.
 
 Managed preflight and `gateway status` call PageSift `/healthz` and
 `GET /v2/crawl/active` with 2-second timeouts and no redirects. `/healthz`

@@ -90,6 +90,24 @@ function serverUrl(server: Server, fallbackHost: string): URL {
   return new URL(`http://${bracketedHost}:${address.port}/`);
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  const value =
+    hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
+  return (
+    value === "localhost" ||
+    value === "::1" ||
+    value === "0:0:0:0:0:0:0:1" ||
+    value.startsWith("127.")
+  );
+}
+
+function pointsAtGateway(advanced: URL, gateway: URL): boolean {
+  if (advanced.port !== gateway.port) {
+    return false;
+  }
+  return advanced.hostname === gateway.hostname || isLoopbackHostname(advanced.hostname);
+}
+
 export async function startGatewayServer(options: GatewayServerOptions): Promise<GatewayServer> {
   const crawlJobs =
     options.crawlJobs ??
@@ -143,9 +161,15 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
     );
   });
   await listenGateway(server, options.config);
+  const url = serverUrl(server, options.config.host);
+  if (options.config.advancedBackend && pointsAtGateway(options.config.advancedBackend.url, url)) {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+    throw new Error("The advanced backend URL must not point to the Gateway itself.");
+  }
   const jobSweeper = setInterval(() => crawlJobs.sweepExpired(), 60_000);
   jobSweeper.unref();
-  const url = serverUrl(server, options.config.host);
   let runtimeStatePath: string | undefined;
   if (options.runtimeState) {
     try {

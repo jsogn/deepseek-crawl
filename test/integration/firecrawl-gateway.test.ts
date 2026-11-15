@@ -189,6 +189,40 @@ describe("Firecrawl-compatible gateway", () => {
     expect(calls).toBe(0);
   });
 
+  it("rejects a PageSift backend that points to the Gateway itself", async () => {
+    const portProbe = createServer();
+    await new Promise<void>((resolve, reject) => {
+      portProbe.once("error", reject);
+      portProbe.listen(0, "127.0.0.1", resolve);
+    });
+    const address = portProbe.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Port probe did not expose a TCP address.");
+    }
+    const port = address.port;
+    await new Promise<void>((resolve, reject) => {
+      portProbe.close((error) => (error ? reject(error) : resolve()));
+    });
+
+    await expect(
+      startGatewayServer({
+        config: {
+          ...testConfig(),
+          port,
+          autoPort: false,
+          advancedBackend: {
+            provider: "pagesift",
+            url: new URL(`http://127.0.0.1:${port}/`),
+          },
+        },
+        env: {},
+        fetchImpl: async () => {
+          throw new Error("Unexpected request.");
+        },
+      }),
+    ).rejects.toThrow(/Gateway itself/i);
+  });
+
   it("uses PageSift for advanced Scrape after keyed 402 and Keyless 429", async () => {
     const events: GatewayRequestLog[] = [];
     const pagesift = pageSiftBackend(() =>
@@ -502,6 +536,87 @@ describe("Firecrawl-compatible gateway", () => {
     expect(await response.json()).toMatchObject({
       code: "advanced_backend_session_id_missing",
     });
+  });
+
+  it("applies the provider concurrency limit to PageSift requests", async () => {
+    let active = 0;
+    let maxActive = 0;
+    let started = 0;
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const firstStartedPromise = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        providerMode: "deepseek-first",
+        maxConcurrentProviderRequests: 1,
+        advancedBackend: {
+          provider: "pagesift",
+          url: new URL("http://127.0.0.1:3002/"),
+        },
+      },
+      env: {},
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          throw new Error("DeepSeek must not handle browser Scrape.");
+        },
+      },
+      advancedBackend: {
+        config: {
+          provider: "pagesift",
+          url: new URL("http://127.0.0.1:3002/"),
+        },
+        async request() {
+          active += 1;
+          started += 1;
+          maxActive = Math.max(maxActive, active);
+          if (started === 1) {
+            firstStarted();
+            await firstGate;
+          }
+          active -= 1;
+          return Response.json({
+            success: true,
+            data: { markdown: "# Browser", metadata: { scrapeId: "upstream" } },
+          });
+        },
+        async readJsonResponse(response) {
+          return (await response.json()) as Record<string, unknown>;
+        },
+      },
+    });
+    servers.push(server);
+    const request = () =>
+      fetch(new URL("/v2/scrape", server.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: "https://example.com/",
+          actions: [{ type: "click", selector: "#more" }],
+        }),
+      });
+
+    const first = request();
+    await firstStartedPromise;
+    const second = request();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(started).toBe(1);
+    expect(maxActive).toBe(1);
+    releaseFirst();
+    expect((await first).status).toBe(200);
+    expect((await second).status).toBe(200);
+    expect(maxActive).toBe(1);
   });
 
   it("routes PageSift-owned Interact back to PageSift", async () => {

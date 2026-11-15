@@ -108,7 +108,8 @@ Advanced mode covers only the validated browser Scrape capability allowlist and
 PageSift-owned `ps_` Interact sessions. It does not cover standalone Browser
 Sandbox, Playwright code, CDP/live view, JSON extraction, Parse, Extract, Agent,
 Monitor, or Batch Scrape. PageSift errors and unavailable backends fail
-explicitly; do not silently retry them through DeepSeek.
+explicitly; do not silently retry them through DeepSeek. PageSift cannot be
+enabled with provider mode `no-fallback`.
 
 `auth import firecrawl` prints only a masked hint. `FIRECRAWL_API_KEY` still takes
 precedence over the imported credential.

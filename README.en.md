@@ -139,6 +139,7 @@ The default endpoint is `http://127.0.0.1:3002`. Use
 `DEEPSEEK_GATEWAY_ADVANCED_URL` for another root URL. The Gateway never installs,
 starts, or stops PageSift, and `gateway stop` / `gateway uninstall` do not manage
 that external service.
+PageSift cannot be enabled in `no-fallback` mode.
 
 The advanced backend covers only the validated browser-dependent Scrape and
 Post-Scrape Interact surface. It does not include standalone Browser Sandbox,

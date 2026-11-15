@@ -350,6 +350,18 @@ describe.skipIf(process.platform === "win32")("managed Gateway service", () => {
     ).rejects.toThrow(/PageSift.*credential/i);
   });
 
+  it("rejects PageSift configuration in no-fallback mode", async () => {
+    const { context } = await fixture();
+
+    await expect(
+      installGatewayService(context, {
+        providerMode: "no-fallback",
+        port: 8787,
+        advanced: true,
+      }),
+    ).rejects.toThrow(/no-fallback/i);
+  });
+
   it("preserves advanced settings when reinstall omits advanced flags", async () => {
     const { context, paths } = await fixture();
     context.fetchImpl = advancedFetch(() =>
@@ -396,6 +408,32 @@ describe.skipIf(process.platform === "win32")("managed Gateway service", () => {
     const state = JSON.parse(await readFile(paths.statePath, "utf8"));
     expect(state.advancedBackend).toBeUndefined();
     expect(await readFile(paths.launcherPath, "utf8")).not.toContain("--advanced");
+  });
+
+  it("reports an unreachable advanced backend as a service issue", async () => {
+    const { context } = await fixture();
+    context.fetchImpl = advancedFetch(() =>
+      Response.json({ status: "ok", pid: 4242, provider_mode: "firecrawl-first" }),
+    );
+    await installGatewayService(context, {
+      providerMode: "firecrawl-first",
+      port: 8787,
+      advanced: true,
+      advancedUrl: "http://127.0.0.1:3002",
+    });
+
+    context.fetchImpl = async (input) =>
+      String(input) === "http://127.0.0.1:3002/healthz"
+        ? new Response("not pagesift")
+        : Response.json({ status: "ok", pid: 4242, provider_mode: "firecrawl-first" });
+    const status = await getGatewayServiceStatus(context);
+
+    expect(status.advanced_backend).toMatchObject({
+      enabled: true,
+      reachable: false,
+      api_ready: false,
+    });
+    expect(status.issues).toContain("Advanced PageSift backend is unreachable.");
   });
 
   it("restores the cloud endpoint when stopped and reapplies the proxy when started", async () => {
@@ -568,6 +606,9 @@ describe("managed Windows Gateway service", () => {
     expect(await readFile(paths.launcherPath, "utf8")).toContain(
       '--advanced --advanced-url "http://127.0.0.1:3002/"',
     );
+    const launcher = await readFile(paths.launcherPath, "utf8");
+    expect(launcher).toContain('set "DEEPSEEK_GATEWAY_ADVANCED_URL="');
+    expect(launcher).toContain('set "PAGESIFT_API_KEY="');
   });
 
   it("stops, restarts, and fully uninstalls the Windows task", async () => {

@@ -388,6 +388,8 @@ async function writeServiceFiles(
       : "";
     const launcher = [
       "@echo off",
+      'set "DEEPSEEK_GATEWAY_ADVANCED_URL="',
+      'set "PAGESIFT_API_KEY="',
       `"${context.nodePath}" "${context.cliPath}" gateway --provider-mode ${state.providerMode} --port ${state.port}${windowsAdvancedArgs} 1>>"${join(paths.logsDirectory, "gateway.log")}" 2>>"${join(paths.logsDirectory, "gateway.err.log")}"`,
       "",
     ].join("\r\n");
@@ -887,6 +889,11 @@ export async function getGatewayServiceStatus(
     issues.push("Gateway service is running while marked as stopped.");
   }
   const advancedBackend = await serviceAdvancedStatus(context, state);
+  if (advancedBackend.enabled && !advancedBackend.reachable) {
+    issues.push("Advanced PageSift backend is unreachable.");
+  } else if (advancedBackend.enabled && !advancedBackend.api_ready) {
+    issues.push("Advanced PageSift backend is not API-ready.");
+  }
   return {
     supported: true,
     installed: launcherExists && definitionExists,
@@ -938,6 +945,11 @@ export async function installGatewayService(
             provider: "pagesift" as const,
             url: requestedUrl,
           };
+  if (options.providerMode === "no-fallback" && advanced) {
+    throw new Error(
+      "The advanced backend cannot be enabled in no-fallback mode; use --no-advanced.",
+    );
+  }
   if (advanced) {
     const resolved = loadGatewayConfig({
       advancedUrl: advanced.url,

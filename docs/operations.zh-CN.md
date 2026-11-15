@@ -91,7 +91,11 @@ deepseek-crawl gateway install --no-advanced
 `DEEPSEEK_GATEWAY_ADVANCED_URL` 可用于前台模式或
 `gateway install --advanced`。非 loopback 后端必须使用 HTTPS 并配置 PageSift
 凭据。前台可使用 `PAGESIFT_API_KEY`；受管理后台服务不会继承安装 shell，因此必须
-使用 `deepseek-crawl auth set pagesift` 保存凭据。
+使用 `deepseek-crawl auth set pagesift` 保存凭据。高级 URL 不能指向网关自身。
+`no-fallback` 模式不能启用 PageSift。
+
+当前兼容性以 PageSift `1.4.2` 为测试基线。PageSift `/healthz` 不返回版本号，
+因此网关无法在运行时锁定或验证远端版本。
 
 托管安装预检和 `gateway status` 会请求 PageSift `/healthz` 与
 `GET /v2/crawl/active`，每个请求超时 2 秒且不跟随重定向。`/healthz` 只报告是否

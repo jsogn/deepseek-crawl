@@ -334,6 +334,9 @@ export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConf
     options.maxRetainedCrawlBytes ?? env.DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES,
   );
   const advancedBackend = resolveAdvancedBackend(options, env, options.credentialStores);
+  if (providerMode === "no-fallback" && advancedBackend) {
+    throw new Error("The advanced backend cannot be enabled in no-fallback mode.");
+  }
   const remote = options.remote ?? options.allowRemote ?? false;
   const host = validateHost(options.host?.trim() || (remote ? "0.0.0.0" : DEFAULT_HOST), remote);
   const gatewayApiKey = resolveCredential(env, "gateway", options.credentialStores);

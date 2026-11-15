@@ -185,7 +185,10 @@ credential. Foreground mode can use `PAGESIFT_API_KEY`; managed services require
 `auth set pagesift` because the background service does not inherit the
 installer shell. `--no-advanced` is install-only and removes a prior advanced
 configuration. Reinstalling without an advanced flag preserves the current
-setting.
+setting. The advanced URL must not point back to the Gateway listener.
+PageSift cannot be enabled with provider mode `no-fallback`.
+Compatibility is tested against PageSift `1.4.2`; `/healthz` exposes no version
+for runtime pinning.
 
 PageSift preflight calls `/healthz` and `GET /v2/crawl/active` with 2-second
 per-request timeouts and no redirects. Failed preflight leaves the managed

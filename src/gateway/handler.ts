@@ -452,6 +452,13 @@ export function createGatewayHandler(
     dependencies.config.maxConcurrentProviderRequests ??
       GATEWAY_CAPACITY_DEFAULTS.maxConcurrentProviderRequests,
   );
+  const limitedAdvancedBackend: AdvancedBackend | undefined = advancedBackend
+    ? {
+        config: advancedBackend.config,
+        request: (input) => providerLimiter.run(input.signal, () => advancedBackend.request(input)),
+        readJsonResponse: (response, signal) => advancedBackend.readJsonResponse(response, signal),
+      }
+    : undefined;
   const logger = dependencies.logger;
 
   const resolveRawDeepSeekClient = (): DeepSeekGateway => {
@@ -653,7 +660,7 @@ export function createGatewayHandler(
       isPageSiftSessionId(interactId)
     ) {
       const upstreamId = advancedSessions.resolve(interactId);
-      if (!upstreamId || !advancedBackend) {
+      if (!upstreamId || !limitedAdvancedBackend) {
         fallbackError(
           response,
           new AdvancedBackendError(
@@ -668,7 +675,7 @@ export function createGatewayHandler(
       fallback = true;
       fallbackReason = "pagesift_advanced_interact";
       try {
-        const upstream = await advancedBackend.request({
+        const upstream = await limitedAdvancedBackend.request({
           method,
           path: `/v2/scrape/${encodeURIComponent(upstreamId)}/interact`,
           headers: advancedRequestHeaders(request, requestId),
@@ -865,7 +872,7 @@ export function createGatewayHandler(
         if (
           error instanceof UnsupportedFallbackFeatureError &&
           route?.kind === "scrape" &&
-          advancedBackend &&
+          limitedAdvancedBackend &&
           providerMode !== "no-fallback"
         ) {
           provider = "pagesift";
@@ -875,7 +882,7 @@ export function createGatewayHandler(
             const result = await executeAdvancedScrape(
               body,
               advancedRequestHeaders(request, requestId),
-              advancedBackend,
+              limitedAdvancedBackend,
               advancedSessions,
               requestController.signal,
             );

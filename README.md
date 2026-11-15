@@ -124,6 +124,7 @@ deepseek-crawl gateway install --advanced
 `--advanced-url https://pagesift.example.com` 或
 `DEEPSEEK_GATEWAY_ADVANCED_URL` 指定其他根地址。网关不会安装、启动或停止
 PageSift，`gateway stop` 和 `gateway uninstall` 也不会管理该外部服务。
+`no-fallback` 模式不能启用 PageSift。
 
 高级后端只覆盖经过验证的浏览器型 Scrape 和 Scrape 后 Interact；不支持独立
 Browser Sandbox、Playwright code、CDP/live view、JSON 提取、Extract、Agent、

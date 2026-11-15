@@ -110,6 +110,17 @@ describe("loadGatewayConfig", () => {
     ).toThrow(/PageSift.*credential/i);
   });
 
+  it("rejects an advanced backend in no-fallback mode", () => {
+    expect(() =>
+      loadGatewayConfig({
+        providerMode: "no-fallback",
+        advancedEnabled: true,
+        env: {},
+        credentialStores: {},
+      }),
+    ).toThrow(/no-fallback/i);
+  });
+
   it("rejects a non-loopback host outside remote mode", () => {
     expect(() =>
       loadGatewayConfig({

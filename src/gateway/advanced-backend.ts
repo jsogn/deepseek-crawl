@@ -181,7 +181,9 @@ class JsonBufferLimiter {
     if (signal?.aborted) {
       throw signal.reason;
     }
-    if (this.#active >= MAX_CONCURRENT_JSON) {
+    if (this.#active < MAX_CONCURRENT_JSON) {
+      this.#active += 1;
+    } else {
       await new Promise<void>((resolve, reject) => {
         let abort: () => void;
         const wake = () => {
@@ -199,19 +201,27 @@ class JsonBufferLimiter {
         signal?.addEventListener("abort", abort, { once: true });
       });
       if (signal?.aborted) {
+        this.#release();
         throw signal.reason;
       }
     }
-    this.#active += 1;
     let released = false;
     return () => {
       if (released) {
         return;
       }
       released = true;
-      this.#active -= 1;
-      this.#waiters.shift()?.();
+      this.#release();
     };
+  }
+
+  #release(): void {
+    const next = this.#waiters.shift();
+    if (next) {
+      next();
+      return;
+    }
+    this.#active = Math.max(0, this.#active - 1);
   }
 }
 

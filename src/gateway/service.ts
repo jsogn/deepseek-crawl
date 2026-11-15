@@ -21,6 +21,8 @@ const HEALTH_POLL_MS = 250;
 const DEFAULT_HEALTH_TIMEOUT_MS = 15_000;
 const STOP_POLL_MS = 100;
 const STOP_TIMEOUT_MS = 5_000;
+const BOOTSTRAP_RETRY_MS = 100;
+const BOOTSTRAP_RETRY_TIMEOUT_MS = 5_000;
 
 export interface GatewayCommandResult {
   exitCode: number;
@@ -674,13 +676,20 @@ async function startService(
     return;
   }
 
-  const started = await runner("launchctl", [
-    "bootstrap",
-    `gui/${context.uid}`,
-    paths.serviceDefinitionPath,
-  ]);
-  if (started.exitCode !== 0) {
-    throw new Error(started.stderr.trim() || "Could not start the Gateway service.");
+  const retryUntil = Date.now() + BOOTSTRAP_RETRY_TIMEOUT_MS;
+  while (true) {
+    const started = await runner("launchctl", [
+      "bootstrap",
+      `gui/${context.uid}`,
+      paths.serviceDefinitionPath,
+    ]);
+    if (started.exitCode === 0) {
+      return;
+    }
+    if (started.exitCode !== 5 || Date.now() >= retryUntil) {
+      throw new Error(started.stderr.trim() || "Could not start the Gateway service.");
+    }
+    await (context.wait ?? wait)(BOOTSTRAP_RETRY_MS);
   }
 }
 

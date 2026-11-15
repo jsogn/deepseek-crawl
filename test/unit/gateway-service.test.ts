@@ -29,6 +29,7 @@ afterEach(async () => {
 class FakeLaunchctl {
   running = false;
   delayedBootoutPolls = 0;
+  bootstrapEioFailures = 0;
   readonly calls: string[][] = [];
   #pendingBootout = false;
   #bootoutPollsRemaining = 0;
@@ -52,6 +53,14 @@ class FakeLaunchctl {
         : { exitCode: 1, stdout: "", stderr: "Could not find service." };
     }
     if (args[0] === "bootstrap") {
+      if (this.bootstrapEioFailures > 0) {
+        this.bootstrapEioFailures -= 1;
+        return {
+          exitCode: 5,
+          stdout: "",
+          stderr: "Bootstrap failed: 5: Input/output error",
+        };
+      }
       this.running = true;
       return { exitCode: 0, stdout: "", stderr: "" };
     }
@@ -523,6 +532,26 @@ describe.skipIf(process.platform === "win32")("managed Gateway service", () => {
       issues: [],
     });
     expect(launchctl.calls.filter((call) => call[1] === "print").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("retries launchd bootstrap when an immediate reinstall reports EIO", async () => {
+    const { context, launchctl } = await fixture();
+    await installGatewayService(context, { providerMode: "deepseek-first", port: 8787 });
+    launchctl.bootstrapEioFailures = 1;
+
+    const status = await installGatewayService(context, {
+      providerMode: "deepseek-first",
+      port: 8787,
+    });
+
+    expect(status).toMatchObject({
+      installed: true,
+      desired_running: true,
+      running: true,
+      healthy: true,
+      provider_mode: "deepseek-first",
+    });
+    expect(launchctl.calls.filter((call) => call[1] === "bootstrap")).toHaveLength(3);
   });
 
   it("restores the Firecrawl endpoint when installation health fails", async () => {

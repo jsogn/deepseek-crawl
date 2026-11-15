@@ -2,7 +2,7 @@
 
 Date: 2026-11-15
 
-Status: Proposed
+Status: Approved
 
 Target release: next minor release after implementation
 

@@ -3,7 +3,12 @@ import { executeFetch, executeSearch } from "../application/index.js";
 import type { MapSitemapReader } from "../application/map.js";
 import { executeMap } from "../application/map.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
-import { UnsupportedFallbackFeatureError } from "../gateway/errors.js";
+import {
+  collectUnsupportedFormats,
+  collectUnsupportedKeys,
+  collectUnsupportedSources,
+  throwForUnsupportedOptions,
+} from "./fallback-capabilities.js";
 
 const formatSchema = z.union([
   z.string(),
@@ -52,17 +57,9 @@ const mapInputSchema = z
   })
   .passthrough();
 
-function formatType(value: z.infer<typeof formatSchema>): string {
-  return typeof value === "string" ? value : value.type;
-}
-
-function sourceType(value: z.infer<typeof sourceSchema>): string {
-  return typeof value === "string" ? value : value.type;
-}
-
-function formatsAreMarkdownOnly(formats: z.infer<typeof formatSchema>[] | undefined): boolean {
-  return formats === undefined || formats.every((format) => formatType(format) === "markdown");
-}
+const SEARCH_FALLBACK_KEYS = ["query", "limit", "sources", "scrapeOptions"] as const;
+const SCRAPE_FALLBACK_KEYS = ["url", "formats"] as const;
+const MAP_FALLBACK_KEYS = ["url", "search", "limit"] as const;
 
 export async function firecrawlSearchFallback(
   input: unknown,
@@ -70,16 +67,12 @@ export async function firecrawlSearchFallback(
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const parsed = searchInputSchema.parse(input);
-  if (parsed.sources?.some((source) => sourceType(source) !== "web")) {
-    throw new UnsupportedFallbackFeatureError(
-      "DeepSeek fallback supports only Firecrawl web search sources.",
-    );
-  }
-  if (!formatsAreMarkdownOnly(parsed.scrapeOptions?.formats)) {
-    throw new UnsupportedFallbackFeatureError(
-      "DeepSeek fallback supports only the Firecrawl markdown Search format.",
-    );
-  }
+  throwForUnsupportedOptions([
+    ...collectUnsupportedKeys(parsed, SEARCH_FALLBACK_KEYS),
+    ...collectUnsupportedSources(parsed.sources, "sources"),
+    ...collectUnsupportedKeys(parsed.scrapeOptions ?? {}, ["formats"], "scrapeOptions"),
+    ...collectUnsupportedFormats(parsed.scrapeOptions?.formats, "scrapeOptions.formats"),
+  ]);
 
   const includeMarkdown = parsed.scrapeOptions?.formats !== undefined;
   const response = await executeSearch(
@@ -119,11 +112,10 @@ export async function firecrawlScrapeFallback(
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const parsed = scrapeInputSchema.parse(input);
-  if (!formatsAreMarkdownOnly(parsed.formats)) {
-    throw new UnsupportedFallbackFeatureError(
-      "DeepSeek fallback supports only the Firecrawl markdown Scrape format.",
-    );
-  }
+  throwForUnsupportedOptions([
+    ...collectUnsupportedKeys(parsed, SCRAPE_FALLBACK_KEYS),
+    ...collectUnsupportedFormats(parsed.formats, "formats"),
+  ]);
 
   const response = await executeFetch(client, { url: parsed.url }, { maxChars: 0 }, signal);
   return {
@@ -146,6 +138,7 @@ export async function firecrawlMapFallback(
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const parsed = mapInputSchema.parse(input);
+  throwForUnsupportedOptions(collectUnsupportedKeys(parsed, MAP_FALLBACK_KEYS));
   const result = await executeMap(
     client,
     reader,

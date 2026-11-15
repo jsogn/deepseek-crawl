@@ -239,7 +239,7 @@ git commit -m "feat: validate Firecrawl fallback capabilities"
 - Consumes the four functions produced by Task 1.
 - Produces no new public API; fallback functions keep their current signatures.
 
-- [ ] **Step 1: Add failing tests for unsupported fallback inputs**
+- [x] **Step 1: Add failing tests for unsupported fallback inputs**
 
 In `test/unit/firecrawl-compat.test.ts`, add these tests inside the existing `describe` block:
 
@@ -309,7 +309,7 @@ In `test/unit/firecrawl-compat.test.ts`, add these tests inside the existing `de
   });
 ```
 
-- [ ] **Step 2: Run the focused tests and confirm they fail**
+- [x] **Step 2: Run the focused tests and confirm they fail**
 
 Run:
 
@@ -319,7 +319,7 @@ npm test -- test/unit/firecrawl-compat.test.ts
 
 Expected: FAIL because unsupported fields are still ignored.
 
-- [ ] **Step 3: Integrate the shared guards**
+- [x] **Step 3: Integrate the shared guards**
 
 At the top of `src/firecrawl/compat.ts`, import:
 
@@ -370,7 +370,7 @@ At the start of `firecrawlMapFallback`, immediately after Zod parsing, add:
   throwForUnsupportedOptions(collectUnsupportedKeys(parsed, MAP_FALLBACK_KEYS));
 ```
 
-- [ ] **Step 4: Run the focused compatibility tests**
+- [x] **Step 4: Run the focused compatibility tests**
 
 Run:
 
@@ -380,7 +380,7 @@ npm test -- test/unit/firecrawl-compat.test.ts test/unit/fallback-capabilities.t
 
 Expected: PASS.
 
-- [ ] **Step 5: Run type checks**
+- [x] **Step 5: Run type checks**
 
 Run:
 
@@ -391,7 +391,7 @@ npm run typecheck:test
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Search, Scrape, and Map validation**
+- [x] **Step 6: Commit Search, Scrape, and Map validation**
 
 ```bash
 git add src/firecrawl/compat.ts test/unit/firecrawl-compat.test.ts

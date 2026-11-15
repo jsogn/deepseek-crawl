@@ -161,6 +161,34 @@ describe("Firecrawl-compatible gateway", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
+  it("reports configured advanced backend without probing it", async () => {
+    let calls = 0;
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        advancedBackend: {
+          provider: "pagesift",
+          url: new URL("http://127.0.0.1:3002/"),
+        },
+      },
+      env: {},
+      fetchImpl: async () => {
+        calls += 1;
+        throw new Error("Healthz must not probe PageSift.");
+      },
+    });
+    servers.push(server);
+
+    const health = (await (await fetch(new URL("/healthz", server.url))).json()) as {
+      advanced_backend?: unknown;
+    };
+    expect(health.advanced_backend).toEqual({
+      provider: "pagesift",
+      configured: true,
+    });
+    expect(calls).toBe(0);
+  });
+
   it("uses PageSift for advanced Scrape after keyed 402 and Keyless 429", async () => {
     const events: GatewayRequestLog[] = [];
     const pagesift = pageSiftBackend(() =>

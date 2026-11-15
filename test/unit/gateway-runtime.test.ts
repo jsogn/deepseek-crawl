@@ -24,6 +24,10 @@ describe("gateway runtime state", () => {
       url: "http://127.0.0.1:8787/",
       mode: "local" as const,
       startedAt: "2026-11-14T00:00:00.000Z",
+      advancedBackend: {
+        provider: "pagesift" as const,
+        url: "http://127.0.0.1:3002/",
+      },
     };
     const stale = {
       ...active,
@@ -47,6 +51,10 @@ describe("gateway runtime state", () => {
         max_active_crawl_jobs: 5,
         max_retained_crawl_jobs: 20,
         max_retained_crawl_bytes: 1048576,
+        advanced_backend: {
+          provider: "pagesift",
+          configured: true,
+        },
       }),
     );
 
@@ -61,6 +69,10 @@ describe("gateway runtime state", () => {
           maxActiveCrawlJobs: 5,
           maxRetainedCrawlJobs: 20,
           maxRetainedCrawlBytes: 1_048_576,
+          advancedBackend: {
+            provider: "pagesift",
+            url: "http://127.0.0.1:3002/",
+          },
         },
       ],
       stale: 1,

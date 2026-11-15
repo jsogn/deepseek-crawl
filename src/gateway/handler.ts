@@ -539,6 +539,9 @@ export function createGatewayHandler(
           max_retained_crawl_bytes:
             dependencies.config.maxRetainedCrawlBytes ??
             GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlBytes,
+          advanced_backend: dependencies.config.advancedBackend
+            ? { provider: "pagesift", configured: true }
+            : { provider: null, configured: false },
         },
         { "cache-control": "no-store" },
       );

@@ -725,6 +725,7 @@ describe("parseCli", () => {
     [["gateway", "--port", "65536"], /port/i],
     [["gateway", "extra"], /argument/i],
     [["gateway", "--host", "   "], /host/i],
+    [["gateway", "--advanced-url", "   "], /advanced URL/i],
     [["gateway", "--provider-mode", "sometimes"], /provider mode/i],
     [["gateway", "--credits-cooldown", "-1"], /cooldown/i],
     [["gateway", "--credits-cooldown", "3601"], /cooldown/i],

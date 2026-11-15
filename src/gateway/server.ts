@@ -155,6 +155,14 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
         url: url.href,
         mode: options.runtimeState.mode,
         startedAt: (options.runtimeState.now ?? (() => new Date()))().toISOString(),
+        ...(options.config.advancedBackend
+          ? {
+              advancedBackend: {
+                provider: "pagesift",
+                url: options.config.advancedBackend.url.href,
+              },
+            }
+          : {}),
       });
     } catch (error) {
       clearInterval(jobSweeper);

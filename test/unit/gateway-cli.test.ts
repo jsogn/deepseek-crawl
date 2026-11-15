@@ -353,6 +353,65 @@ describe("gateway discovery commands", () => {
     expect(human.stdout.value()).toContain("Firecrawl CLI points to an unavailable Gateway.");
   });
 
+  it("reports advanced backend readiness for each running gateway", async () => {
+    const directory = await runtimeDirectory();
+    await writeGatewayRuntimeState(directory, {
+      version: 1,
+      pid: process.pid,
+      url: "http://127.0.0.1:8787/",
+      mode: "local",
+      startedAt: "2026-11-14T00:00:00.000Z",
+      advancedBackend: {
+        provider: "pagesift",
+        url: "http://127.0.0.1:3002/",
+      },
+    });
+    const environment = dependencies(directory, { pagesift: store() });
+    environment.deps.fetchImpl = (async (input) => {
+      const url = String(input);
+      if (url === "http://127.0.0.1:3002/healthz") {
+        return new Response("ok");
+      }
+      if (url === "http://127.0.0.1:3002/v2/crawl/active") {
+        return Response.json([]);
+      }
+      return Response.json({
+        status: "ok",
+        pid: process.pid,
+        provider_mode: "firecrawl-first",
+        advanced_backend: {
+          provider: "pagesift",
+          configured: true,
+        },
+      });
+    }) as typeof fetch;
+
+    expect(await runCli(["gateway", "status", "--json"], environment.deps)).toBe(0);
+    expect(JSON.parse(environment.stdout.value())).toMatchObject({
+      instances: [
+        {
+          advanced_backend: {
+            enabled: true,
+            provider: "pagesift",
+            url: "http://127.0.0.1:3002/",
+            reachable: true,
+            api_ready: true,
+            credential_configured: false,
+          },
+        },
+      ],
+      credentials: {
+        pagesift: { configured: false, source: "missing", backend: "keychain" },
+      },
+    });
+
+    const human = dependencies(directory, { pagesift: store() });
+    human.deps.fetchImpl = environment.deps.fetchImpl;
+    expect(await runCli(["gateway", "status"], human.deps)).toBe(0);
+    expect(human.stdout.value()).toContain("PageSift: not configured");
+    expect(human.stdout.value()).toContain("advanced=ready");
+  });
+
   it("prints provider readiness in human-readable status when stopped", async () => {
     const directory = await runtimeDirectory();
     const { deps, stdout } = dependencies(directory, {

@@ -57,8 +57,13 @@ import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekBalanceGateway, DeepSeekGateway } from "../deepseek/gateway.js";
 import { errorMessage as genericErrorMessage } from "../error-message.js";
+import { disabledAdvancedBackendStatus, probePageSift } from "../gateway/advanced-backend.js";
 import { GATEWAY_CAPACITY_DEFAULTS, loadGatewayConfig } from "../gateway/config.js";
-import { pruneGatewayRuntimeStates, resolveGatewayRuntimeDirectory } from "../gateway/runtime.js";
+import {
+  type GatewayRuntimeState,
+  pruneGatewayRuntimeStates,
+  resolveGatewayRuntimeDirectory,
+} from "../gateway/runtime.js";
 import { startGatewayServer } from "../gateway/server.js";
 import {
   createGatewayServiceManager,
@@ -127,7 +132,7 @@ Gateway
 
 Credentials and setup
   init [options]                 Configure DeepSeek and install the Skill
-  auth set [credential]          Store deepseek, firecrawl, or gateway credentials
+  auth set [credential]          Store deepseek, firecrawl, gateway, or pagesift credentials
   auth import firecrawl          Import an existing Firecrawl CLI credential
   auth status [credential]       Show credential source
   auth remove [credential]       Remove a stored credential
@@ -305,7 +310,7 @@ Credential defaults to deepseek. Values are read from hidden input and stored in
 the user's Keychain or a private credential file. The auth import firecrawl
 command reads an existing Firecrawl CLI login instead of prompting for input.
 `,
-  "auth set": `Usage: deepseek-crawl auth set [deepseek|firecrawl|gateway]
+  "auth set": `Usage: deepseek-crawl auth set [deepseek|firecrawl|gateway|pagesift]
 
 Read one credential through hidden input and store it in Keychain or the private
 credential file. Omitting the provider selects deepseek.
@@ -348,6 +353,9 @@ Options:
   --max-retained-crawl-bytes <bytes>
                       Retained Crawl data (default: 256 MiB)
   --remote            Enable authenticated remote mode (fixed port 8787)
+  --advanced          Enable the default loopback PageSift backend
+  --advanced-url <url>
+                      Enable PageSift at an explicit HTTP(S) root URL
 
 Subcommands:
   install             Install, configure, and start the managed service
@@ -542,6 +550,8 @@ async function runGateway(
     ...(command.maxRetainedCrawlBytes === undefined
       ? {}
       : { maxRetainedCrawlBytes: command.maxRetainedCrawlBytes }),
+    ...(command.advanced || command.advancedUrl !== undefined ? { advancedEnabled: true } : {}),
+    ...(command.advancedUrl === undefined ? {} : { advancedUrl: command.advancedUrl }),
     env: deps.env,
     ...(deps.credentialStores === undefined ? {} : { credentialStores: deps.credentialStores }),
   });
@@ -565,6 +575,11 @@ async function runGateway(
   deps.stdout.write(`Provider mode: ${config.providerMode}\n`);
   deps.stdout.write(
     `Firecrawl credits cooldown: ${(config.creditsCooldownMs ?? 60_000) / 1000} seconds\n`,
+  );
+  deps.stdout.write(
+    config.advancedBackend
+      ? `Advanced backend: pagesift ${config.advancedBackend.url.href}\n`
+      : "Advanced backend: disabled\n",
   );
   deps.stdout.write(
     `Capacity: http=${config.maxConcurrentRequests ?? GATEWAY_CAPACITY_DEFAULTS.maxConcurrentRequests}, provider=${config.maxConcurrentProviderRequests ?? GATEWAY_CAPACITY_DEFAULTS.maxConcurrentProviderRequests}, crawl_jobs=${config.maxActiveCrawlJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxActiveCrawlJobs}, retained_jobs=${config.maxRetainedCrawlJobs ?? GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlJobs}, retained_bytes=${config.maxRetainedCrawlBytes ?? GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlBytes}\n`,
@@ -698,6 +713,37 @@ async function runGatewayUrl(
   return 0;
 }
 
+async function gatewayAdvancedStatus(state: GatewayRuntimeState, deps: CliDependencies) {
+  if (!state.advancedBackend) {
+    return disabledAdvancedBackendStatus();
+  }
+  try {
+    const config = loadGatewayConfig({
+      advancedUrl: state.advancedBackend.url,
+      env: deps.env,
+      ...(deps.credentialStores === undefined ? {} : { credentialStores: deps.credentialStores }),
+    }).advancedBackend;
+    if (!config) {
+      throw new Error("Advanced runtime state did not resolve to a backend.");
+    }
+    return await probePageSift(config, deps.fetchImpl);
+  } catch {
+    const credentialConfigured = authStatus(
+      deps.env,
+      resolvedCredentialStore(deps, "pagesift"),
+      "pagesift",
+    ).configured;
+    return {
+      enabled: true,
+      provider: "pagesift" as const,
+      url: state.advancedBackend.url,
+      reachable: false,
+      api_ready: false,
+      credential_configured: credentialConfigured,
+    };
+  }
+}
+
 async function runGatewayStatus(
   command: Extract<ParsedCommand, { kind: "gateway-status" }>,
   deps: CliDependencies,
@@ -710,12 +756,10 @@ async function runGatewayStatus(
     deepseek: authStatus(deps.env, resolvedCredentialStore(deps, "deepseek"), "deepseek"),
     firecrawl: authStatus(deps.env, resolvedCredentialStore(deps, "firecrawl"), "firecrawl"),
     gateway_auth: authStatus(deps.env, resolvedCredentialStore(deps, "gateway"), "gateway"),
+    pagesift: authStatus(deps.env, resolvedCredentialStore(deps, "pagesift"), "pagesift"),
   };
-  const result = {
-    version: 1 as const,
-    running: running.length > 0,
-    stale,
-    instances: running.map((state) => ({
+  const instances = await Promise.all(
+    running.map(async (state) => ({
       pid: state.pid,
       url: state.url,
       mode: state.mode,
@@ -727,7 +771,14 @@ async function runGatewayStatus(
       max_active_crawl_jobs: state.maxActiveCrawlJobs ?? null,
       max_retained_crawl_jobs: state.maxRetainedCrawlJobs ?? null,
       max_retained_crawl_bytes: state.maxRetainedCrawlBytes ?? null,
+      advanced_backend: await gatewayAdvancedStatus(state, deps),
     })),
+  );
+  const result = {
+    version: 1 as const,
+    running: running.length > 0,
+    stale,
+    instances,
     service,
     credentials,
   };
@@ -737,9 +788,9 @@ async function runGatewayStatus(
     const lines =
       running.length === 0
         ? ["Gateway is not running."]
-        : running.map(
-            (state) =>
-              `${state.mode}  ${state.url}  pid=${state.pid}  provider=${state.providerMode ?? "unknown"}  cooldown=${state.creditsCooldownSeconds === undefined ? "unknown" : `${state.creditsCooldownSeconds}s`}  http=${state.maxConcurrentRequests ?? "unknown"}  provider_requests=${state.maxConcurrentProviderRequests ?? "unknown"}  crawl_jobs=${state.maxActiveCrawlJobs ?? "unknown"}  retained_jobs=${state.maxRetainedCrawlJobs ?? "unknown"}  retained_bytes=${state.maxRetainedCrawlBytes ?? "unknown"}  started=${state.startedAt}`,
+        : instances.map(
+            (instance) =>
+              `${instance.mode}  ${instance.url}  pid=${instance.pid}  provider=${instance.provider_mode ?? "unknown"}  advanced=${instance.advanced_backend.enabled ? (instance.advanced_backend.api_ready ? "ready" : "unavailable") : "disabled"}  cooldown=${instance.credits_cooldown_seconds === null ? "unknown" : `${instance.credits_cooldown_seconds}s`}  http=${instance.max_concurrent_requests ?? "unknown"}  provider_requests=${instance.max_concurrent_provider_requests ?? "unknown"}  crawl_jobs=${instance.max_active_crawl_jobs ?? "unknown"}  retained_jobs=${instance.max_retained_crawl_jobs ?? "unknown"}  retained_bytes=${instance.max_retained_crawl_bytes ?? "unknown"}  started=${instance.started_at}`,
           );
     lines.push(
       "",
@@ -748,6 +799,7 @@ async function runGatewayStatus(
       `DeepSeek: ${credentials.deepseek.configured ? `configured via ${credentials.deepseek.source}` : `not configured (${credentials.deepseek.backend})`}`,
       `Firecrawl: ${credentials.firecrawl.configured ? `configured via ${credentials.firecrawl.source}` : `not configured (${credentials.firecrawl.backend})`}`,
       `Gateway auth: ${credentials.gateway_auth.configured ? `configured via ${credentials.gateway_auth.source}` : `not configured (${credentials.gateway_auth.backend})`}`,
+      `PageSift: ${credentials.pagesift.configured ? `configured via ${credentials.pagesift.source}` : `not configured (${credentials.pagesift.backend})`}`,
     );
     if (service.issues.length > 0) {
       lines.push("Service issues:", ...service.issues.map((issue) => `- ${issue}`));

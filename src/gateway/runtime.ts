@@ -20,6 +20,10 @@ export interface GatewayRuntimeState {
   maxActiveCrawlJobs?: number;
   maxRetainedCrawlJobs?: number;
   maxRetainedCrawlBytes?: number;
+  advancedBackend?: {
+    provider: "pagesift";
+    url: string;
+  };
 }
 
 interface ListedRuntimeState {
@@ -48,6 +52,24 @@ export function resolveGatewayRuntimeDirectory(
   return join(resolveCacheDirectory(env, home, platform), "gateway", "runtime");
 }
 
+function validateAdvancedBackend(value: unknown): GatewayRuntimeState["advancedBackend"] {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!value || typeof value !== "object") {
+    throw new Error("Gateway runtime advanced backend must be an object.");
+  }
+  const candidate = value as Record<string, unknown>;
+  if (candidate.provider !== "pagesift" || typeof candidate.url !== "string") {
+    throw new Error("Gateway runtime advanced backend is invalid.");
+  }
+  const url = new URL(candidate.url);
+  if (url.pathname !== "/" || url.search || url.hash || url.username || url.password) {
+    throw new Error("Gateway runtime advanced backend URL is invalid.");
+  }
+  return { provider: "pagesift", url: url.href };
+}
+
 function validateState(value: unknown): GatewayRuntimeState {
   if (!value || typeof value !== "object") {
     throw new Error("Gateway runtime state must be an object.");
@@ -65,12 +87,14 @@ function validateState(value: unknown): GatewayRuntimeState {
     throw new Error("Gateway runtime state is invalid.");
   }
   new URL(candidate.url);
+  const advancedBackend = validateAdvancedBackend(candidate.advancedBackend);
   return {
     version: 1,
     pid: candidate.pid as number,
     url: candidate.url,
     mode: candidate.mode as "local" | "remote",
     startedAt: candidate.startedAt,
+    ...(advancedBackend === undefined ? {} : { advancedBackend }),
   };
 }
 

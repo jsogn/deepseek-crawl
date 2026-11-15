@@ -14,7 +14,11 @@ import {
   firecrawlScrapeFallback,
   firecrawlSearchFallback,
 } from "../firecrawl/compat.js";
-import { requestFirecrawlUpstream, responseHeaders } from "../firecrawl/upstream.js";
+import {
+  type FirecrawlCredentialMode,
+  requestFirecrawlUpstream,
+  responseHeaders,
+} from "../firecrawl/upstream.js";
 import { packageVersion } from "../version.js";
 import { AuthFailureLimiter } from "./auth-limiter.js";
 import { GATEWAY_CAPACITY_DEFAULTS, type GatewayConfig } from "./config.js";
@@ -25,6 +29,7 @@ import {
   GatewayNotFoundError,
   UnsupportedFallbackFeatureError,
 } from "./errors.js";
+import { isKeylessEnabled, isKeylessRoute, KeylessCooldown } from "./keyless.js";
 import { LimitedDeepSeekGateway, ProviderRequestLimiter } from "./provider-request-limiter.js";
 import {
   type GatewayLogger,
@@ -338,6 +343,7 @@ export function createGatewayHandler(
         GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlBytes,
     });
   let firecrawlExhaustedUntil = 0;
+  const keylessCooldown = new KeylessCooldown();
   const creditsCooldownMs = dependencies.config.creditsCooldownMs ?? 60_000;
   const now = dependencies.now ?? Date.now;
   const authLimiter = new AuthFailureLimiter({
@@ -555,13 +561,32 @@ export function createGatewayHandler(
       route?.kind === "crawl-errors" ||
       route?.kind === "crawl-cancel";
     const hasFirecrawl = hasFirecrawlCredential(request, dependencies.env, dependencies.config);
-    const inCreditCooldown = now() < firecrawlExhaustedUntil;
     const providerMode = dependencies.config.providerMode ?? "firecrawl-first";
-    let shouldTryDeepSeekFirst = false;
+    const requestUpstream = (credentialMode: FirecrawlCredentialMode) => {
+      const upstreamHeaders = incomingHeaders(
+        request,
+        dependencies.config.gatewayApiKey !== undefined,
+      );
+      upstreamHeaders.set("x-request-id", requestId);
+      return requestFirecrawlUpstream(
+        {
+          method: request.method ?? "GET",
+          path: request.url ?? "/",
+          headers: upstreamHeaders,
+          ...(body === undefined ? {} : { body }),
+          signal: requestController.signal,
+          credentialMode,
+        },
+        dependencies,
+      );
+    };
+    let shouldTryDeepSeek = false;
     if (isLocalCrawlRoute) {
-      shouldTryDeepSeekFirst = true;
+      shouldTryDeepSeek = true;
+      fallbackReason = "local_crawl_job";
     } else if (route !== undefined && providerMode === "deepseek-first") {
-      shouldTryDeepSeekFirst = true;
+      shouldTryDeepSeek = true;
+      fallbackReason = "deepseek_first";
     } else if (route !== undefined && providerMode === "no-fallback" && !hasFirecrawl) {
       sendJson(response, 503, {
         success: false,
@@ -569,81 +594,135 @@ export function createGatewayHandler(
         code: "firecrawl_credential_required",
       });
       return;
-    } else if (!hasFirecrawl) {
-      shouldTryDeepSeekFirst = true;
-    } else if (route !== undefined && providerMode === "firecrawl-first" && inCreditCooldown) {
-      shouldTryDeepSeekFirst = true;
-    }
+    } else {
+      const inCreditCooldown = now() < firecrawlExhaustedUntil;
+      const skipKeyedForCooldown =
+        route !== undefined && providerMode === "firecrawl-first" && inCreditCooldown;
+      let keyedAttempted = false;
 
-    if (!shouldTryDeepSeekFirst) {
-      provider = "firecrawl";
-      try {
-        const upstreamHeaders = incomingHeaders(
-          request,
-          dependencies.config.gatewayApiKey !== undefined,
-        );
-        upstreamHeaders.set("x-request-id", requestId);
-        const upstream = await requestFirecrawlUpstream(
-          {
-            method: request.method ?? "GET",
-            path: request.url ?? "/",
-            headers: upstreamHeaders,
-            ...(body === undefined ? {} : { body }),
-            signal: requestController.signal,
-          },
-          dependencies,
-        );
-        if (upstream.status === 402 && route !== undefined && providerMode === "firecrawl-first") {
-          firecrawlExhaustedUntil = now() + creditsCooldownMs;
-          provider = "deepseek";
-          fallback = true;
-          fallbackReason = "firecrawl_credits_exhausted";
-          await upstream.body?.cancel().catch(() => undefined);
-        } else {
-          await sendUpstream(response, upstream);
+      if (hasFirecrawl && !skipKeyedForCooldown) {
+        keyedAttempted = true;
+        provider = "firecrawl";
+        try {
+          const upstream = await requestUpstream("configured");
+          if (
+            upstream.status === 402 &&
+            route !== undefined &&
+            providerMode === "firecrawl-first"
+          ) {
+            firecrawlExhaustedUntil = now() + creditsCooldownMs;
+            await upstream.body?.cancel().catch(() => undefined);
+            fallbackReason = "firecrawl_credits_exhausted";
+          } else {
+            await sendUpstream(response, upstream);
+            return;
+          }
+        } catch {
+          if (requestController.signal.aborted) {
+            return;
+          }
+          sendJson(response, 502, {
+            success: false,
+            error: "Firecrawl upstream request failed.",
+            code: "upstream_unavailable",
+          });
           return;
         }
-      } catch {
+      }
+
+      const keylessRoute =
+        isKeylessEnabled(dependencies.config) && isKeylessRoute(method, requestUrl.pathname);
+      if (keylessRoute) {
+        const keylessTime = now();
+        const remainingMs = keylessCooldown.remainingMs(keylessTime);
+        if (remainingMs > 0) {
+          if (route === undefined) {
+            sendJson(
+              response,
+              429,
+              {
+                success: false,
+                error: "Firecrawl Keyless is cooling down after rate limiting.",
+                code: "keyless_rate_limited",
+              },
+              { "retry-after": String(keylessCooldown.retryAfterSeconds(keylessTime)) },
+            );
+            return;
+          }
+          shouldTryDeepSeek = true;
+          fallbackReason = "firecrawl_keyless_cooldown";
+        } else {
+          provider = "firecrawl-keyless";
+          fallback = true;
+          fallbackReason = hasFirecrawl
+            ? "firecrawl_keyless_after_credits"
+            : "firecrawl_keyless_no_credential";
+          try {
+            const upstream = await requestUpstream("keyless");
+            if (upstream.status === 429) {
+              keylessCooldown.block(now(), upstream.headers.get("retry-after"));
+              if (route === undefined) {
+                await sendUpstream(response, upstream);
+                return;
+              }
+              await upstream.body?.cancel().catch(() => undefined);
+              provider = "deepseek";
+              shouldTryDeepSeek = true;
+              fallbackReason = "firecrawl_keyless_rate_limited";
+            } else {
+              await sendUpstream(response, upstream);
+              return;
+            }
+          } catch {
+            if (requestController.signal.aborted) {
+              return;
+            }
+            sendJson(response, 502, {
+              success: false,
+              error: "Firecrawl upstream request failed.",
+              code: "upstream_unavailable",
+            });
+            return;
+          }
+        }
+      } else if (route !== undefined) {
+        shouldTryDeepSeek = true;
+        fallbackReason = !hasFirecrawl
+          ? "no_firecrawl_credential"
+          : inCreditCooldown
+            ? "firecrawl_credits_cooldown"
+            : "firecrawl_credits_exhausted";
+      } else if (!keyedAttempted) {
+        shouldTryDeepSeek = true;
+        fallbackReason = "no_firecrawl_credential";
+      }
+    }
+
+    if (shouldTryDeepSeek) {
+      provider = "deepseek";
+      fallback = true;
+    }
+
+    if (shouldTryDeepSeek) {
+      try {
+        if (!route) {
+          throw new UnsupportedFallbackFeatureError("This route has no DeepSeek fallback.");
+        }
+        const result = await executeFallback(
+          route,
+          body,
+          resolveDeepSeekClient,
+          resolveSitemapReader,
+          crawlJobs,
+          requestController.signal,
+        );
         if (requestController.signal.aborted) {
           return;
         }
-        sendJson(response, 502, {
-          success: false,
-          error: "Firecrawl upstream request failed.",
-          code: "upstream_unavailable",
-        });
-        return;
+        sendJson(response, 200, result);
+      } catch (error) {
+        fallbackError(response, error);
       }
-    } else {
-      provider = "deepseek";
-      fallback = true;
-      fallbackReason = isLocalCrawlRoute
-        ? "local_crawl_job"
-        : providerMode === "deepseek-first" && route !== undefined
-          ? "deepseek_first"
-          : !hasFirecrawl
-            ? "no_firecrawl_credential"
-            : "firecrawl_credits_cooldown";
-    }
-
-    try {
-      if (!route) {
-        throw new UnsupportedFallbackFeatureError("This route has no DeepSeek fallback.");
-      }
-      const result = await executeFallback(
-        route,
-        body,
-        resolveDeepSeekClient,
-        resolveSitemapReader,
-        crawlJobs,
-        requestController.signal,
-      );
-      if (requestController.signal.aborted) {
-        return;
-      }
-      sendJson(response, 200, result);
-    } catch (error) {
-      fallbackError(response, error);
     }
   };
 }

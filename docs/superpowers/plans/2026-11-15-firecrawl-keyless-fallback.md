@@ -385,7 +385,7 @@ git commit -m "feat: support Firecrawl keyless upstream requests"
   - `provider: "firecrawl-keyless"` telemetry
   - Keyless fallback reasons defined in the spec
 
-- [ ] **Step 1: Extend the telemetry provider union**
+- [x] **Step 1: Extend the telemetry provider union**
 
 In `src/gateway/telemetry.ts`:
 
@@ -393,7 +393,7 @@ In `src/gateway/telemetry.ts`:
   provider: "firecrawl" | "firecrawl-keyless" | "deepseek" | "gateway" | "none";
 ```
 
-- [ ] **Step 2: Add failing no-key and 402-to-Keyless integration tests**
+- [x] **Step 2: Add failing no-key and 402-to-Keyless integration tests**
 
 In `test/integration/firecrawl-gateway.test.ts`, add:
 
@@ -471,7 +471,7 @@ In `test/integration/firecrawl-gateway.test.ts`, add:
   });
 ```
 
-- [ ] **Step 3: Run the focused integration tests and verify failure**
+- [x] **Step 3: Run the focused integration tests and verify failure**
 
 ```bash
 npm test -- test/integration/firecrawl-gateway.test.ts
@@ -479,7 +479,7 @@ npm test -- test/integration/firecrawl-gateway.test.ts
 
 Expected: FAIL because the handler still sends no-key Scrape to DeepSeek and 402 directly to fallback.
 
-- [ ] **Step 4: Integrate Keyless routing**
+- [x] **Step 4: Integrate Keyless routing**
 
 At handler scope, create:
 
@@ -539,7 +539,7 @@ fallbackReason = keylessCoolingDown
   : "firecrawl_keyless_rate_limited";
 ```
 
-- [ ] **Step 5: Run the focused integration tests**
+- [x] **Step 5: Run the focused integration tests**
 
 ```bash
 npm test -- test/integration/firecrawl-gateway.test.ts
@@ -547,7 +547,7 @@ npm test -- test/integration/firecrawl-gateway.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit staged routing**
+- [x] **Step 6: Commit staged routing**
 
 ```bash
 git add src/gateway/telemetry.ts src/gateway/handler.ts \

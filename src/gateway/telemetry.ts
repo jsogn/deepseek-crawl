@@ -9,7 +9,7 @@ export interface GatewayRequestLog {
   route: string;
   status: number;
   duration_ms: number;
-  provider: "firecrawl" | "deepseek" | "gateway" | "none";
+  provider: "firecrawl" | "firecrawl-keyless" | "deepseek" | "gateway" | "none";
   fallback: boolean;
   fallback_reason?: string;
 }

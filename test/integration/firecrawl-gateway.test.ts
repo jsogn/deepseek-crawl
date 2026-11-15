@@ -629,11 +629,16 @@ describe("Firecrawl-compatible gateway", () => {
       config: testConfig(),
       env: { FIRECRAWL_API_KEY: "fc-test" },
       deepseekClient,
-      fetchImpl: async () =>
-        Response.json(
-          { success: false, error: "Payment required to access this resource." },
-          { status: 402 },
-        ),
+      fetchImpl: async (_input, init) =>
+        new Headers(init?.headers).has("authorization")
+          ? Response.json(
+              { success: false, error: "Payment required to access this resource." },
+              { status: 402 },
+            )
+          : Response.json(
+              { success: false, error: "Keyless rate limited." },
+              { status: 429, headers: { "retry-after": "60" } },
+            ),
     });
     servers.push(server);
 
@@ -656,6 +661,78 @@ describe("Firecrawl-compatible gateway", () => {
       },
     });
     expect(deepSeekCalls).toBe(1);
+  });
+
+  it("uses keyless Firecrawl before DeepSeek when no credential exists", async () => {
+    let authorization: string | null = "unset";
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: {},
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Fetch call.");
+        },
+      },
+      fetchImpl: async (_input, init) => {
+        authorization = new Headers(init?.headers).get("authorization");
+        return Response.json({ success: true, data: { markdown: "# Keyless" } });
+      },
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      data: { markdown: "# Keyless" },
+    });
+    expect(authorization).toBeNull();
+    expect(deepSeekCalls).toBe(0);
+  });
+
+  it("tries keyless Firecrawl after a keyed 402 before DeepSeek", async () => {
+    const authorizations: Array<string | null> = [];
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: { FIRECRAWL_API_KEY: "fc-keyed" },
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          throw new Error("Unexpected Fetch call.");
+        },
+      },
+      fetchImpl: async (_input, init) => {
+        authorizations.push(new Headers(init?.headers).get("authorization"));
+        return authorizations.length === 1
+          ? Response.json({ success: false, error: "Payment required." }, { status: 402 })
+          : Response.json({ success: true, data: { markdown: "# Keyless" } });
+      },
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(authorizations).toEqual(["Bearer fc-keyed", null]);
+    expect(deepSeekCalls).toBe(0);
   });
 
   it("exposes a DeepSeek-backed crawl through Firecrawl job endpoints", async () => {
@@ -845,6 +922,7 @@ describe("Firecrawl-compatible gateway", () => {
 
   it("avoids repeated Firecrawl attempts while exhausted credits are cooling down", async () => {
     let firecrawlCalls = 0;
+    let keylessCalls = 0;
     let deepSeekCalls = 0;
     const server = await startGatewayServer({
       config: testConfig(),
@@ -858,7 +936,14 @@ describe("Firecrawl-compatible gateway", () => {
           return { title: "Example", content: "# Example" };
         },
       },
-      fetchImpl: async () => {
+      fetchImpl: async (_input, init) => {
+        if (!new Headers(init?.headers).has("authorization")) {
+          keylessCalls += 1;
+          return Response.json(
+            { success: false, error: "Keyless rate limited." },
+            { status: 429, headers: { "retry-after": "60" } },
+          );
+        }
         firecrawlCalls += 1;
         return Response.json({ success: false, error: "Payment required." }, { status: 402 });
       },
@@ -875,11 +960,13 @@ describe("Firecrawl-compatible gateway", () => {
     }
 
     expect(firecrawlCalls).toBe(1);
+    expect(keylessCalls).toBe(1);
     expect(deepSeekCalls).toBe(2);
   });
 
   it("retries Firecrawl on every request when the cooldown is disabled", async () => {
     let firecrawlCalls = 0;
+    let keylessCalls = 0;
     let deepSeekCalls = 0;
     const server = await startGatewayServer({
       config: { ...testConfig(), creditsCooldownMs: 0 },
@@ -893,7 +980,14 @@ describe("Firecrawl-compatible gateway", () => {
           return { title: "Example", content: "# Example" };
         },
       },
-      fetchImpl: async () => {
+      fetchImpl: async (_input, init) => {
+        if (!new Headers(init?.headers).has("authorization")) {
+          keylessCalls += 1;
+          return Response.json(
+            { success: false, error: "Keyless rate limited." },
+            { status: 429, headers: { "retry-after": "60" } },
+          );
+        }
         firecrawlCalls += 1;
         return Response.json({ success: false, error: "Payment required." }, { status: 402 });
       },
@@ -910,11 +1004,13 @@ describe("Firecrawl-compatible gateway", () => {
     }
 
     expect(firecrawlCalls).toBe(2);
+    expect(keylessCalls).toBe(1);
     expect(deepSeekCalls).toBe(2);
   });
 
   it("retries Firecrawl after a configured cooldown expires", async () => {
     let firecrawlCalls = 0;
+    let keylessCalls = 0;
     let deepSeekCalls = 0;
     const server = await startGatewayServer({
       config: { ...testConfig(), creditsCooldownMs: 10 },
@@ -928,7 +1024,14 @@ describe("Firecrawl-compatible gateway", () => {
           return { title: "Example", content: "# Example" };
         },
       },
-      fetchImpl: async () => {
+      fetchImpl: async (_input, init) => {
+        if (!new Headers(init?.headers).has("authorization")) {
+          keylessCalls += 1;
+          return Response.json(
+            { success: false, error: "Keyless rate limited." },
+            { status: 429, headers: { "retry-after": "60" } },
+          );
+        }
         firecrawlCalls += 1;
         return Response.json({ success: false, error: "Payment required." }, { status: 402 });
       },
@@ -950,6 +1053,7 @@ describe("Firecrawl-compatible gateway", () => {
     expect(second.status).toBe(200);
 
     expect(firecrawlCalls).toBe(2);
+    expect(keylessCalls).toBe(1);
     expect(deepSeekCalls).toBe(2);
   });
 
@@ -1003,7 +1107,7 @@ describe("Firecrawl-compatible gateway", () => {
 
   it("returns a Firecrawl-shaped 400 for malformed fallback JSON", async () => {
     const server = await startGatewayServer({
-      config: testConfig(),
+      config: { ...testConfig(), providerMode: "deepseek-first" },
       env: {},
       deepseekClient: {
         async search() {
@@ -1031,7 +1135,7 @@ describe("Firecrawl-compatible gateway", () => {
 
   it("rejects fallback features that DeepSeek cannot reproduce", async () => {
     const server = await startGatewayServer({
-      config: testConfig(),
+      config: { ...testConfig(), providerMode: "deepseek-first" },
       env: {},
       deepseekClient: {
         async search() {
@@ -1064,7 +1168,8 @@ describe("Firecrawl-compatible gateway", () => {
 
   it("does not call DeepSeek when fallback Scrape contains actions", async () => {
     let deepSeekCalls = 0;
-    let firecrawlCalls = 0;
+    let keyedCalls = 0;
+    let keylessCalls = 0;
     const server = await startGatewayServer({
       config: testConfig(),
       env: { FIRECRAWL_API_KEY: "fc-test" },
@@ -1077,8 +1182,15 @@ describe("Firecrawl-compatible gateway", () => {
           throw new Error("Unexpected Fetch call.");
         },
       },
-      fetchImpl: async () => {
-        firecrawlCalls += 1;
+      fetchImpl: async (_input, init) => {
+        if (!new Headers(init?.headers).has("authorization")) {
+          keylessCalls += 1;
+          return Response.json(
+            { success: false, error: "Keyless rate limited." },
+            { status: 429, headers: { "retry-after": "60" } },
+          );
+        }
+        keyedCalls += 1;
         return Response.json({ success: false, error: "Payment required." }, { status: 402 });
       },
     });
@@ -1100,14 +1212,15 @@ describe("Firecrawl-compatible gateway", () => {
       error: "DeepSeek fallback does not support Firecrawl option `actions`.",
       code: "unsupported_fallback_feature",
     });
-    expect(firecrawlCalls).toBe(1);
+    expect(keyedCalls).toBe(1);
+    expect(keylessCalls).toBe(1);
     expect(deepSeekCalls).toBe(0);
   });
 
   it("fails closed for Scrape actions without a Firecrawl credential", async () => {
     let deepSeekCalls = 0;
     const server = await startGatewayServer({
-      config: testConfig(),
+      config: { ...testConfig(), providerMode: "deepseek-first" },
       env: {},
       deepseekClient: {
         async search() {
@@ -1144,7 +1257,7 @@ describe("Firecrawl-compatible gateway", () => {
   it("fails closed for unsupported Search scrape options", async () => {
     let deepSeekCalls = 0;
     const server = await startGatewayServer({
-      config: testConfig(),
+      config: { ...testConfig(), providerMode: "deepseek-first" },
       env: {},
       deepseekClient: {
         async search() {
@@ -1434,8 +1547,13 @@ describe("Firecrawl-compatible gateway", () => {
     const server = await startGatewayServer({
       config: testConfig(),
       env: { FIRECRAWL_API_KEY: "fc-upstream" },
-      fetchImpl: async () =>
-        Response.json({ success: false, error: "Payment required." }, { status: 402 }),
+      fetchImpl: async (_input, init) =>
+        new Headers(init?.headers).has("authorization")
+          ? Response.json({ success: false, error: "Payment required." }, { status: 402 })
+          : Response.json(
+              { success: false, error: "Keyless rate limited." },
+              { status: 429, headers: { "retry-after": "60" } },
+            ),
       deepseekClient: {
         async search() {
           throw new Error("Unexpected Search call.");
@@ -1461,7 +1579,7 @@ describe("Firecrawl-compatible gateway", () => {
       status: 200,
       provider: "deepseek",
       fallback: true,
-      fallback_reason: "firecrawl_credits_exhausted",
+      fallback_reason: "firecrawl_keyless_rate_limited",
     });
   });
 

@@ -248,7 +248,7 @@ git commit -m "feat: add Firecrawl keyless policy"
   - `type FirecrawlCredentialMode = "configured" | "keyless"`
   - `FirecrawlUpstreamRequest.credentialMode?: FirecrawlCredentialMode`
 
-- [ ] **Step 1: Add failing upstream authorization tests**
+- [x] **Step 1: Add failing upstream authorization tests**
 
 Append to `test/unit/firecrawl-upstream.test.ts`:
 
@@ -295,7 +295,7 @@ Append to `test/unit/firecrawl-upstream.test.ts`:
   });
 ```
 
-- [ ] **Step 2: Run the upstream tests and verify failure**
+- [x] **Step 2: Run the upstream tests and verify failure**
 
 ```bash
 npm test -- test/unit/firecrawl-upstream.test.ts
@@ -303,7 +303,7 @@ npm test -- test/unit/firecrawl-upstream.test.ts
 
 Expected: FAIL because `credentialMode` is not implemented.
 
-- [ ] **Step 3: Implement credential mode**
+- [x] **Step 3: Implement credential mode**
 
 In `src/firecrawl/upstream.ts`:
 
@@ -351,7 +351,7 @@ function upstreamHeaders(
 
 Pass `input.credentialMode ?? "configured"` from `requestFirecrawlUpstream`.
 
-- [ ] **Step 4: Run upstream tests**
+- [x] **Step 4: Run upstream tests**
 
 ```bash
 npm test -- test/unit/firecrawl-upstream.test.ts
@@ -359,7 +359,7 @@ npm test -- test/unit/firecrawl-upstream.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit upstream credential mode**
+- [x] **Step 5: Commit upstream credential mode**
 
 ```bash
 git add src/firecrawl/upstream.ts test/unit/firecrawl-upstream.test.ts

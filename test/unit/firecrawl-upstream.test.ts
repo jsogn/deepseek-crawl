@@ -55,4 +55,45 @@ describe("Firecrawl upstream client", () => {
     controller.abort(new Error("client disconnected"));
     expect(signal?.aborted).toBe(true);
   });
+
+  it("preserves configured credentials by default", async () => {
+    let authorization: string | null = "unset";
+    await requestFirecrawlUpstream(
+      {
+        method: "POST",
+        path: "/v2/scrape",
+        headers: new Headers({ authorization: "Bearer caller-key" }),
+      },
+      {
+        config,
+        env: { FIRECRAWL_API_KEY: "fc-environment" },
+        fetchImpl: async (_input, init) => {
+          authorization = new Headers(init?.headers).get("authorization");
+          return Response.json({ success: true });
+        },
+      },
+    );
+    expect(authorization).toBe("Bearer caller-key");
+  });
+
+  it("strips every authorization source in keyless mode", async () => {
+    let authorization: string | null = "unset";
+    await requestFirecrawlUpstream(
+      {
+        method: "POST",
+        path: "/v2/scrape",
+        headers: new Headers({ authorization: "Bearer caller-key" }),
+        credentialMode: "keyless",
+      },
+      {
+        config: { ...config, firecrawlApiKey: "fc-configured" },
+        env: { FIRECRAWL_API_KEY: "fc-environment" },
+        fetchImpl: async (_input, init) => {
+          authorization = new Headers(init?.headers).get("authorization");
+          return Response.json({ success: true });
+        },
+      },
+    );
+    expect(authorization).toBeNull();
+  });
 });

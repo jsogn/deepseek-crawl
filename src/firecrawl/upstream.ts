@@ -34,7 +34,10 @@ export interface FirecrawlUpstreamRequest {
   headers: Headers;
   body?: Uint8Array;
   signal?: AbortSignal;
+  credentialMode?: FirecrawlCredentialMode;
 }
+
+export type FirecrawlCredentialMode = "configured" | "keyless";
 
 export interface FirecrawlUpstreamDependencies {
   config: GatewayConfig;
@@ -46,12 +49,18 @@ function upstreamHeaders(
   source: Headers,
   env: NodeJS.ProcessEnv,
   configuredKey: string | undefined,
+  credentialMode: FirecrawlCredentialMode,
 ): Headers {
   const headers = new Headers();
   for (const [name, value] of source) {
     if (!BLOCKED_REQUEST_HEADERS.has(name.toLowerCase())) {
       headers.set(name, value);
     }
+  }
+
+  if (credentialMode === "keyless") {
+    headers.delete("authorization");
+    return headers;
   }
 
   const upstreamKey = configuredKey?.trim() || env.FIRECRAWL_API_KEY?.trim();
@@ -85,7 +94,12 @@ export async function requestFirecrawlUpstream(
   );
   const init: RequestInit = {
     method: input.method,
-    headers: upstreamHeaders(input.headers, dependencies.env, dependencies.config.firecrawlApiKey),
+    headers: upstreamHeaders(
+      input.headers,
+      dependencies.env,
+      dependencies.config.firecrawlApiKey,
+      input.credentialMode ?? "configured",
+    ),
     redirect: "manual",
     signal: input.signal
       ? AbortSignal.any([input.signal, AbortSignal.timeout(dependencies.config.timeoutMs)])

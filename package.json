@@ -1,6 +1,6 @@
 {
   "name": "deepseek-crawl",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "Firecrawl-compatible gateway with Keyless and DeepSeek fallback, plus an Agent-native search, fetch, map, and crawl CLI",
   "type": "module",
   "license": "MIT",

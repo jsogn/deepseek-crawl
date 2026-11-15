@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.15.1 - 2026-11-15
+
+### Fixed
+
+- Retry transient macOS `launchctl` bootstrap I/O errors during immediate
+  managed Gateway reinstalls, so upgrades complete instead of rolling back.
+
+### Testing
+
+- Add regression coverage for back-to-back managed Gateway reinstalls and
+  verify the repaired service against a real Firecrawl Scrape.
+
 ## 0.15.0 - 2026-11-15
 
 ### Added

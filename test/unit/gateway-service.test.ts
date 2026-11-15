@@ -208,6 +208,19 @@ async function windowsFixture() {
   return { context, paths, scheduler };
 }
 
+function advancedFetch(gatewayHealth: () => Response): typeof fetch {
+  return async (input) => {
+    const url = String(input);
+    if (url === "http://127.0.0.1:3002/healthz") {
+      return new Response("ok");
+    }
+    if (url === "http://127.0.0.1:3002/v2/crawl/active") {
+      return Response.json([]);
+    }
+    return gatewayHealth();
+  };
+}
+
 describe.skipIf(process.platform === "win32")("managed Gateway service", () => {
   it("installs a persistent service and points the Firecrawl CLI at it", async () => {
     const { context, launchctl, paths } = await fixture();
@@ -239,6 +252,150 @@ describe.skipIf(process.platform === "win32")("managed Gateway service", () => {
       apiUrl: LOCAL_API_URL,
       custom: "keep",
     });
+  });
+
+  it("does not probe PageSift for a default install", async () => {
+    const { context } = await fixture();
+    const calls: string[] = [];
+    context.fetchImpl = async (input) => {
+      calls.push(String(input));
+      return Response.json({ status: "ok", pid: 4242, provider_mode: "firecrawl-first" });
+    };
+
+    await installGatewayService(context, {
+      providerMode: "firecrawl-first",
+      port: 8787,
+    });
+
+    expect(calls.every((url) => !url.includes(":3002"))).toBe(true);
+  });
+
+  it("persists advanced settings and passes them to the managed process", async () => {
+    const { context, paths } = await fixture();
+    context.fetchImpl = advancedFetch(() =>
+      Response.json({ status: "ok", pid: 4242, provider_mode: "firecrawl-first" }),
+    );
+
+    const status = await installGatewayService(context, {
+      providerMode: "firecrawl-first",
+      port: 8787,
+      advanced: true,
+      advancedUrl: "http://127.0.0.1:3002",
+    });
+
+    expect(status.advanced_backend).toMatchObject({
+      enabled: true,
+      provider: "pagesift",
+      api_ready: true,
+    });
+    expect(await readFile(paths.launcherPath, "utf8")).toContain(
+      "--advanced --advanced-url 'http://127.0.0.1:3002/'",
+    );
+    expect(JSON.parse(await readFile(paths.statePath, "utf8"))).toMatchObject({
+      advancedBackend: {
+        provider: "pagesift",
+        url: "http://127.0.0.1:3002/",
+      },
+    });
+  });
+
+  it("does not modify install state when PageSift preflight fails", async () => {
+    const { context, paths } = await fixture();
+    context.fetchImpl = async (input) => {
+      if (String(input).endsWith("/healthz")) {
+        return new Response("not pagesift");
+      }
+      return Response.json({ status: "ok", pid: 4242 });
+    };
+
+    await expect(
+      installGatewayService(context, {
+        providerMode: "firecrawl-first",
+        port: 8787,
+        advanced: true,
+      }),
+    ).rejects.toThrow(/PageSift/i);
+
+    await expect(lstat(paths.statePath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(JSON.parse(await readFile(paths.firecrawlCredentialsPath, "utf8")).apiUrl).toBe(
+      CLOUD_API_URL,
+    );
+  });
+
+  it("requires a stored PageSift key for a managed remote backend", async () => {
+    const { context } = await fixture();
+    context.env = {
+      PATH: "/usr/bin:/bin",
+      PAGESIFT_API_KEY: "environment-only-secret",
+    };
+    context.credentialStores = {
+      pagesift: {
+        name: "keychain",
+        get: () => undefined,
+        set: () => undefined,
+        remove: () => undefined,
+      },
+    };
+    context.fetchImpl = advancedFetch(() =>
+      Response.json({ status: "ok", pid: 4242, provider_mode: "firecrawl-first" }),
+    );
+
+    await expect(
+      installGatewayService(context, {
+        providerMode: "firecrawl-first",
+        port: 8787,
+        advanced: true,
+        advancedUrl: "https://pagesift.example/",
+      }),
+    ).rejects.toThrow(/PageSift.*credential/i);
+  });
+
+  it("preserves advanced settings when reinstall omits advanced flags", async () => {
+    const { context, paths } = await fixture();
+    context.fetchImpl = advancedFetch(() =>
+      Response.json({ status: "ok", pid: 4242, provider_mode: "firecrawl-first" }),
+    );
+
+    await installGatewayService(context, {
+      providerMode: "firecrawl-first",
+      port: 8787,
+      advanced: true,
+      advancedUrl: "http://127.0.0.1:3002",
+    });
+    await installGatewayService(context, {
+      providerMode: "firecrawl-first",
+      port: 8787,
+    });
+
+    expect(JSON.parse(await readFile(paths.statePath, "utf8"))).toMatchObject({
+      advancedBackend: {
+        provider: "pagesift",
+        url: "http://127.0.0.1:3002/",
+      },
+    });
+  });
+
+  it("removes advanced settings with noAdvanced", async () => {
+    const { context, paths } = await fixture();
+    context.fetchImpl = advancedFetch(() =>
+      Response.json({ status: "ok", pid: 4242, provider_mode: "firecrawl-first" }),
+    );
+
+    await installGatewayService(context, {
+      providerMode: "firecrawl-first",
+      port: 8787,
+      advanced: true,
+      advancedUrl: "http://127.0.0.1:3002",
+    });
+    await installGatewayService(context, {
+      providerMode: "firecrawl-first",
+      port: 8787,
+      noAdvanced: true,
+    });
+
+    const state = JSON.parse(await readFile(paths.statePath, "utf8"));
+    expect(state.advancedBackend).toBeUndefined();
+    expect(await readFile(paths.launcherPath, "utf8")).not.toContain("--advanced");
   });
 
   it("restores the cloud endpoint when stopped and reapplies the proxy when started", async () => {
@@ -393,6 +550,24 @@ describe("managed Windows Gateway service", () => {
       apiKey: "fc-windows",
       apiUrl: LOCAL_API_URL,
     });
+  });
+
+  it("passes advanced settings to the Windows launcher", async () => {
+    const { context, paths } = await windowsFixture();
+    context.fetchImpl = advancedFetch(() =>
+      Response.json({ status: "ok", pid: 5151, provider_mode: "firecrawl-first" }),
+    );
+
+    await installGatewayService(context, {
+      providerMode: "firecrawl-first",
+      port: 8787,
+      advanced: true,
+      advancedUrl: "http://127.0.0.1:3002",
+    });
+
+    expect(await readFile(paths.launcherPath, "utf8")).toContain(
+      '--advanced --advanced-url "http://127.0.0.1:3002/"',
+    );
   });
 
   it("stops, restarts, and fully uninstalls the Windows task", async () => {

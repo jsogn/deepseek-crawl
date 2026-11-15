@@ -379,6 +379,10 @@ Options:
   --provider-mode <mode>
                       firecrawl-first (default), deepseek-first, or no-fallback
   --port <1..65535>   Managed listener port (default: 8787)
+  --advanced          Enable the default loopback PageSift backend
+  --advanced-url <url>
+                      Enable PageSift at an explicit HTTP(S) root URL
+  --no-advanced       Disable a previously configured PageSift backend
   --json              Print a stable machine-readable result
 `,
   "gateway start": `Usage: deepseek-crawl gateway start [--json]
@@ -613,6 +617,7 @@ function gatewayServiceManager(deps: CliDependencies): GatewayServiceManager {
       nodePath: process.execPath,
       cliPath: fileURLToPath(new URL("../bin.js", import.meta.url)),
       env: deps.env,
+      ...(deps.credentialStores === undefined ? {} : { credentialStores: deps.credentialStores }),
       fetchImpl: deps.fetchImpl,
     })
   );
@@ -635,6 +640,11 @@ function formatGatewayServiceStatus(
   if (status.provider_mode) {
     lines.push(`Provider mode: ${status.provider_mode}`);
   }
+  lines.push(
+    status.advanced_backend.enabled
+      ? `Advanced backend: pagesift (${status.advanced_backend.api_ready ? "ready" : "unavailable"})`
+      : "Advanced backend: disabled",
+  );
   if (status.issues.length > 0) {
     lines.push("Issues:", ...status.issues.map((issue) => `- ${issue}`));
   }
@@ -648,6 +658,9 @@ async function runGatewayInstall(
   const status = await gatewayServiceManager(deps).install({
     providerMode: command.providerMode ?? "firecrawl-first",
     port: command.port ?? 8787,
+    ...(command.advanced === undefined ? {} : { advanced: command.advanced }),
+    ...(command.advancedUrl === undefined ? {} : { advancedUrl: command.advancedUrl }),
+    ...(command.noAdvanced === undefined ? {} : { noAdvanced: command.noAdvanced }),
   });
   deps.stdout.write(
     command.json

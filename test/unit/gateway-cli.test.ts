@@ -81,6 +81,14 @@ function serviceStatus(overrides: Partial<GatewayServiceStatus> = {}): GatewaySe
     gateway_url: "http://127.0.0.1:8787/",
     client_api_url: "http://127.0.0.1:8787",
     service_path: "/tmp/com.jsogn.deepseek-crawl.gateway.plist",
+    advanced_backend: {
+      enabled: false,
+      provider: null,
+      url: null,
+      reachable: false,
+      api_ready: false,
+      credential_configured: false,
+    },
     issues: [],
     ...overrides,
   };
@@ -126,6 +134,41 @@ describe("gateway discovery commands", () => {
       running: true,
       healthy: true,
       client_targets_gateway: true,
+    });
+  });
+
+  it("passes advanced install options to the service manager", async () => {
+    const directory = await runtimeDirectory();
+    const lifecycle = dependencies(directory);
+    let received: Parameters<GatewayServiceManager["install"]>[0] | undefined;
+    lifecycle.deps.gatewayServiceManager = {
+      async install(options) {
+        received = options;
+        return serviceStatus();
+      },
+      async start() {
+        throw new Error("Unexpected start.");
+      },
+      async stop() {
+        throw new Error("Unexpected stop.");
+      },
+      async uninstall() {
+        throw new Error("Unexpected uninstall.");
+      },
+      async status() {
+        return serviceStatus();
+      },
+    } satisfies GatewayServiceManager;
+
+    expect(
+      await runCli(
+        ["gateway", "install", "--advanced-url", "http://127.0.0.1:3002", "--json"],
+        lifecycle.deps,
+      ),
+    ).toBe(0);
+    expect(received).toMatchObject({
+      advanced: true,
+      advancedUrl: "http://127.0.0.1:3002",
     });
   });
 

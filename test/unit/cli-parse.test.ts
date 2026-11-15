@@ -502,6 +502,22 @@ describe("parseCli", () => {
       kind: "gateway-install",
       json: false,
     });
+    expect(parseCli(["gateway", "install", "--advanced", "--json"])).toEqual({
+      kind: "gateway-install",
+      advanced: true,
+      json: true,
+    });
+    expect(parseCli(["gateway", "install", "--advanced-url", "http://127.0.0.1:3002"])).toEqual({
+      kind: "gateway-install",
+      advanced: true,
+      advancedUrl: "http://127.0.0.1:3002",
+      json: false,
+    });
+    expect(parseCli(["gateway", "install", "--no-advanced"])).toEqual({
+      kind: "gateway-install",
+      noAdvanced: true,
+      json: false,
+    });
     expect(parseCli(["gateway", "start", "--json"])).toEqual({
       kind: "gateway-start",
       json: true,
@@ -734,6 +750,12 @@ describe("parseCli", () => {
     [["gateway", "--max-crawl-jobs", "0"], /crawl/i],
     [["gateway", "--max-retained-crawl-jobs", "1001"], /retained/i],
     [["gateway", "--max-retained-crawl-bytes", "0"], /retained/i],
+    [["gateway", "install", "--advanced", "--no-advanced"], /mutually exclusive/i],
+    [
+      ["gateway", "install", "--advanced-url", "http://127.0.0.1:3002", "--no-advanced"],
+      /mutually exclusive/i,
+    ],
+    [["gateway", "--no-advanced"], /unknown option/i],
     [["gateway", "url", "--port", "0"], /port/i],
     [["gateway", "status", "--port", "8787"], /unknown option/i],
     [["gateway", "url", "extra"], /argument/i],

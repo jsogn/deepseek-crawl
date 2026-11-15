@@ -167,6 +167,9 @@ export type ParsedCommand =
       kind: "gateway-install";
       providerMode?: GatewayProviderMode;
       port?: number;
+      advanced?: boolean;
+      advancedUrl?: string;
+      noAdvanced?: boolean;
       json: boolean;
     }
   | { kind: "gateway-start"; json: boolean }
@@ -1019,6 +1022,9 @@ export function parseCli(argv: string[]): ParsedCommand {
             options: {
               "provider-mode": { type: "string" },
               port: { type: "string" },
+              advanced: { type: "boolean" },
+              "advanced-url": { type: "string" },
+              "no-advanced": { type: "boolean" },
               json: { type: "boolean" },
               help: { type: "boolean", short: "h" },
             },
@@ -1031,10 +1037,23 @@ export function parseCli(argv: string[]): ParsedCommand {
             parsed.values.port === undefined
               ? undefined
               : parseInteger(parsed.values.port, "port", 1, 65_535);
+          const advancedUrl = parsed.values["advanced-url"]?.trim();
+          if (parsed.values["advanced-url"] !== undefined && !advancedUrl) {
+            throw new CliUsageError("Advanced URL is required.");
+          }
+          if (
+            parsed.values["no-advanced"] &&
+            (parsed.values.advanced || parsed.values["advanced-url"] !== undefined)
+          ) {
+            throw new CliUsageError("--no-advanced and advanced options are mutually exclusive.");
+          }
           return {
             kind: "gateway-install",
             ...(providerMode === undefined ? {} : { providerMode }),
             ...(port === undefined ? {} : { port }),
+            ...(parsed.values.advanced || advancedUrl !== undefined ? { advanced: true } : {}),
+            ...(advancedUrl === undefined ? {} : { advancedUrl }),
+            ...(parsed.values["no-advanced"] ? { noAdvanced: true } : {}),
             json: parsed.values.json ?? false,
           };
         }

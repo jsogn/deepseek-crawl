@@ -1,8 +1,18 @@
 import { spawn } from "node:child_process";
 import { chmod, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { CredentialName, CredentialStore } from "../credentials/store.js";
 import { writeFileAtomic } from "../output/files.js";
-import type { GatewayProviderMode } from "./config.js";
+import {
+  type AdvancedBackendStatus,
+  disabledAdvancedBackendStatus,
+  probePageSift,
+} from "./advanced-backend.js";
+import {
+  DEFAULT_ADVANCED_BACKEND_URL,
+  type GatewayProviderMode,
+  loadGatewayConfig,
+} from "./config.js";
 
 const SERVICE_LABEL = "com.jsogn.deepseek-crawl.gateway";
 const WINDOWS_TASK_NAME = "DeepSeek Crawl Gateway";
@@ -30,6 +40,7 @@ export interface GatewayServiceContext {
   nodePath: string;
   cliPath: string;
   env?: NodeJS.ProcessEnv;
+  credentialStores?: Partial<Record<CredentialName, CredentialStore>>;
   runCommand?: GatewayCommandRunner;
   fetchImpl?: typeof fetch;
   wait?: (milliseconds: number) => Promise<void>;
@@ -57,6 +68,10 @@ interface GatewayServiceState {
   desiredRunning: boolean;
   installedAt: string;
   originalFirecrawlApiUrl: FirecrawlApiUrlSnapshot;
+  advancedBackend?: {
+    provider: "pagesift";
+    url: string;
+  };
 }
 
 export interface GatewayServiceStatus {
@@ -70,6 +85,7 @@ export interface GatewayServiceStatus {
   gateway_url: string | null;
   client_api_url: string | null;
   service_path: string | null;
+  advanced_backend: AdvancedBackendStatus;
   issues: string[];
 }
 
@@ -77,6 +93,9 @@ export interface GatewayServiceManager {
   install(options: {
     providerMode: GatewayProviderMode;
     port: number;
+    advanced?: boolean;
+    advancedUrl?: string;
+    noAdvanced?: boolean;
   }): Promise<GatewayServiceStatus>;
   start(): Promise<GatewayServiceStatus>;
   stop(): Promise<GatewayServiceStatus>;
@@ -129,6 +148,12 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+function serviceGatewayEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const serviceEnv = { ...env };
+  delete serviceEnv.PAGESIFT_API_KEY;
+  return serviceEnv;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -145,6 +170,31 @@ function validatePort(value: unknown): number {
     throw new Error("Gateway service state contains an invalid port.");
   }
   return value as number;
+}
+
+function validateAdvancedBackendState(value: unknown): GatewayServiceState["advancedBackend"] {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!value || typeof value !== "object") {
+    throw new Error("Gateway service state contains invalid advanced backend data.");
+  }
+  const candidate = value as Record<string, unknown>;
+  if (candidate.provider !== "pagesift" || typeof candidate.url !== "string") {
+    throw new Error("Gateway service state contains invalid advanced backend data.");
+  }
+  const url = new URL(candidate.url);
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash ||
+    url.username ||
+    url.password
+  ) {
+    throw new Error("Gateway service state contains invalid advanced backend URL.");
+  }
+  return { provider: "pagesift", url: url.href };
 }
 
 export function resolveGatewayServicePaths(
@@ -225,6 +275,7 @@ async function readServiceState(path: string): Promise<GatewayServiceState | und
   if (!isRecord(value.originalFirecrawlApiUrl)) {
     throw new Error("Gateway service state is missing the Firecrawl API URL backup.");
   }
+  const advancedBackend = validateAdvancedBackendState(value.advancedBackend);
   return {
     version: 1,
     providerMode: validateProviderMode(value.providerMode),
@@ -237,6 +288,7 @@ async function readServiceState(path: string): Promise<GatewayServiceState | und
         ? { value: value.originalFirecrawlApiUrl.value }
         : {}),
     },
+    ...(advancedBackend === undefined ? {} : { advancedBackend }),
   };
 }
 
@@ -327,10 +379,16 @@ async function writeServiceFiles(
 ): Promise<void> {
   await mkdir(paths.serviceDirectory, { recursive: true, mode: 0o700 });
   await mkdir(paths.logsDirectory, { recursive: true, mode: 0o700 });
+  const advancedArgs = state.advancedBackend
+    ? ` --advanced --advanced-url ${shellQuote(state.advancedBackend.url)}`
+    : "";
   if (context.platform === "win32") {
+    const windowsAdvancedArgs = state.advancedBackend
+      ? ` --advanced --advanced-url "${state.advancedBackend.url}"`
+      : "";
     const launcher = [
       "@echo off",
-      `"${context.nodePath}" "${context.cliPath}" gateway --provider-mode ${state.providerMode} --port ${state.port} 1>>"${join(paths.logsDirectory, "gateway.log")}" 2>>"${join(paths.logsDirectory, "gateway.err.log")}"`,
+      `"${context.nodePath}" "${context.cliPath}" gateway --provider-mode ${state.providerMode} --port ${state.port}${windowsAdvancedArgs} 1>>"${join(paths.logsDirectory, "gateway.log")}" 2>>"${join(paths.logsDirectory, "gateway.err.log")}"`,
       "",
     ].join("\r\n");
     await writeFileAtomic(paths.launcherPath, launcher, { mode: 0o600 });
@@ -398,7 +456,7 @@ async function writeServiceFiles(
     "#!/bin/sh",
     "set -eu",
     "umask 077",
-    `exec ${shellQuote(context.nodePath)} ${shellQuote(context.cliPath)} gateway --provider-mode ${shellQuote(state.providerMode)} --port ${state.port}`,
+    `exec ${shellQuote(context.nodePath)} ${shellQuote(context.cliPath)} gateway --provider-mode ${shellQuote(state.providerMode)} --port ${state.port}${advancedArgs}`,
     "",
   ].join("\n");
   await writeFileAtomic(paths.launcherPath, launcher, { mode: 0o700 });
@@ -701,6 +759,45 @@ async function startFromState(
   return getGatewayServiceStatus(context);
 }
 
+async function serviceAdvancedStatus(
+  context: GatewayServiceContext,
+  state: GatewayServiceState,
+): Promise<AdvancedBackendStatus> {
+  if (!state.advancedBackend) {
+    return disabledAdvancedBackendStatus();
+  }
+  const env = serviceGatewayEnvironment(context.env ?? process.env);
+  try {
+    const config = loadGatewayConfig({
+      advancedUrl: state.advancedBackend.url,
+      env,
+      ...(context.credentialStores === undefined
+        ? {}
+        : { credentialStores: context.credentialStores }),
+    }).advancedBackend;
+    if (!config) {
+      throw new Error("PageSift configuration did not resolve.");
+    }
+    return await probePageSift(config, context.fetchImpl ?? fetch);
+  } catch {
+    let credentialConfigured = Boolean(env.PAGESIFT_API_KEY?.trim());
+    try {
+      credentialConfigured =
+        credentialConfigured || context.credentialStores?.pagesift?.get() !== undefined;
+    } catch {
+      credentialConfigured = Boolean(env.PAGESIFT_API_KEY?.trim());
+    }
+    return {
+      enabled: true,
+      provider: "pagesift",
+      url: state.advancedBackend.url,
+      reachable: false,
+      api_ready: false,
+      credential_configured: credentialConfigured,
+    };
+  }
+}
+
 function unsupportedStatus(): GatewayServiceStatus {
   return {
     supported: false,
@@ -713,6 +810,7 @@ function unsupportedStatus(): GatewayServiceStatus {
     gateway_url: null,
     client_api_url: null,
     service_path: null,
+    advanced_backend: disabledAdvancedBackendStatus(),
     issues: ["Managed Gateway services are supported on macOS and Windows only."],
   };
 }
@@ -737,6 +835,7 @@ export async function getGatewayServiceStatus(
       gateway_url: null,
       client_api_url: normalizedUrl(await currentFirecrawlApiUrl(paths.firecrawlCredentialsPath)),
       service_path: null,
+      advanced_backend: disabledAdvancedBackendStatus(),
       issues: [],
     };
   }
@@ -787,6 +886,7 @@ export async function getGatewayServiceStatus(
   if (!state.desiredRunning && runtime.running) {
     issues.push("Gateway service is running while marked as stopped.");
   }
+  const advancedBackend = await serviceAdvancedStatus(context, state);
   return {
     supported: true,
     installed: launcherExists && definitionExists,
@@ -798,22 +898,62 @@ export async function getGatewayServiceStatus(
     gateway_url: `${expectedUrl}/`,
     client_api_url: normalizedUrl(clientApiUrl),
     service_path: paths.serviceDefinitionPath,
+    advanced_backend: advancedBackend,
     issues,
   };
 }
 
 export async function installGatewayService(
   context: GatewayServiceContext,
-  options: { providerMode: GatewayProviderMode; port: number },
+  options: {
+    providerMode: GatewayProviderMode;
+    port: number;
+    advanced?: boolean;
+    advancedUrl?: string;
+    noAdvanced?: boolean;
+  },
 ): Promise<GatewayServiceStatus> {
   if (context.platform !== "darwin" && context.platform !== "win32") {
     throw new Error("Managed Gateway services are supported on macOS and Windows only.");
   }
   const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
+  const env = serviceGatewayEnvironment(context.env ?? process.env);
   const existing = await readServiceState(paths.statePath);
   const credentials = await readFirecrawlCredentials(paths.firecrawlCredentialsPath);
   if (!credentials) {
     throw new Error("Firecrawl CLI credentials were not found. Run `firecrawl config` first.");
+  }
+  const previousAdvanced = existing?.advancedBackend;
+  const requestedUrl =
+    options.advancedUrl ??
+    (options.advanced
+      ? env.DEEPSEEK_GATEWAY_ADVANCED_URL?.trim() || DEFAULT_ADVANCED_BACKEND_URL
+      : undefined);
+  let advanced =
+    options.noAdvanced === true
+      ? undefined
+      : requestedUrl === undefined
+        ? previousAdvanced
+        : {
+            provider: "pagesift" as const,
+            url: requestedUrl,
+          };
+  if (advanced) {
+    const resolved = loadGatewayConfig({
+      advancedUrl: advanced.url,
+      env,
+      ...(context.credentialStores === undefined
+        ? {}
+        : { credentialStores: context.credentialStores }),
+    }).advancedBackend;
+    if (!resolved) {
+      throw new Error("PageSift configuration did not resolve.");
+    }
+    const probe = await probePageSift(resolved, context.fetchImpl ?? fetch);
+    if (!probe.reachable || !probe.api_ready) {
+      throw new Error("PageSift preflight failed: service or credential is unavailable.");
+    }
+    advanced = { provider: "pagesift", url: resolved.url.href };
   }
   const state: GatewayServiceState = {
     version: 1,
@@ -823,6 +963,7 @@ export async function installGatewayService(
     installedAt: existing?.installedAt ?? new Date().toISOString(),
     originalFirecrawlApiUrl:
       existing?.originalFirecrawlApiUrl ?? firecrawlApiSnapshot(credentials, options.port),
+    ...(advanced === undefined ? {} : { advancedBackend: advanced }),
   };
   await writeServiceFiles(context, paths, state);
   try {

@@ -242,12 +242,14 @@ npm ci
 npm run verify
 ```
 
-Normal tests do not call a real Provider. Explicit live tests are billable and
-require additional confirmation:
+Normal tests do not call a real Provider. Explicit live tests use real services;
+DeepSeek and Gateway tests are billable, while the Keyless test consumes the
+current public IP's daily free quota:
 
 ```bash
 DEEPSEEK_API_KEY=sk-... npm run test:live
 npm run test:live:gateway -- --billable
+npm run test:live:keyless
 ```
 
 The project is licensed under MIT.

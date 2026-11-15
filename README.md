@@ -212,11 +212,13 @@ npm ci
 npm run verify
 ```
 
-普通测试不访问真实 Provider。显式 live 测试会计费，必须额外确认：
+普通测试不访问真实 Provider。显式 live 测试会访问真实服务；DeepSeek 和 Gateway
+测试会计费，Keyless 测试消耗当前公网 IP 的每日免费配额：
 
 ```bash
 DEEPSEEK_API_KEY=sk-... npm run test:live
 npm run test:live:gateway -- --billable
+npm run test:live:keyless
 ```
 
 项目使用 MIT License。

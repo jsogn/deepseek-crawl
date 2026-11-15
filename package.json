@@ -66,7 +66,8 @@
     "check:release": "node scripts/check-release.mjs",
     "prepublishOnly": "npm run verify && npm run check:release",
     "test:live": "npm run build && node scripts/live-smoke.mjs",
-    "test:live:gateway": "npm run build && node scripts/live-gateway-smoke.mjs"
+    "test:live:gateway": "npm run build && node scripts/live-gateway-smoke.mjs",
+    "test:live:keyless": "npm run build && node scripts/live-keyless-smoke.mjs --confirm"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

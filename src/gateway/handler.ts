@@ -637,6 +637,9 @@ export function createGatewayHandler(
         const remainingMs = keylessCooldown.remainingMs(keylessTime);
         if (remainingMs > 0) {
           if (route === undefined) {
+            provider = "firecrawl-keyless";
+            fallback = true;
+            fallbackReason = "firecrawl_keyless_cooldown";
             sendJson(
               response,
               429,

@@ -576,7 +576,7 @@ git commit -m "feat: route local gateways through Firecrawl keyless"
 - Consumes all prior tasks.
 - Produces no additional public API.
 
-- [ ] **Step 1: Add Keyless cooldown and advanced-route tests**
+- [x] **Step 1: Add Keyless cooldown and advanced-route tests**
 
 Add integration cases:
 
@@ -707,7 +707,7 @@ Add integration cases:
   });
 ```
 
-- [ ] **Step 2: Add remote-mode and official-SDK no-key tests**
+- [x] **Step 2: Add remote-mode and official-SDK no-key tests**
 
 Add remote mode coverage:
 
@@ -802,7 +802,7 @@ rg -n 'env: \\{\\}' test/integration/firecrawl-gateway.test.ts
 Preserve each test's original intent rather than changing expectations to
 Keyless accidentally.
 
-- [ ] **Step 3: Run focused advanced tests**
+- [x] **Step 3: Run focused advanced tests**
 
 ```bash
 npm test -- test/integration/firecrawl-gateway.test.ts \
@@ -811,7 +811,7 @@ npm test -- test/integration/firecrawl-gateway.test.ts \
 
 Expected: PASS.
 
-- [ ] **Step 4: Update documentation**
+- [x] **Step 4: Update documentation**
 
 README tables become:
 
@@ -832,7 +832,7 @@ Document:
 
 Update both operations guides and the CLI reference with the same contract.
 
-- [ ] **Step 5: Add changelog**
+- [x] **Step 5: Add changelog**
 
 At the top of `CHANGELOG.md`:
 
@@ -845,13 +845,13 @@ At the top of `CHANGELOG.md`:
   supported local routes before DeepSeek fallback.
 ```
 
-- [ ] **Step 6: Run full verification**
+- [x] **Step 6: Run full verification**
 
 ```bash
 npm run verify
 ```
 
-- [ ] **Step 7: Review diff and commit**
+- [x] **Step 7: Review diff and commit**
 
 ```bash
 git diff --check
@@ -869,14 +869,14 @@ git commit -m "test: cover Firecrawl keyless fallback"
 
 ## Final Acceptance Checklist
 
-- [ ] Local `firecrawl-first` uses Keyless before DeepSeek for supported routes.
-- [ ] Keyed `402` tries Keyless next.
-- [ ] Keyless requests never contain Authorization.
-- [ ] Keyless `429` uses Retry-After or a 15-minute default cooldown.
-- [ ] Keyless-only cooldown returns `429 keyless_rate_limited`.
-- [ ] Remote gateways never use Keyless.
-- [ ] Existing provider modes remain unchanged.
-- [ ] Advanced Parse and Post-Scrape Interact pass through.
-- [ ] No IP rotation or bypass behavior exists.
-- [ ] README, operations, CLI reference, and changelog are aligned.
-- [ ] `npm run verify` passes.
+- [x] Local `firecrawl-first` uses Keyless before DeepSeek for supported routes.
+- [x] Keyed `402` tries Keyless next.
+- [x] Keyless requests never contain Authorization.
+- [x] Keyless `429` uses Retry-After or a 15-minute default cooldown.
+- [x] Keyless-only cooldown returns `429 keyless_rate_limited`.
+- [x] Remote gateways never use Keyless.
+- [x] Existing provider modes remain unchanged.
+- [x] Advanced Parse and Post-Scrape Interact pass through.
+- [x] No IP rotation or bypass behavior exists.
+- [x] README, operations, CLI reference, and changelog are aligned.
+- [x] `npm run verify` passes.

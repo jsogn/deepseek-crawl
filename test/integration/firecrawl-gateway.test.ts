@@ -664,6 +664,7 @@ describe("Firecrawl-compatible gateway", () => {
   });
 
   it("uses keyless Firecrawl before DeepSeek when no credential exists", async () => {
+    const events: GatewayRequestLog[] = [];
     let authorization: string | null = "unset";
     let deepSeekCalls = 0;
     const server = await startGatewayServer({
@@ -682,6 +683,7 @@ describe("Firecrawl-compatible gateway", () => {
         authorization = new Headers(init?.headers).get("authorization");
         return Response.json({ success: true, data: { markdown: "# Keyless" } });
       },
+      logger: (event) => events.push(event),
     });
     servers.push(server);
 
@@ -698,6 +700,14 @@ describe("Firecrawl-compatible gateway", () => {
     });
     expect(authorization).toBeNull();
     expect(deepSeekCalls).toBe(0);
+    expect(events).toMatchObject([
+      {
+        provider: "firecrawl-keyless",
+        fallback: true,
+        fallback_reason: "firecrawl_keyless_no_credential",
+        status: 200,
+      },
+    ]);
   });
 
   it("tries keyless Firecrawl after a keyed 402 before DeepSeek", async () => {
@@ -733,6 +743,168 @@ describe("Firecrawl-compatible gateway", () => {
     expect(response.status).toBe(200);
     expect(authorizations).toEqual(["Bearer fc-keyed", null]);
     expect(deepSeekCalls).toBe(0);
+  });
+
+  it("uses DeepSeek after keyless 429 and does not retry Keyless during cooldown", async () => {
+    let keylessCalls = 0;
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: {},
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          return { title: "Example", content: "# DeepSeek" };
+        },
+      },
+      fetchImpl: async () => {
+        keylessCalls += 1;
+        return Response.json(
+          { success: false, error: "Rate limited." },
+          { status: 429, headers: { "retry-after": "60" } },
+        );
+      },
+    });
+    servers.push(server);
+
+    const body = JSON.stringify({ url: "https://example.com/", formats: ["markdown"] });
+    for (let index = 0; index < 2; index += 1) {
+      const response = await fetch(new URL("/v2/scrape", server.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      expect(response.status).toBe(200);
+    }
+
+    expect(keylessCalls).toBe(1);
+    expect(deepSeekCalls).toBe(2);
+  });
+
+  it("passes Keyless Parse through without authorization", async () => {
+    let authorization: string | null = "unset";
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: {},
+      fetchImpl: async (_input, init) => {
+        authorization = new Headers(init?.headers).get("authorization");
+        return Response.json({ success: true, data: { markdown: "# Parsed" } });
+      },
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/parse", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: "document",
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      data: { markdown: "# Parsed" },
+    });
+    expect(authorization).toBeNull();
+  });
+
+  it("passes Post-Scrape Interact through without authorization", async () => {
+    let captured: { path: string; authorization: string | null } | undefined;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: {},
+      fetchImpl: async (input, init) => {
+        captured = {
+          path: new URL(String(input)).pathname,
+          authorization: new Headers(init?.headers).get("authorization"),
+        };
+        return Response.json({ success: true, stdout: "clicked", stderr: "" });
+      },
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape/job_1/interact", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: "await page.click('#submit')", language: "node" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(captured).toEqual({
+      path: "/v2/scrape/job_1/interact",
+      authorization: null,
+    });
+  });
+
+  it("returns 429 for a keyless-only route during cooldown", async () => {
+    let keylessCalls = 0;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: {},
+      fetchImpl: async () => {
+        keylessCalls += 1;
+        return Response.json(
+          { success: false, error: "Rate limited." },
+          { status: 429, headers: { "retry-after": "60" } },
+        );
+      },
+    });
+    servers.push(server);
+
+    const request = () =>
+      fetch(new URL("/v2/parse", server.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: "document",
+      });
+    expect((await request()).status).toBe(429);
+    const second = await request();
+    expect(second.status).toBe(429);
+    expect(second.headers.get("retry-after")).toBeTruthy();
+    expect(await second.json()).toMatchObject({ code: "keyless_rate_limited" });
+    expect(keylessCalls).toBe(1);
+  });
+
+  it("never uses keyless Firecrawl for a remote gateway", async () => {
+    let firecrawlCalls = 0;
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        allowRemote: true,
+        gatewayApiKey: "gateway-token",
+      },
+      env: {},
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          return { title: "Example", content: "# DeepSeek" };
+        },
+      },
+      fetchImpl: async () => {
+        firecrawlCalls += 1;
+        return Response.json({ success: true });
+      },
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer gateway-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(firecrawlCalls).toBe(0);
+    expect(deepSeekCalls).toBe(1);
   });
 
   it("exposes a DeepSeek-backed crawl through Firecrawl job endpoints", async () => {

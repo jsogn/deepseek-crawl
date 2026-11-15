@@ -151,6 +151,40 @@ describe("Firecrawl SDK against the gateway", () => {
     );
   });
 
+  it("uses the official SDK against Keyless Firecrawl without an API key", async () => {
+    const upstream = await startMockUpstream(() => ({
+      body: {
+        success: true,
+        data: {
+          markdown: "# Keyless",
+          metadata: {
+            title: "Example",
+            sourceURL: "https://example.com/",
+            url: "https://example.com/",
+            statusCode: 200,
+          },
+        },
+      },
+    }));
+    const gateway = await startGatewayServer({
+      config: testConfig(upstream.url),
+      env: {},
+      fetchImpl: fetch,
+    });
+    servers.push(gateway);
+    const client = new Firecrawl({
+      apiUrl: gateway.url.href.replace(/\/$/, ""),
+    });
+
+    const scraped = await client.scrape("https://example.com/", {
+      formats: ["markdown"],
+    });
+
+    expect(scraped.markdown).toBe("# Keyless");
+    expect(upstream.requests).toHaveLength(1);
+    expect(upstream.requests[0]?.authorization).toBeUndefined();
+  });
+
   it("surfaces Firecrawl authentication errors through the official SDK without fallback", async () => {
     const upstream = await startMockUpstream(() => ({
       status: 401,
@@ -191,10 +225,14 @@ describe("Firecrawl SDK against the gateway", () => {
   });
 
   it("uses the official SDK unchanged when Firecrawl credits require a DeepSeek fallback", async () => {
-    const upstream = await startMockUpstream(() => ({
-      status: 402,
-      body: { success: false, error: "Payment required." },
-    }));
+    const upstream = await startMockUpstream((request) =>
+      request.authorization
+        ? { status: 402, body: { success: false, error: "Payment required." } }
+        : {
+            status: 429,
+            body: { success: false, error: "Keyless rate limited." },
+          },
+    );
     const deepseek: DeepSeekGateway = {
       async search() {
         return {
@@ -262,14 +300,20 @@ describe("Firecrawl SDK against the gateway", () => {
     const mapped = await client.map("https://example.com/", { limit: 2 });
     expect(mapped.links.map((link) => link.url)).toContain("https://example.com/docs");
 
-    expect(upstream.requests).toHaveLength(1);
+    expect(upstream.requests).toHaveLength(2);
+    expect(upstream.requests[0]?.authorization).toBe("Bearer fc-test");
+    expect(upstream.requests[1]?.authorization).toBeUndefined();
   });
 
   it("runs the official SDK crawl lifecycle through a DeepSeek-backed gateway job", async () => {
-    const upstream = await startMockUpstream(() => ({
-      status: 402,
-      body: { success: false, error: "Payment required." },
-    }));
+    const upstream = await startMockUpstream((request) =>
+      request.authorization
+        ? { status: 402, body: { success: false, error: "Payment required." } }
+        : {
+            status: 429,
+            body: { success: false, error: "Keyless rate limited." },
+          },
+    );
     const gateway = await startGatewayServer({
       config: testConfig(upstream.url),
       env: { FIRECRAWL_API_KEY: "fc-test" },
@@ -389,10 +433,14 @@ describe("Firecrawl SDK against the gateway", () => {
   });
 
   it("surfaces unsupported fallback features as official SDK errors", async () => {
-    const upstream = await startMockUpstream(() => ({
-      status: 402,
-      body: { success: false, error: "Payment required." },
-    }));
+    const upstream = await startMockUpstream((request) =>
+      request.authorization
+        ? { status: 402, body: { success: false, error: "Payment required." } }
+        : {
+            status: 429,
+            body: { success: false, error: "Keyless rate limited." },
+          },
+    );
     const gateway = await startGatewayServer({
       config: testConfig(upstream.url),
       env: { FIRECRAWL_API_KEY: "fc-test" },

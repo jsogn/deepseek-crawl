@@ -171,6 +171,13 @@ Firecrawl SDK `apiKey` to the gateway token. The gateway removes that incoming
 Authorization value before requesting Firecrawl and uses its stored Firecrawl
 credential.
 
+Local loopback gateways in `firecrawl-first` mode also use Firecrawl Keyless for
+Scrape, Search, Parse, and Post-Scrape Interact. Keyless requests remove every
+Authorization header. They are free but rate-limited by Firecrawl per IP; `429`
+honors `Retry-After` or starts a 15-minute default cooldown. Keyless is never
+used by remote gateways, `deepseek-first`, or `no-fallback`, and it does not
+cover Crawl, Map, Extract, Batch Scrape, Agent, or job status.
+
 `gateway install` creates a user LaunchAgent on macOS or a per-user Scheduled
 Task on Windows, starts the service, waits for `/healthz`, and then points the
 Firecrawl CLI persistent `apiUrl` at the managed Gateway. The original API URL

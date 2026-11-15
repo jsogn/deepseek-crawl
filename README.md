@@ -132,11 +132,11 @@ npx -y deepseek-crawl@latest init --copy
 
 ## Provider 策略
 
-| 模式                      | 行为                                                            |
-| ------------------------- | --------------------------------------------------------------- |
-| `firecrawl-first`（默认） | 优先 Firecrawl；`402`、冷却期或无 Firecrawl 凭据时使用 DeepSeek |
-| `deepseek-first`          | 常用路由直接使用 DeepSeek                                       |
-| `no-fallback`             | 始终使用 Firecrawl，`402` 原样返回                              |
+| 模式                      | 行为                                                              |
+| ------------------------- | ----------------------------------------------------------------- |
+| `firecrawl-first`（默认） | 带 Key Firecrawl；`402`/冷却期后尝试本地 Keyless，再使用 DeepSeek |
+| `deepseek-first`          | 常用路由直接使用 DeepSeek                                         |
+| `no-fallback`             | 始终使用 Firecrawl，`402` 原样返回                                |
 
 ```bash
 deepseek-crawl gateway install --provider-mode deepseek-first
@@ -145,6 +145,10 @@ deepseek-crawl gateway install --provider-mode deepseek-first
 DeepSeek fallback 覆盖 `POST /v2/search`、`POST /v2/scrape`、`POST /v2/map`、
 `POST /v2/crawl`，以及本地 `dsc_` Crawl job 的状态、错误和取消接口。
 
+本地 `firecrawl-first` 网关还会在带 Key Firecrawl 返回 `402`、处于额度冷却期或
+没有 Firecrawl 凭据时，尝试 Firecrawl Keyless。Keyless 不需要 API Key，但按公网
+IP 每日限量，出现 `429` 后默认冷却 15 分钟。远程网关不会自动使用 Keyless。
+
 ## 兼容边界
 
 - 高级 Firecrawl 能力在有额度时可以透传；没有 DeepSeek 等价能力时返回明确错误，
@@ -152,6 +156,8 @@ DeepSeek fallback 覆盖 `POST /v2/search`、`POST /v2/scrape`、`POST /v2/map`�
 - DeepSeek fallback 只接受能够保真的闭集参数；例如 `actions`、等待、DOM 筛选或浏览器
   选项会返回 `unsupported_fallback_feature`，不会被静默忽略。Firecrawl 正常处理
   请求时，这些高级选项仍原样透传。
+- Keyless 支持 Scrape、Search、Parse 和 Scrape 后 Interact；Crawl、Map、Extract、
+  Batch Scrape、Agent 和 Job Status 仍需要 Firecrawl API Key。
 - Markdown 是 fallback 支持的 Scrape、Search 和 Crawl 输出格式；浏览器动作、
   截图、结构化 Extract 等能力不能在 fallback 中完整替代。
 - 受管理安装只改写当前用户的 Firecrawl CLI 配置，不会自动改写所有 SDK、Skill 或

@@ -147,11 +147,11 @@ for every option.
 
 ## Provider policy
 
-| Mode                        | Behavior                                                            |
-| --------------------------- | ------------------------------------------------------------------- |
-| `firecrawl-first` (default) | Prefer Firecrawl; use DeepSeek on `402`, cooldown, or no credential |
-| `deepseek-first`            | Send common routes directly to DeepSeek                             |
-| `no-fallback`               | Keep every common route on Firecrawl and return `402` unchanged     |
+| Mode                        | Behavior                                                           |
+| --------------------------- | ------------------------------------------------------------------ |
+| `firecrawl-first` (default) | Keyed Firecrawl; local Keyless after `402`/cooldown; then DeepSeek |
+| `deepseek-first`            | Send common routes directly to DeepSeek                            |
+| `no-fallback`               | Keep every common route on Firecrawl and return `402` unchanged    |
 
 ```bash
 deepseek-crawl gateway install --provider-mode deepseek-first
@@ -160,6 +160,12 @@ deepseek-crawl gateway install --provider-mode deepseek-first
 DeepSeek fallback covers `POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`,
 `POST /v2/crawl`, and the status, errors, and cancellation routes for local
 `dsc_` Crawl jobs.
+
+Local `firecrawl-first` gateways also try Firecrawl Keyless after a keyed `402`,
+during the keyed credit cooldown, or when no Firecrawl credential exists.
+Keyless requires no API key but is rate-limited per public IP each day. A `429`
+starts a 15-minute default cooldown. Remote gateways never use Keyless
+automatically.
 
 ## Compatibility boundaries
 
@@ -171,6 +177,9 @@ DeepSeek fallback covers `POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`,
   return `unsupported_fallback_feature` instead of being silently ignored.
   Advanced options still pass through unchanged whenever Firecrawl handles the
   request.
+- Keyless covers Scrape, Search, Parse, and Post-Scrape Interact. Crawl, Map,
+  Extract, Batch Scrape, Agent, and job-status routes still require a Firecrawl
+  API key.
 - Markdown is the supported Scrape, Search, and Crawl fallback output. Browser
   actions, screenshots, structured Extract, and similar capabilities are not
   fully replaceable during fallback.

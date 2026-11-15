@@ -61,9 +61,21 @@ store，只显示掩码提示。
 `DEEPSEEK_GATEWAY_PROVIDER_MODE` 或 `gateway --provider-mode` 用于选择 Provider
 策略：
 
-- `firecrawl-first`：默认，先使用 Firecrawl，收到 `402` 后降级。
+- `firecrawl-first`：默认，先使用带 Key Firecrawl，`402` 后尝试本地 Keyless，
+  再使用 DeepSeek。
 - `deepseek-first`：常用路由直接使用 DeepSeek。
 - `no-fallback`：常用路由始终使用 Firecrawl，`402` 原样返回。
+
+Keyless 是传输层，不是新的 Provider mode。只有 loopback 网关且处于
+`firecrawl-first` 时才会启用。Keyless 请求会删除所有 `Authorization`，不会注入
+客户端、环境变量、Keychain 或网关凭据。它支持 Scrape、Search、Parse 和 Scrape
+后 Interact，不会尝试 Keyless Crawl、Map、Extract、Batch Scrape、Agent 或 Job
+Status。
+
+Keyless 免费但按 Firecrawl 的公网 IP 每日限量。收到 `429` 时优先遵守
+`Retry-After`，否则冷却 15 分钟。冷却期间，常用路由使用 DeepSeek；仅 Keyless
+支持的路由返回结构化的 `429 keyless_rate_limited`。远程网关不会自动使用
+Keyless。
 
 `gateway --credits-cooldown` 或
 `DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` 控制 `firecrawl-first` 的额度熔断时间，

@@ -60,9 +60,23 @@ into that store while displaying only a masked hint.
 `DEEPSEEK_GATEWAY_PROVIDER_MODE` or `gateway --provider-mode` selects provider
 policy:
 
-- `firecrawl-first`: default; use Firecrawl, then fall back after `402`.
+- `firecrawl-first`: default; use keyed Firecrawl, local Keyless after `402`,
+  then DeepSeek fallback.
 - `deepseek-first`: use DeepSeek directly for common routes.
 - `no-fallback`: keep common routes on Firecrawl and pass `402` through.
+
+Keyless is a transport tier, not a provider mode. It is enabled only for
+loopback gateways in `firecrawl-first` mode. Keyless requests remove every
+`Authorization` header and never inject a client, environment, Keychain, or
+gateway credential. It covers Scrape, Search, Parse, and Post-Scrape Interact.
+Keyless Crawl, Map, Extract, Batch Scrape, Agent, and job-status routes are not
+attempted.
+
+Keyless usage is free but rate-limited by Firecrawl per public IP. On `429`, the
+gateway honors `Retry-After` or starts a 15-minute default cooldown. During that
+cooldown, common routes use DeepSeek; keyless-only routes return a structured
+`429 keyless_rate_limited` response. Remote gateways never use Keyless
+automatically.
 
 `gateway --credits-cooldown` or
 `DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` controls the `firecrawl-first`

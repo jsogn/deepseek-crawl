@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Use Firecrawl's free Keyless tier as an automatic intermediate provider for
+  supported local routes before DeepSeek fallback.
+
 ## 0.14.2 - 2026-11-15
 
 ### Fixed

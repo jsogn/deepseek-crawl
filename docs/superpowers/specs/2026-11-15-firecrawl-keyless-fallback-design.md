@@ -2,7 +2,7 @@
 
 Date: 2026-11-15
 
-Status: Pending spec review
+Status: Approved
 
 Target release: next patch release after implementation
 
@@ -124,8 +124,9 @@ During the existing keyed Firecrawl credit cooldown, a supported local route
 tries Keyless before DeepSeek.
 
 During the Keyless cooldown, no Keyless request is attempted. The gateway uses
-DeepSeek fallback where available and returns the unsupported-route behavior
-otherwise.
+DeepSeek fallback where available. For a keyless-only route with no DeepSeek
+fallback, return a Firecrawl-shaped `429 keyless_rate_limited` response with a
+`Retry-After` value for the remaining cooldown.
 
 ## Credential Handling
 

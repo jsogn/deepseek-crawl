@@ -151,6 +151,63 @@ describe("Firecrawl SDK against the gateway", () => {
     );
   });
 
+  it("accepts a rewritten PageSift scrape ID through the official SDK", async () => {
+    const pagesiftResponse = {
+      success: true,
+      data: {
+        markdown: "# Browser",
+        metadata: { scrapeId: "pagesift-upstream" },
+      },
+    };
+    const gateway = await startGatewayServer({
+      config: {
+        ...testConfig(new URL("https://api.firecrawl.dev/")),
+        advancedBackend: {
+          provider: "pagesift",
+          url: new URL("http://127.0.0.1:3002/"),
+        },
+      },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      fetchImpl: async (_input, init) =>
+        new Headers(init?.headers).has("authorization")
+          ? Response.json({ success: false }, { status: 402 })
+          : Response.json({ success: false }, { status: 429 }),
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          throw new Error("DeepSeek must not handle browser Scrape.");
+        },
+      },
+      advancedBackend: {
+        config: {
+          provider: "pagesift",
+          url: new URL("http://127.0.0.1:3002/"),
+        },
+        async request() {
+          return Response.json(pagesiftResponse);
+        },
+        async readJsonResponse() {
+          return pagesiftResponse;
+        },
+      },
+    });
+    servers.push(gateway);
+    const client = new Firecrawl({
+      apiKey: "fc-test",
+      apiUrl: gateway.url.href.replace(/\/$/, ""),
+    });
+
+    const scraped = await client.scrape("https://example.com/", {
+      formats: ["markdown"],
+      actions: [{ type: "click", selector: "#more" }],
+    });
+    expect((scraped.metadata as { scrapeId?: string } | undefined)?.scrapeId).toMatch(
+      /^ps_[0-9a-f]{32}$/,
+    );
+  });
+
   it("uses the official SDK against Keyless Firecrawl without an API key", async () => {
     const upstream = await startMockUpstream(() => ({
       body: {

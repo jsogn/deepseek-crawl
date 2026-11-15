@@ -9,7 +9,10 @@ import { loadConfig } from "../config.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
-import { preparePageSiftScrape } from "../firecrawl/advanced-capabilities.js";
+import {
+  preparePageSiftInteract,
+  preparePageSiftScrape,
+} from "../firecrawl/advanced-capabilities.js";
 import {
   firecrawlMapFallback,
   firecrawlScrapeFallback,
@@ -28,6 +31,7 @@ import {
 } from "./advanced-backend.js";
 import {
   AdvancedSessionStore,
+  isPageSiftSessionId,
   readPageSiftScrapeId,
   rewritePageSiftScrapeId,
 } from "./advanced-sessions.js";
@@ -638,6 +642,54 @@ export function createGatewayHandler(
     }
 
     const method = request.method ?? "GET";
+    const interactMatch = requestUrl.pathname.match(/^\/v2\/scrape\/([^/]+)\/interact$/);
+    const interactId = interactMatch ? decodeURIComponent(interactMatch[1] ?? "") : undefined;
+    if (
+      (method === "POST" || method === "DELETE") &&
+      interactId !== undefined &&
+      isPageSiftSessionId(interactId)
+    ) {
+      const upstreamId = advancedSessions.resolve(interactId);
+      if (!upstreamId || !advancedBackend) {
+        fallbackError(
+          response,
+          new AdvancedBackendError(
+            "The advanced scrape session is not available.",
+            "advanced_session_not_found",
+            404,
+          ),
+        );
+        return;
+      }
+      provider = "pagesift";
+      fallback = true;
+      fallbackReason = "pagesift_advanced_interact";
+      try {
+        const upstream = await advancedBackend.request({
+          method,
+          path: `/v2/scrape/${encodeURIComponent(upstreamId)}/interact`,
+          headers: advancedRequestHeaders(request, requestId),
+          ...(method === "POST" ? { body: preparePageSiftInteract(parseJsonBody(body)) } : {}),
+          signal: requestController.signal,
+        });
+        if (upstream.status === 404 || upstream.status === 410) {
+          advancedSessions.remove(interactId);
+          await upstream.body?.cancel().catch(() => undefined);
+          throw new AdvancedBackendError(
+            "The advanced scrape session is not available.",
+            "advanced_session_not_found",
+            404,
+          );
+        }
+        if (method === "DELETE" && upstream.ok) {
+          advancedSessions.remove(interactId);
+        }
+        await sendUpstream(response, upstream);
+      } catch (error) {
+        fallbackError(response, error);
+      }
+      return;
+    }
     const route = fallbackRoute(method, requestUrl.pathname);
     const isLocalCrawlRoute =
       route?.kind === "crawl-status" ||

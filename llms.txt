@@ -4,6 +4,11 @@
 > with DeepSeek fallback, plus an Agent-native Search, Fetch, Map, and bounded
 > Crawl CLI. Existing Firecrawl CLI calls can remain unchanged on macOS and
 > Windows, or use an explicit gateway URL on Linux and in containers.
+>
+> Treat these as two product routes with separate contracts: a transparent
+> Firecrawl gateway and a DeepSeek-native replacement. Keyless is a transport
+> tier inside the gateway route, not a third route. Do not claim complete
+> Firecrawl API compatibility.
 
 Project: https://github.com/jsogn/deepseek-crawl
 License: MIT

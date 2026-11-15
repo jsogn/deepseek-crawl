@@ -7,6 +7,12 @@
 - Use Firecrawl's free Keyless tier as an automatic intermediate provider for
   supported local routes before DeepSeek fallback.
 
+### Changed
+
+- Clarify that the product exposes a transparent Firecrawl gateway and a
+  DeepSeek-native replacement as two separate contracts over one shared core,
+  with Keyless documented as an internal gateway transport tier.
+
 ### Fixed
 
 - Reject unsupported Firecrawl options before DeepSeek fallback instead of

@@ -1,7 +1,7 @@
 ---
 
 name: deepseek-crawl
-description: Use when the user or workflow selects DeepSeek's official Search and Fetch APIs through the deepseek-crawl CLI for live web search, reading a known URL, mapping a site, bounded same-origin crawling, or scheduled page-change checks. Do not use for local files, browser interaction, login, or full Firecrawl API compatibility; the optional Firecrawl-compatible gateway is documented separately.
+description: Use for DeepSeek-native live web search, page reading, site mapping, bounded crawling, and page-change checks through the deepseek-crawl CLI, or to configure the bundled transparent Firecrawl-compatible gateway. Choose the native CLI for new workflows and the gateway only when existing Firecrawl clients should remain unchanged. Do not use for local files, browser interaction, login, or complete Firecrawl API compatibility.
 allowed-tools:
 
 - Bash(deepseek-crawl *)
@@ -10,9 +10,18 @@ allowed-tools:
 
 # DeepSeek Crawl
 
-Use `deepseek-crawl` to retrieve live web content through DeepSeek. The CLI is
-the execution surface. MCP is optional and should be used only when the calling
-client cannot execute the CLI or the user explicitly requests MCP.
+This package has two product routes with separate contracts:
+
+- **Path A: transparent Firecrawl gateway.** Preserve existing Firecrawl
+  CLI/SDK/Agent calls and fall back only where the documented DeepSeek mapping is
+  faithful.
+- **Path B: DeepSeek-native replacement.** Use the simpler
+  `deepseek-crawl` CLI and optional MCP interface without Firecrawl API
+  compatibility.
+
+The execution workflow below is Path B unless the user explicitly selects Path
+A. Keyless is a tier inside Path A, not a third route. Do not infer a route from
+DeepSeek account availability.
 
 ## Before Searching
 
@@ -47,9 +56,9 @@ If the CLI is installed but this Skill is unavailable in a new Agent session,
 run `deepseek-crawl setup skills` to install it into the common
 `.agents/skills` directory.
 
-## Optional Firecrawl-Compatible Gateway
+## Path A: Transparent Firecrawl-Compatible Gateway
 
-Only start the gateway when the user explicitly wants an existing Firecrawl v2
+Use this path only when the user explicitly wants an existing Firecrawl v2
 client to keep working without changing its API calls:
 
 ```bash
@@ -62,7 +71,7 @@ On macOS or Windows, use the managed lifecycle when the user wants transparent
 CLI/Skill traffic after the current shell exits:
 
 ```bash
-deepseek-crawl gateway install --provider-mode deepseek-first
+deepseek-crawl gateway install
 deepseek-crawl gateway status --json
 deepseek-crawl gateway stop
 deepseek-crawl gateway start
@@ -88,6 +97,13 @@ Provider mode defaults to `firecrawl-first`. Use `deepseek-first` or
 `no-fallback` when the deployment must not switch providers automatically.
 The Firecrawl 402 cooldown defaults to 60 seconds; set it to `0` only when every
 request should retry Firecrawl.
+
+Local `firecrawl-first` gateways try Firecrawl Keyless before DeepSeek for
+Scrape, Search, Parse, and Post-Scrape Interact routes. Keyless removes every
+incoming `Authorization` header and never inherits another credential. It is
+rate-limited by Firecrawl; respect `429` and never rotate IPs or add a bypass.
+Remote gateways and non-`firecrawl-first` modes do not use Keyless.
+
 Gateway Provider requests and background Crawl jobs have separate global limits.
 Retained Crawl jobs and serialized result bytes are also bounded. Capacity first
 evicts the oldest terminal job. Keep these limits bounded when one gateway

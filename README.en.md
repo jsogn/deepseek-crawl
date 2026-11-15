@@ -18,7 +18,21 @@ Current release: `0.15.0` · [npm](https://www.npmjs.com/package/deepseek-crawl)
 > Firecrawl CLI. Code with a hard-coded SDK `apiUrl` must point at the gateway
 > explicitly.
 
-## One package, two ways to use it
+## One core, two product routes
+
+Both routes share Search, Fetch, Map, Crawl, caching, safety boundaries, and the
+DeepSeek execution core, but they make different external promises:
+
+| Route                  | Priority                          | External contract                                                                          |
+| ---------------------- | --------------------------------- | ------------------------------------------------------------------------------------------ |
+| A: Transparent gateway | Compatibility and transparency    | Preserve existing Firecrawl calls where possible; switch backends only when fidelity holds |
+| B: Native replacement  | Simplicity and independent design | Use the DeepSeek-native CLI/MCP contract without requiring Firecrawl API compatibility     |
+
+Keyless is a Firecrawl transport tier inside Route A, not a third product route.
+Only local `firecrawl-first` gateways use it; remote gateways never try it
+automatically.
+
+### Choose a route
 
 | Your situation                                                | Recommended path                                                         |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------ |

@@ -67,6 +67,25 @@ describe("file credential store", () => {
     expect(deepseek.get()).toBe("deepseek-secret");
     expect(gateway.get()).toBe("gateway-secret");
   });
+
+  it("stores a PageSift credential separately", async () => {
+    const home = await mkdtemp(join(tmpdir(), "deepseek-crawl-auth-"));
+    const env = { XDG_CONFIG_HOME: join(home, "config") };
+    const options = { platform: "linux" as const, home, env };
+    const firecrawl = createCredentialStore({ ...options, credential: "firecrawl" });
+    const pagesift = createCredentialStore({ ...options, credential: "pagesift" });
+    const path = join(home, "config", "deepseek-crawl", "credentials.json");
+
+    firecrawl.set("firecrawl-secret");
+    pagesift.set("pagesift-secret");
+
+    expect(pagesift.get()).toBe("pagesift-secret");
+    expect(firecrawl.get()).toBe("firecrawl-secret");
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+      firecrawl_api_key: "firecrawl-secret",
+      pagesift_api_key: "pagesift-secret",
+    });
+  });
 });
 
 describe("Keychain credential store", () => {

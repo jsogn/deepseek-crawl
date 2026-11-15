@@ -8,6 +8,7 @@ import {
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8787;
 const DEFAULT_UPSTREAM_URL = "https://api.firecrawl.dev";
+export const DEFAULT_ADVANCED_BACKEND_URL = "http://127.0.0.1:3002/";
 const DEFAULT_REQUEST_BODY_LIMIT = 8 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_CREDITS_COOLDOWN_MS = 60_000;
@@ -46,12 +47,19 @@ export interface GatewayConfig {
   maxActiveCrawlJobs?: number;
   maxRetainedCrawlJobs?: number;
   maxRetainedCrawlBytes?: number;
+  advancedBackend?: AdvancedBackendConfig;
   headersTimeoutMs?: number;
   requestTimeoutMs?: number;
   keepAliveTimeoutMs?: number;
   upstreamUrl: URL;
   requestBodyLimit: number;
   timeoutMs: number;
+}
+
+export interface AdvancedBackendConfig {
+  provider: "pagesift";
+  url: URL;
+  apiKey?: string;
 }
 
 export interface GatewayConfigInput {
@@ -66,6 +74,8 @@ export interface GatewayConfigInput {
   maxActiveCrawlJobs?: number;
   maxRetainedCrawlJobs?: number;
   maxRetainedCrawlBytes?: number;
+  advancedEnabled?: boolean;
+  advancedUrl?: string;
   env?: NodeJS.ProcessEnv;
   credentialStores?: Partial<Record<CredentialName, CredentialStore>>;
 }
@@ -111,6 +121,38 @@ function parseUpstreamUrl(value: string | undefined): URL {
   if (!url.pathname.endsWith("/")) {
     url.pathname += "/";
   }
+  return url;
+}
+
+function parseAdvancedBackendUrl(value: string, hasCredential: boolean): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("DEEPSEEK_GATEWAY_ADVANCED_URL must be a valid HTTP(S) URL.");
+  }
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error("DEEPSEEK_GATEWAY_ADVANCED_URL must use HTTP or HTTPS.");
+  }
+  if (url.username || url.password) {
+    throw new Error("DEEPSEEK_GATEWAY_ADVANCED_URL must not contain credentials.");
+  }
+  if (url.search) {
+    throw new Error("DEEPSEEK_GATEWAY_ADVANCED_URL must not contain a query string.");
+  }
+  if (url.hash) {
+    throw new Error("DEEPSEEK_GATEWAY_ADVANCED_URL must not contain a fragment.");
+  }
+  if (url.pathname !== "/" && url.pathname !== "") {
+    throw new Error("DEEPSEEK_GATEWAY_ADVANCED_URL path must be the service root.");
+  }
+  if (url.protocol === "http:" && !isLoopbackHostname(url.hostname)) {
+    throw new Error("DEEPSEEK_GATEWAY_ADVANCED_URL must use HTTPS unless loopback.");
+  }
+  if (!isLoopbackHostname(url.hostname) && !hasCredential) {
+    throw new Error("A non-loopback PageSift backend requires a PageSift credential.");
+  }
+  url.pathname = "/";
   return url;
 }
 
@@ -213,6 +255,7 @@ const CREDENTIAL_ENV: Record<CredentialName, string> = {
   deepseek: "DEEPSEEK_API_KEY",
   firecrawl: "FIRECRAWL_API_KEY",
   gateway: "GATEWAY_API_KEY",
+  pagesift: "PAGESIFT_API_KEY",
 };
 
 function resolveCredential(
@@ -228,6 +271,29 @@ function resolveCredential(
   const store =
     stores !== undefined ? stores[credential] : createCredentialStore({ env, credential });
   return store?.get()?.trim() || undefined;
+}
+
+function resolveAdvancedBackend(
+  options: GatewayConfigInput,
+  env: NodeJS.ProcessEnv,
+  stores: GatewayConfigInput["credentialStores"],
+): AdvancedBackendConfig | undefined {
+  const environmentUrl = env.DEEPSEEK_GATEWAY_ADVANCED_URL?.trim();
+  const requestedUrl = options.advancedUrl ?? environmentUrl;
+  const enabled = options.advancedEnabled ?? requestedUrl !== undefined;
+  if (!enabled) {
+    return undefined;
+  }
+  const apiKey = resolveCredential(env, "pagesift", stores);
+  const url = parseAdvancedBackendUrl(
+    requestedUrl || DEFAULT_ADVANCED_BACKEND_URL,
+    apiKey !== undefined,
+  );
+  return {
+    provider: "pagesift",
+    url,
+    ...(apiKey === undefined ? {} : { apiKey }),
+  };
 }
 
 export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConfig {
@@ -267,6 +333,7 @@ export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConf
   const maxRetainedCrawlBytes = parseByteLimit(
     options.maxRetainedCrawlBytes ?? env.DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES,
   );
+  const advancedBackend = resolveAdvancedBackend(options, env, options.credentialStores);
   const remote = options.remote ?? options.allowRemote ?? false;
   const host = validateHost(options.host?.trim() || (remote ? "0.0.0.0" : DEFAULT_HOST), remote);
   const gatewayApiKey = resolveCredential(env, "gateway", options.credentialStores);
@@ -287,6 +354,7 @@ export function loadGatewayConfig(options: GatewayConfigInput = {}): GatewayConf
     maxActiveCrawlJobs,
     maxRetainedCrawlJobs,
     maxRetainedCrawlBytes,
+    ...(advancedBackend === undefined ? {} : { advancedBackend }),
     ...(gatewayApiKey === undefined ? {} : { gatewayApiKey }),
     ...(firecrawlApiKey === undefined ? {} : { firecrawlApiKey }),
     upstreamUrl: parseUpstreamUrl(env.FIRECRAWL_UPSTREAM_URL),

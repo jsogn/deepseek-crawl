@@ -13,7 +13,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 export type CredentialBackend = "keychain" | "file";
-export type CredentialName = "deepseek" | "firecrawl" | "gateway";
+export type CredentialName = "deepseek" | "firecrawl" | "gateway" | "pagesift";
 
 export interface CredentialStore {
   readonly name: CredentialBackend;
@@ -46,6 +46,7 @@ const FILE_FIELDS: Record<CredentialName, string> = {
   deepseek: "api_key",
   firecrawl: "firecrawl_api_key",
   gateway: "gateway_api_key",
+  pagesift: "pagesift_api_key",
 };
 
 function credentialLabel(credential: CredentialName): string {
@@ -56,6 +57,8 @@ function credentialLabel(credential: CredentialName): string {
       return "Firecrawl API key";
     case "gateway":
       return "gateway API key";
+    case "pagesift":
+      return "PageSift API key";
   }
 }
 

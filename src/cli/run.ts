@@ -1757,12 +1757,14 @@ const CREDENTIAL_ENV: Record<CredentialName, string> = {
   deepseek: "DEEPSEEK_API_KEY",
   firecrawl: "FIRECRAWL_API_KEY",
   gateway: "GATEWAY_API_KEY",
+  pagesift: "PAGESIFT_API_KEY",
 };
 
 const CREDENTIAL_LABEL: Record<CredentialName, string> = {
   deepseek: "DeepSeek API key",
   firecrawl: "Firecrawl API key",
   gateway: "gateway API key",
+  pagesift: "PageSift API key",
 };
 
 function authStatus(

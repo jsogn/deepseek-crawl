@@ -391,25 +391,30 @@ describe("parseCli", () => {
     expect(parseCli(["gateway"])).toEqual({
       kind: "gateway",
       remote: false,
+      advanced: false,
     });
     expect(parseCli(["gateway", "--remote", "--host", "192.0.2.1", "--port", "9000"])).toEqual({
       kind: "gateway",
       host: "192.0.2.1",
       port: 9000,
       remote: true,
+      advanced: false,
     });
     expect(parseCli(["gateway", "--allow-remote"])).toEqual({
       kind: "gateway",
       remote: true,
+      advanced: false,
     });
     expect(parseCli(["gateway", "--provider-mode", "deepseek-first"])).toEqual({
       kind: "gateway",
       remote: false,
+      advanced: false,
       providerMode: "deepseek-first",
     });
     expect(parseCli(["gateway", "--credits-cooldown", "120"])).toEqual({
       kind: "gateway",
       remote: false,
+      advanced: false,
       creditsCooldownSeconds: 120,
     });
     expect(
@@ -429,6 +434,7 @@ describe("parseCli", () => {
     ).toEqual({
       kind: "gateway",
       remote: false,
+      advanced: false,
       maxConcurrentRequests: 200,
       maxProviderRequests: 50,
       maxCrawlJobs: 5,
@@ -454,6 +460,24 @@ describe("parseCli", () => {
     expect(parseCli(["gateway", "--help"])).toEqual({
       kind: "help",
       command: "gateway",
+    });
+  });
+
+  it("parses PageSift credential and foreground advanced flags", () => {
+    expect(parseCli(["auth", "set", "pagesift"])).toEqual({
+      kind: "auth-set",
+      credential: "pagesift",
+    });
+    expect(parseCli(["gateway", "--advanced"])).toEqual({
+      kind: "gateway",
+      remote: false,
+      advanced: true,
+    });
+    expect(parseCli(["gateway", "--advanced-url", "http://127.0.0.1:3002"])).toEqual({
+      kind: "gateway",
+      remote: false,
+      advanced: true,
+      advancedUrl: "http://127.0.0.1:3002",
     });
   });
 

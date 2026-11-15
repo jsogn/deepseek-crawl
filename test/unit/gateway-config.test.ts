@@ -31,6 +31,85 @@ describe("loadGatewayConfig", () => {
     });
   });
 
+  it("keeps the advanced backend disabled by default", () => {
+    expect(loadGatewayConfig({ env: {}, credentialStores: {} }).advancedBackend).toBeUndefined();
+  });
+
+  it("enables a default local PageSift backend", () => {
+    expect(
+      loadGatewayConfig({
+        advancedEnabled: true,
+        env: {},
+        credentialStores: {},
+      }).advancedBackend,
+    ).toEqual({
+      provider: "pagesift",
+      url: new URL("http://127.0.0.1:3002/"),
+    });
+  });
+
+  it("uses an explicit or environment PageSift URL", () => {
+    expect(() =>
+      loadGatewayConfig({
+        advancedUrl: "https://explicit.example/pagesift",
+        env: { DEEPSEEK_GATEWAY_ADVANCED_URL: "https://env.example/" },
+        credentialStores: { pagesift: store("pagesift-secret") },
+      }),
+    ).toThrow(/path|root/i);
+
+    expect(
+      loadGatewayConfig({
+        advancedUrl: "https://explicit.example/",
+        env: { DEEPSEEK_GATEWAY_ADVANCED_URL: "https://env.example/" },
+        credentialStores: { pagesift: store("pagesift-secret") },
+      }).advancedBackend,
+    ).toMatchObject({
+      provider: "pagesift",
+      url: new URL("https://explicit.example/"),
+      apiKey: "pagesift-secret",
+    });
+
+    expect(
+      loadGatewayConfig({
+        env: {
+          DEEPSEEK_GATEWAY_ADVANCED_URL: "http://127.0.0.1:3002",
+          PAGESIFT_API_KEY: "pagesift-secret",
+        },
+        credentialStores: {},
+      }).advancedBackend,
+    ).toEqual({
+      provider: "pagesift",
+      url: new URL("http://127.0.0.1:3002/"),
+      apiKey: "pagesift-secret",
+    });
+  });
+
+  it.each([
+    ["http://pagesift.example/", /HTTPS/i],
+    ["https://user:secret@pagesift.example/", /credentials/i],
+    ["https://pagesift.example/?mode=test", /query/i],
+    ["https://pagesift.example/#fragment", /fragment/i],
+    ["https://pagesift.example/api", /path|root/i],
+  ])("rejects invalid advanced URL %s", (advancedUrl, expected) => {
+    expect(() =>
+      loadGatewayConfig({
+        advancedUrl,
+        env: {},
+        credentialStores: { pagesift: store("pagesift-secret") },
+      }),
+    ).toThrow(expected);
+  });
+
+  it("requires a PageSift credential for a non-loopback backend", () => {
+    expect(() =>
+      loadGatewayConfig({
+        advancedUrl: "https://pagesift.example/",
+        env: {},
+        credentialStores: {},
+      }),
+    ).toThrow(/PageSift.*credential/i);
+  });
+
   it("rejects a non-loopback host outside remote mode", () => {
     expect(() =>
       loadGatewayConfig({

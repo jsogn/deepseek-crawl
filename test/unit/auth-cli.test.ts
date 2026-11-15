@@ -154,6 +154,22 @@ describe("auth commands", () => {
     expect(environment.stdout.value()).not.toContain("gateway-secret");
   });
 
+  it("stores a PageSift credential in its provider store", async () => {
+    const pagesift = memoryStore();
+    const environment = providerDependencies({ pagesift });
+
+    expect(
+      await runCli(["auth", "set", "pagesift"], {
+        ...environment.deps,
+        secretReader: async () => "pagesift-secret",
+      }),
+    ).toBe(0);
+
+    expect(pagesift.value()).toBe("pagesift-secret");
+    expect(environment.stdout.value()).toContain("PageSift API key saved");
+    expect(environment.stdout.value()).not.toContain("pagesift-secret");
+  });
+
   it("imports a Firecrawl CLI credential without printing the full secret", async () => {
     const firecrawl = memoryStore();
     const environment = providerDependencies({ firecrawl });

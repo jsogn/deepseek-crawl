@@ -151,8 +151,10 @@ export type ParsedCommand =
   | {
       kind: "gateway";
       remote: boolean;
+      advanced: boolean;
       host?: string;
       port?: number;
+      advancedUrl?: string;
       providerMode?: GatewayProviderMode;
       creditsCooldownSeconds?: number;
       maxConcurrentRequests?: number;
@@ -215,8 +217,8 @@ function parsePatterns(value: string, name: string): string[] {
 
 function parseCredential(value: string | undefined): CredentialName {
   const credential = value ?? "deepseek";
-  if (!["deepseek", "firecrawl", "gateway"].includes(credential)) {
-    throw new CliUsageError("Credential must be deepseek, firecrawl, or gateway.");
+  if (!["deepseek", "firecrawl", "gateway", "pagesift"].includes(credential)) {
+    throw new CliUsageError("Credential must be deepseek, firecrawl, gateway, or pagesift.");
   }
   return credential as CredentialName;
 }
@@ -1111,6 +1113,8 @@ export function parseCli(argv: string[]): ParsedCommand {
             "max-retained-crawl-bytes": { type: "string" },
             remote: { type: "boolean" },
             "allow-remote": { type: "boolean" },
+            advanced: { type: "boolean" },
+            "advanced-url": { type: "string" },
             help: { type: "boolean", short: "h" },
           },
         });
@@ -1125,6 +1129,10 @@ export function parseCli(argv: string[]): ParsedCommand {
           parsed.values.port === undefined
             ? undefined
             : parseInteger(parsed.values.port, "port", 1, 65_535);
+        const advancedUrl = parsed.values["advanced-url"]?.trim();
+        if (parsed.values["advanced-url"] !== undefined && !advancedUrl) {
+          throw new CliUsageError("Advanced URL is required.");
+        }
         const providerMode = parseProviderMode(parsed.values["provider-mode"]);
         const creditsCooldownSeconds =
           parsed.values["credits-cooldown"] === undefined
@@ -1173,8 +1181,10 @@ export function parseCli(argv: string[]): ParsedCommand {
         return {
           kind: "gateway",
           remote: parsed.values.remote ?? parsed.values["allow-remote"] ?? false,
+          advanced: parsed.values.advanced ?? advancedUrl !== undefined,
           ...(host === undefined ? {} : { host }),
           ...(port === undefined ? {} : { port }),
+          ...(advancedUrl === undefined ? {} : { advancedUrl }),
           ...(providerMode === undefined ? {} : { providerMode }),
           ...(creditsCooldownSeconds === undefined ? {} : { creditsCooldownSeconds }),
           ...(maxConcurrentRequests === undefined ? {} : { maxConcurrentRequests }),

@@ -9,6 +9,7 @@ import { loadConfig } from "../config.js";
 import { DeepSeekClient } from "../deepseek/client.js";
 import { DeepSeekError } from "../deepseek/errors.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
+import { preparePageSiftScrape } from "../firecrawl/advanced-capabilities.js";
 import {
   firecrawlMapFallback,
   firecrawlScrapeFallback,
@@ -20,6 +21,16 @@ import {
   responseHeaders,
 } from "../firecrawl/upstream.js";
 import { packageVersion } from "../version.js";
+import {
+  type AdvancedBackend,
+  AdvancedBackendError,
+  createPageSiftBackend,
+} from "./advanced-backend.js";
+import {
+  AdvancedSessionStore,
+  readPageSiftScrapeId,
+  rewritePageSiftScrapeId,
+} from "./advanced-sessions.js";
 import { AuthFailureLimiter } from "./auth-limiter.js";
 import { GATEWAY_CAPACITY_DEFAULTS, type GatewayConfig } from "./config.js";
 import { CrawlJobManager } from "./crawl-jobs.js";
@@ -59,6 +70,7 @@ export interface GatewayHandlerDependencies {
   deepseekClient?: DeepSeekGateway;
   sitemapReader?: MapSitemapReader;
   crawlJobs?: CrawlJobManager;
+  advancedBackend?: AdvancedBackend;
   now?: () => number;
   logger?: GatewayLogger;
 }
@@ -259,6 +271,21 @@ function fallbackError(response: ServerResponse, error: unknown): void {
     });
     return;
   }
+  if (error instanceof AdvancedBackendError) {
+    sendJson(
+      response,
+      error.statusCode,
+      {
+        success: false,
+        error: error.message,
+        code: error.code,
+      },
+      error.retryAfterSeconds === undefined
+        ? {}
+        : { "retry-after": String(error.retryAfterSeconds) },
+    );
+    return;
+  }
   if (error instanceof z.ZodError) {
     sendJson(response, 400, {
       success: false,
@@ -325,12 +352,68 @@ function incomingHeaders(request: IncomingMessage, stripAuthorization: boolean):
   return headers;
 }
 
+function advancedRequestHeaders(request: IncomingMessage, requestId: string): Headers {
+  const headers = incomingHeaders(request, true);
+  headers.set("content-type", "application/json");
+  headers.set("x-request-id", requestId);
+  return headers;
+}
+
+async function executeAdvancedScrape(
+  body: Uint8Array | undefined,
+  headers: Headers,
+  backend: AdvancedBackend,
+  sessions: AdvancedSessionStore,
+  signal?: AbortSignal,
+): Promise<
+  { kind: "passthrough"; response: Response } | { kind: "success"; body: Record<string, unknown> }
+> {
+  const lease = sessions.reserve();
+  try {
+    const prepared = preparePageSiftScrape(parseJsonBody(body));
+    const upstream = await backend.request({
+      method: "POST",
+      path: "/v2/scrape",
+      headers,
+      body: prepared.serialized,
+      ...(signal === undefined ? {} : { signal }),
+    });
+    if (!upstream.ok) {
+      lease.release();
+      return { kind: "passthrough", response: upstream };
+    }
+    const value = await backend.readJsonResponse(upstream, signal);
+    const upstreamId = readPageSiftScrapeId(value);
+    if (!upstreamId) {
+      throw new AdvancedBackendError(
+        "The advanced backend did not return a scrape session.",
+        "advanced_backend_session_id_missing",
+        502,
+      );
+    }
+    const publicId = lease.commit(upstreamId);
+    return { kind: "success", body: rewritePageSiftScrapeId(value, publicId) };
+  } finally {
+    lease.release();
+  }
+}
+
 export function createGatewayHandler(
   dependencies: GatewayHandlerDependencies,
 ): (request: IncomingMessage, response: ServerResponse) => Promise<void> {
   let deepseekClient = dependencies.deepseekClient;
   let limitedDeepSeekClient: DeepSeekGateway | undefined;
   let sitemapReader = dependencies.sitemapReader;
+  const advancedBackend =
+    dependencies.advancedBackend ??
+    (dependencies.config.advancedBackend
+      ? createPageSiftBackend(
+          dependencies.config.advancedBackend,
+          dependencies.fetchImpl,
+          dependencies.config.timeoutMs,
+        )
+      : undefined);
+  const advancedSessions = new AdvancedSessionStore();
   const crawlJobs =
     dependencies.crawlJobs ??
     new CrawlJobManager({
@@ -724,6 +807,36 @@ export function createGatewayHandler(
         }
         sendJson(response, 200, result);
       } catch (error) {
+        if (
+          error instanceof UnsupportedFallbackFeatureError &&
+          route?.kind === "scrape" &&
+          advancedBackend &&
+          providerMode !== "no-fallback"
+        ) {
+          provider = "pagesift";
+          fallback = true;
+          fallbackReason = "pagesift_advanced_scrape";
+          try {
+            const result = await executeAdvancedScrape(
+              body,
+              advancedRequestHeaders(request, requestId),
+              advancedBackend,
+              advancedSessions,
+              requestController.signal,
+            );
+            if (requestController.signal.aborted) {
+              return;
+            }
+            if (result.kind === "passthrough") {
+              await sendUpstream(response, result.response);
+            } else {
+              sendJson(response, 200, result.body);
+            }
+          } catch (advancedError) {
+            fallbackError(response, advancedError);
+          }
+          return;
+        }
         fallbackError(response, error);
       }
     }

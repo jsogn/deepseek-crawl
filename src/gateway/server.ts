@@ -1,6 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { MapSitemapReader } from "../application/map.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
+import type { AdvancedBackend } from "./advanced-backend.js";
 import { GATEWAY_CAPACITY_DEFAULTS, type GatewayConfig } from "./config.js";
 import { CrawlJobManager } from "./crawl-jobs.js";
 import { createGatewayHandler } from "./handler.js";
@@ -20,6 +21,7 @@ export interface GatewayServerOptions {
   deepseekClient?: DeepSeekGateway;
   sitemapReader?: MapSitemapReader;
   crawlJobs?: CrawlJobManager;
+  advancedBackend?: AdvancedBackend;
   runtimeState?: GatewayServerRuntimeOptions;
   logger?: GatewayLogger;
 }
@@ -107,6 +109,9 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
       ...(options.deepseekClient === undefined ? {} : { deepseekClient: options.deepseekClient }),
       ...(options.sitemapReader === undefined ? {} : { sitemapReader: options.sitemapReader }),
       crawlJobs,
+      ...(options.advancedBackend === undefined
+        ? {}
+        : { advancedBackend: options.advancedBackend }),
       ...(options.logger === undefined ? {} : { logger: options.logger }),
     }),
   );

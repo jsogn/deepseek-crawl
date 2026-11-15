@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DeepSeekGateway } from "../../src/deepseek/gateway.js";
+import { AdvancedBackendError, type AdvancedRequest } from "../../src/gateway/advanced-backend.js";
 import { CrawlJobManager } from "../../src/gateway/crawl-jobs.js";
 import { listGatewayRuntimeStates } from "../../src/gateway/runtime.js";
 import { startGatewayServer } from "../../src/gateway/server.js";
@@ -25,6 +26,38 @@ function testConfig() {
     upstreamUrl: new URL("https://api.firecrawl.dev/"),
     requestBodyLimit: 1024 * 1024,
     timeoutMs: 2000,
+  };
+}
+
+function pageSiftBackend(handler: (input: AdvancedRequest) => Response | Promise<Response>) {
+  const requests: Array<{
+    method: string;
+    path: string;
+    authorization: string | null;
+    body: Record<string, unknown>;
+  }> = [];
+  const config = {
+    provider: "pagesift" as const,
+    url: new URL("http://127.0.0.1:3002/"),
+    apiKey: "pagesift-secret",
+  };
+  return {
+    requests,
+    backend: {
+      config,
+      async request(input: AdvancedRequest) {
+        requests.push({
+          method: input.method,
+          path: input.path,
+          authorization: input.headers.get("authorization"),
+          body: JSON.parse(Buffer.from(input.body ?? []).toString("utf8")),
+        });
+        return handler(input);
+      },
+      async readJsonResponse(response: Response) {
+        return (await response.json()) as Record<string, unknown>;
+      },
+    },
   };
 }
 
@@ -72,6 +105,321 @@ describe("Firecrawl-compatible gateway", () => {
     expect(serialized).not.toContain("gateway-token");
     expect(serialized).not.toContain("fc-secret");
     expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("uses PageSift for advanced Scrape after keyed 402 and Keyless 429", async () => {
+    const events: GatewayRequestLog[] = [];
+    const pagesift = pageSiftBackend(() =>
+      Response.json({
+        success: true,
+        data: {
+          markdown: "# Browser",
+          metadata: { scrapeId: "pagesift-upstream" },
+        },
+      }),
+    );
+    let firecrawlCalls = 0;
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        advancedBackend: pagesift.backend.config,
+      },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      fetchImpl: async (_input, init) => {
+        firecrawlCalls += 1;
+        return new Headers(init?.headers).has("authorization")
+          ? Response.json({ success: false }, { status: 402 })
+          : Response.json({ success: false }, { status: 429 });
+      },
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          throw new Error("DeepSeek must not handle an action-bearing Scrape.");
+        },
+      },
+      advancedBackend: pagesift.backend,
+      logger: (event) => events.push(event),
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com/",
+        formats: ["markdown", "screenshot"],
+        actions: [{ type: "click", selector: "#more" }],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: { metadata: { scrapeId: expect.stringMatching(/^ps_[0-9a-f]{32}$/) } },
+    });
+    expect(firecrawlCalls).toBe(2);
+    expect(pagesift.requests).toEqual([
+      {
+        method: "POST",
+        path: "/v2/scrape",
+        authorization: null,
+        body: {
+          url: "https://example.com/",
+          formats: ["markdown", "screenshot"],
+          actions: [{ type: "click", selector: "#more" }],
+          keepSession: true,
+        },
+      },
+    ]);
+    expect(events.at(-1)).toMatchObject({
+      provider: "pagesift",
+      fallback: true,
+      fallback_reason: "pagesift_advanced_scrape",
+      status: 200,
+    });
+  });
+
+  it("keeps a common Scrape on DeepSeek when PageSift is configured", async () => {
+    let deepSeekCalls = 0;
+    const pagesift = pageSiftBackend(() => {
+      throw new Error("PageSift must not handle common Scrape.");
+    });
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        providerMode: "deepseek-first",
+        advancedBackend: pagesift.backend.config,
+      },
+      env: {},
+      fetchImpl: async () => {
+        throw new Error("Unexpected Firecrawl request.");
+      },
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          return { title: "Common", content: "# Common" };
+        },
+      },
+      advancedBackend: pagesift.backend,
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/", formats: ["markdown"] }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(deepSeekCalls).toBe(1);
+    expect(pagesift.requests).toHaveLength(0);
+  });
+
+  it("uses PageSift for advanced Scrape in deepseek-first mode", async () => {
+    const pagesift = pageSiftBackend(() =>
+      Response.json({
+        success: true,
+        data: { markdown: "# Browser", metadata: { scrapeId: "upstream" } },
+      }),
+    );
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        providerMode: "deepseek-first",
+        advancedBackend: pagesift.backend.config,
+      },
+      env: {},
+      fetchImpl: async () => {
+        throw new Error("Firecrawl must not be called in deepseek-first mode.");
+      },
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          throw new Error("DeepSeek must not handle browser Scrape.");
+        },
+      },
+      advancedBackend: pagesift.backend,
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com/",
+        actions: [{ type: "click", selector: "#more" }],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(pagesift.requests).toHaveLength(1);
+  });
+
+  it("never uses PageSift in no-fallback mode", async () => {
+    const pagesift = pageSiftBackend(() => Response.json({ success: true, data: {} }));
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        providerMode: "no-fallback",
+        advancedBackend: pagesift.backend.config,
+      },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      fetchImpl: async () =>
+        Response.json({ success: false, error: "Payment required." }, { status: 402 }),
+      advancedBackend: pagesift.backend,
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com/",
+        actions: [{ type: "click", selector: "#more" }],
+      }),
+    });
+
+    expect(response.status).toBe(402);
+    expect(pagesift.requests).toHaveLength(0);
+  });
+
+  it("passes PageSift 429 through without calling DeepSeek again", async () => {
+    let deepSeekCalls = 0;
+    const pagesift = pageSiftBackend(() =>
+      Response.json(
+        { success: false, code: "RATE_LIMITED", error: "Slow down" },
+        { status: 429, headers: { "retry-after": "9" } },
+      ),
+    );
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        advancedBackend: pagesift.backend.config,
+      },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      fetchImpl: async (_input, init) =>
+        new Headers(init?.headers).has("authorization")
+          ? Response.json({ success: false }, { status: 402 })
+          : Response.json({ success: false }, { status: 429 }),
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          return { title: "Wrong", content: "Wrong" };
+        },
+      },
+      advancedBackend: pagesift.backend,
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com/",
+        formats: ["markdown"],
+        actions: [{ type: "click", selector: "#more" }],
+      }),
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("9");
+    expect(deepSeekCalls).toBe(0);
+  });
+
+  it("returns advanced_backend_unavailable when PageSift transport fails", async () => {
+    const pagesift = pageSiftBackend(() => {
+      throw new AdvancedBackendError(
+        "The configured advanced backend is unavailable.",
+        "advanced_backend_unavailable",
+        503,
+      );
+    });
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        advancedBackend: pagesift.backend.config,
+      },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      fetchImpl: async (_input, init) =>
+        new Headers(init?.headers).has("authorization")
+          ? Response.json({ success: false }, { status: 402 })
+          : Response.json({ success: false }, { status: 429 }),
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          throw new Error("DeepSeek must not handle browser Scrape.");
+        },
+      },
+      advancedBackend: pagesift.backend,
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com/",
+        actions: [{ type: "click", selector: "#more" }],
+      }),
+    });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: "advanced_backend_unavailable",
+    });
+  });
+
+  it("rejects a successful PageSift Scrape without a scrapeId", async () => {
+    const pagesift = pageSiftBackend(() =>
+      Response.json({ success: true, data: { markdown: "# No session" } }),
+    );
+    const server = await startGatewayServer({
+      config: {
+        ...testConfig(),
+        advancedBackend: pagesift.backend.config,
+      },
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      fetchImpl: async (_input, init) =>
+        new Headers(init?.headers).has("authorization")
+          ? Response.json({ success: false }, { status: 402 })
+          : Response.json({ success: false }, { status: 429 }),
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          throw new Error("DeepSeek must not handle browser Scrape.");
+        },
+      },
+      advancedBackend: pagesift.backend,
+    });
+    servers.push(server);
+
+    const response = await fetch(new URL("/v2/scrape", server.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: "https://example.com/",
+        actions: [{ type: "click", selector: "#more" }],
+      }),
+    });
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({
+      code: "advanced_backend_session_id_missing",
+    });
   });
 
   it("applies bounded HTTP timeout settings", async () => {

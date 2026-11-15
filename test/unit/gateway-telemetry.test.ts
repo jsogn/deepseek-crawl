@@ -13,6 +13,7 @@ describe("gateway telemetry", () => {
     expect(normalizeGatewayRoute("/v2/search")).toBe("/v2/search");
     expect(normalizeGatewayRoute("/v2/crawl/dsc_secret")).toBe("/v2/crawl/:id");
     expect(normalizeGatewayRoute("/v2/crawl/dsc_secret/errors")).toBe("/v2/crawl/:id/errors");
+    expect(normalizeGatewayRoute("/v2/scrape/ps_abc/interact")).toBe("/v2/scrape/:id/interact");
     expect(normalizeGatewayRoute("/v2/unknown/path")).toBe("/v2/*");
     expect(normalizeGatewayRoute("/healthz")).toBe("/healthz");
   });

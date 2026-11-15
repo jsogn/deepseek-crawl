@@ -9,7 +9,7 @@ export interface GatewayRequestLog {
   route: string;
   status: number;
   duration_ms: number;
-  provider: "firecrawl" | "firecrawl-keyless" | "deepseek" | "gateway" | "none";
+  provider: "firecrawl" | "firecrawl-keyless" | "deepseek" | "pagesift" | "gateway" | "none";
   fallback: boolean;
   fallback_reason?: string;
 }
@@ -27,6 +27,9 @@ export function normalizeGatewayRoute(pathname: string): string {
   }
   if (/^\/v2\/crawl\/[^/]+\/errors$/.test(pathname)) {
     return "/v2/crawl/:id/errors";
+  }
+  if (/^\/v2\/scrape\/[^/]+\/interact$/.test(pathname)) {
+    return "/v2/scrape/:id/interact";
   }
   if (/^\/v2\/crawl\/[^/]+$/.test(pathname)) {
     return "/v2/crawl/:id";

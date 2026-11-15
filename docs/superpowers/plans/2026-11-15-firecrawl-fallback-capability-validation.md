@@ -412,7 +412,7 @@ git commit -m "fix: fail closed for unsupported search fallback options"
 - Consumes Task 1 helpers.
 - Preserves `new CrawlJobManager(...).create(input, client, reader, signal)`.
 
-- [ ] **Step 1: Replace the existing Crawl unsupported-option test table**
+- [x] **Step 1: Replace the existing Crawl unsupported-option test table**
 
 Replace the current `it.each` block in `test/unit/gateway-crawl-jobs.test.ts` with:
 
@@ -449,7 +449,7 @@ Replace the current `it.each` block in `test/unit/gateway-crawl-jobs.test.ts` wi
   });
 ```
 
-- [ ] **Step 2: Run the focused Crawl tests and confirm they fail**
+- [x] **Step 2: Run the focused Crawl tests and confirm they fail**
 
 Run:
 
@@ -459,7 +459,7 @@ npm test -- test/unit/gateway-crawl-jobs.test.ts
 
 Expected: FAIL for actions, nested options, webhook, and the new exact paths.
 
-- [ ] **Step 3: Integrate the shared guards**
+- [x] **Step 3: Integrate the shared guards**
 
 At the top of `src/gateway/crawl-jobs.ts`, import:
 
@@ -504,7 +504,7 @@ Immediately after `const parsed = crawlInputSchema.parse(input);` in `create`, a
 
 Remove the old format, external-link, and subdomain checks.
 
-- [ ] **Step 4: Run the focused Crawl and compatibility tests**
+- [x] **Step 4: Run the focused Crawl and compatibility tests**
 
 Run:
 
@@ -514,7 +514,7 @@ npm test -- test/unit/gateway-crawl-jobs.test.ts test/unit/firecrawl-compat.test
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Crawl validation**
+- [x] **Step 5: Commit Crawl validation**
 
 ```bash
 git add src/gateway/crawl-jobs.ts test/unit/gateway-crawl-jobs.test.ts

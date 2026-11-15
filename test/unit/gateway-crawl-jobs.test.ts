@@ -558,9 +558,18 @@ describe("CrawlJobManager", () => {
   });
 
   it.each([
-    [{ scrapeOptions: { formats: ["screenshot"] } }, /markdown/i],
-    [{ allowExternalLinks: true }, /external/i],
-    [{ allowSubdomains: true }, /subdomain/i],
+    [{ scrapeOptions: { formats: ["screenshot"] } }, "`scrapeOptions.formats[0]`"],
+    [
+      { scrapeOptions: { formats: ["markdown"], actions: [{ type: "click" }] } },
+      "`scrapeOptions.actions`",
+    ],
+    [
+      { scrapeOptions: { formats: ["markdown"], onlyMainContent: true } },
+      "`scrapeOptions.onlyMainContent`",
+    ],
+    [{ webhook: { url: "https://example.com/hook" } }, "`webhook`"],
+    [{ allowExternalLinks: true }, "`allowExternalLinks`"],
+    [{ allowSubdomains: true }, "`allowSubdomains`"],
   ])("rejects an unsupported DeepSeek Crawl option %#", (options, message) => {
     const manager = new CrawlJobManager({ idFactory: () => "dsc_unsupported" });
     expect(() =>

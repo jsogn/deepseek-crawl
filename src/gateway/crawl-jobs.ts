@@ -4,8 +4,13 @@ import { executeCrawl } from "../application/crawl.js";
 import type { MapSitemapReader } from "../application/map.js";
 import type { DeepSeekGateway } from "../deepseek/gateway.js";
 import { errorMessage } from "../error-message.js";
+import {
+  collectUnsupportedFormats,
+  collectUnsupportedKeys,
+  throwForUnsupportedOptions,
+} from "../firecrawl/fallback-capabilities.js";
 import { GATEWAY_CAPACITY_DEFAULTS } from "./config.js";
-import { GatewayCapacityError, UnsupportedFallbackFeatureError } from "./errors.js";
+import { GatewayCapacityError } from "./errors.js";
 
 const DEFAULT_JOB_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -41,6 +46,21 @@ const crawlInputSchema = z
       .optional(),
   })
   .passthrough();
+
+const CRAWL_FALLBACK_KEYS = [
+  "url",
+  "limit",
+  "maxDiscoveryDepth",
+  "sitemap",
+  "ignoreQueryParameters",
+  "includePaths",
+  "excludePaths",
+  "delay",
+  "maxConcurrency",
+  "allowExternalLinks",
+  "allowSubdomains",
+  "scrapeOptions",
+] as const;
 
 export interface CrawlJobManagerOptions {
   now?: () => Date;
@@ -116,22 +136,6 @@ function requestUrl(value: string): string {
   return url.href;
 }
 
-function formatsAreMarkdownOnly(
-  formats:
-    | Array<
-        | string
-        | {
-            type: string;
-          }
-      >
-    | undefined,
-): boolean {
-  return (
-    formats === undefined ||
-    formats.every((format) => (typeof format === "string" ? format : format.type) === "markdown")
-  );
-}
-
 function storedDocumentBytes(document: FirecrawlCrawlDocument): number {
   return Buffer.byteLength(JSON.stringify(document), "utf8");
 }
@@ -170,21 +174,13 @@ export class CrawlJobManager {
   ): { success: true; id: string; url: string } {
     startSignal?.throwIfAborted();
     const parsed = crawlInputSchema.parse(input);
-    if (!formatsAreMarkdownOnly(parsed.scrapeOptions?.formats)) {
-      throw new UnsupportedFallbackFeatureError(
-        "DeepSeek fallback supports only the Firecrawl markdown Crawl format.",
-      );
-    }
-    if (parsed.allowExternalLinks) {
-      throw new UnsupportedFallbackFeatureError(
-        "DeepSeek fallback does not support Firecrawl external-link crawling.",
-      );
-    }
-    if (parsed.allowSubdomains) {
-      throw new UnsupportedFallbackFeatureError(
-        "DeepSeek fallback does not support Firecrawl subdomain crawling.",
-      );
-    }
+    throwForUnsupportedOptions([
+      ...collectUnsupportedKeys(parsed, CRAWL_FALLBACK_KEYS),
+      ...collectUnsupportedKeys(parsed.scrapeOptions ?? {}, ["formats"], "scrapeOptions"),
+      ...collectUnsupportedFormats(parsed.scrapeOptions?.formats, "scrapeOptions.formats"),
+      ...(parsed.allowExternalLinks ? ["allowExternalLinks"] : []),
+      ...(parsed.allowSubdomains ? ["allowSubdomains"] : []),
+    ]);
     const url = requestUrl(parsed.url);
     this.sweepExpired();
     const runningJobs = [...this.#jobs.values()].filter((job) => job.status === "scraping").length;

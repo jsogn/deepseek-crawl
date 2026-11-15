@@ -1,19 +1,15 @@
 # Changelog
 
-## Unreleased
-
-### Added
-
-- Add an opt-in PageSift advanced backend for browser-dependent Firecrawl
-  Scrape and Scrape-bound Interact, with bounded `ps_` sessions and automatic
-  fail-closed errors.
-
 ## 0.15.0 - 2026-11-15
 
 ### Added
 
 - Use Firecrawl's free Keyless tier as an automatic intermediate provider for
   supported local routes before DeepSeek fallback.
+- Add an opt-in PageSift advanced backend for browser-dependent Firecrawl
+  Scrape actions and Scrape-bound Interact, with bounded `ps_` sessions and
+  automatic fail-closed errors. Screenshots are supported through the
+  `screenshot` action, not as a Scrape format.
 
 ### Changed
 
@@ -30,6 +26,9 @@
 
 - Add an explicitly confirmed live Keyless Scrape smoke test that verifies no
   Authorization header is sent.
+- Verify PageSift 1.4.2 through the real Gateway with browser actions,
+  screenshot output, `ps_` Interact, session cleanup, and unavailable-backend
+  failure behavior.
 
 ## 0.14.1 - 2026-11-14
 

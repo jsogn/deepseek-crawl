@@ -26,6 +26,8 @@ DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS=100
 DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS=10
 DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS=100
 DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES=268435456
+DEEPSEEK_GATEWAY_ADVANCED_URL=
+PAGESIFT_API_KEY=
 ```
 
 Provider 模式默认为 `firecrawl-first`。设为 `deepseek-first` 可让常用路由直接
@@ -40,6 +42,11 @@ Provider 模式默认为 `firecrawl-first`。设为 `deepseek-first` 可让常�
 `DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS`。
 保留字节预算限制进程内 Crawl 结果占用的内存；内存受限的部署应降低
 `DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES`。
+
+启用可选 PageSift 高级后端时，将 `DEEPSEEK_GATEWAY_ADVANCED_URL` 设为 HTTPS
+服务根地址，并在需要时配置 `PAGESIFT_API_KEY`。HTTP 只允许 loopback 地址。
+`http://pagesift:3002` 这类 Docker 网络地址属于非 loopback，会被拒绝；应通过
+HTTPS 暴露 PageSift，或让 PageSift 与网关使用同一 loopback 命名空间。
 
 环境文件权限应为 `0600`。不要把 Token 写入镜像、Compose 文件、命令行或仓库。
 

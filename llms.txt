@@ -85,6 +85,25 @@ IP; respect `429` and do not rotate IPs. Crawl, Map, Extract, Batch Scrape,
 Agent, and job-status routes require a Firecrawl API key. Remote gateways do
 not use Keyless automatically.
 
+PageSift is not installed or managed by DeepSeek Crawl. If the user already runs
+PageSift and explicitly needs browser-dependent advanced Scrape or Post-Scrape
+Interact, an existing service can be connected with:
+
+```bash
+deepseek-crawl auth set pagesift  # only when PageSift requires an API key
+deepseek-crawl gateway install --advanced
+deepseek-crawl gateway install --advanced-url https://pagesift.example.com
+deepseek-crawl gateway install --no-advanced
+```
+
+`--advanced` defaults to `http://127.0.0.1:3002`. Do not install, start, stop, or
+remove PageSift on the user's behalf. Managed services require the stored
+`pagesift` credential; foreground mode may use `PAGESIFT_API_KEY`. The advanced
+surface is limited to the documented browser Scrape allowlist and PageSift-owned
+`ps_` Interact sessions. It does not include standalone Browser Sandbox,
+Playwright code, CDP/live view, JSON extraction, Parse, Extract, Agent, Monitor,
+or Batch Scrape.
+
 `gateway install`:
 
 - Uses the default `firecrawl-first` provider mode.
@@ -134,6 +153,7 @@ Interactive alternatives:
 ```bash
 deepseek-crawl auth set
 deepseek-crawl auth set firecrawl
+deepseek-crawl auth set pagesift
 deepseek-crawl auth status --json
 ```
 

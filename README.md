@@ -110,6 +110,26 @@ Node SDK 或任何直接调用 HTTP API 的客户端，应把根地址设置为
 `deepseek-crawl gateway url` 的输出；不要在末尾添加 `/v2`。远程部署和反向代理见
 [部署指南](https://github.com/jsogn/deepseek-crawl/blob/main/docs/deploying.zh-CN.md)。
 
+### 可选 PageSift 高级后端
+
+普通安装不需要 PageSift。需要使用浏览器执行的 Scrape Actions、截图，或 Scrape 后
+Interact 时，可以自行运行 PageSift，再让网关作为可选高级后端使用：
+
+```bash
+deepseek-crawl auth set pagesift  # PageSift 服务要求 API Key 时
+deepseek-crawl gateway install --advanced
+```
+
+默认连接 `http://127.0.0.1:3002`。可用
+`--advanced-url https://pagesift.example.com` 或
+`DEEPSEEK_GATEWAY_ADVANCED_URL` 指定其他根地址。网关不会安装、启动或停止
+PageSift，`gateway stop` 和 `gateway uninstall` 也不会管理该外部服务。
+
+高级后端只覆盖经过验证的浏览器型 Scrape 和 Scrape 后 Interact；不支持独立
+Browser Sandbox、Playwright code、CDP/live view、JSON 提取、Extract、Agent、
+Monitor、Batch Scrape 或 Parse。PageSift 不可用或能力不匹配时明确失败，不会静默
+降低为 DeepSeek 结果。`gateway install --no-advanced` 可撤销此配置。
+
 ## 路线 B：直接使用 DeepSeek CLI
 
 适合新 Agent 工作流，不需要 Firecrawl API 兼容层。
@@ -166,6 +186,8 @@ IP 每日限量，出现 `429` 后默认冷却 15 分钟。远程网关不会自
 
 - 高级 Firecrawl 能力在有额度时可以透传；没有 DeepSeek 等价能力时返回明确错误，
   不会伪装成功。
+- 可选的 PageSift 后端只覆盖浏览器型高级 Scrape 和 Scrape 后 Interact；它不提供
+  完整 Firecrawl 兼容，也不会接管 Firecrawl 已创建的浏览器会话。
 - DeepSeek fallback 只接受能够保真的闭集参数；例如 `actions`、等待、DOM 筛选或浏览器
   选项会返回 `unsupported_fallback_feature`，不会被静默忽略。Firecrawl 正常处理
   请求时，这些高级选项仍原样透传。

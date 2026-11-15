@@ -123,6 +123,30 @@ For the Node SDK or any direct HTTP client, use the output of
 [deployment guide](https://github.com/jsogn/deepseek-crawl/blob/main/docs/deploying.md)
 for remote and reverse-proxy setup.
 
+### Optional PageSift advanced backend
+
+A normal installation does not need PageSift. For browser-executed Scrape
+actions, screenshots, or Post-Scrape Interact, run PageSift externally and
+enable the optional advanced backend:
+
+```bash
+deepseek-crawl auth set pagesift  # when PageSift requires an API key
+deepseek-crawl gateway install --advanced
+```
+
+The default endpoint is `http://127.0.0.1:3002`. Use
+`--advanced-url https://pagesift.example.com` or
+`DEEPSEEK_GATEWAY_ADVANCED_URL` for another root URL. The Gateway never installs,
+starts, or stops PageSift, and `gateway stop` / `gateway uninstall` do not manage
+that external service.
+
+The advanced backend covers only the validated browser-dependent Scrape and
+Post-Scrape Interact surface. It does not include standalone Browser Sandbox,
+Playwright code, CDP/live view, JSON extraction, Extract, Agent, Monitor, Batch
+Scrape, or Parse. When PageSift is unavailable or cannot preserve semantics, the
+Gateway fails explicitly instead of silently returning a DeepSeek result. Use
+`gateway install --no-advanced` to disable the configured backend.
+
 ## Path B: Use the DeepSeek CLI directly
 
 Choose this path for a new Agent workflow that does not need Firecrawl API
@@ -186,6 +210,9 @@ automatically.
 - Advanced Firecrawl capabilities can pass through while credits are available;
   when DeepSeek has no equivalent, the gateway returns an explicit error rather
   than pretending the fallback succeeded.
+- The optional PageSift backend covers only browser-dependent advanced Scrape
+  and Post-Scrape Interact. It is not full Firecrawl compatibility and never
+  takes over a browser session already created by Firecrawl.
 - DeepSeek fallback accepts only a closed set of options it can reproduce
   faithfully. Options such as `actions`, waits, DOM filters, or browser controls
   return `unsupported_fallback_feature` instead of being silently ignored.

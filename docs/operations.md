@@ -53,7 +53,7 @@ preventing a loop back into itself.
 Local mode searches from `8787` for an available port; explicit `--port` and
 remote mode use strict fixed ports. Provider credentials come from environment
 variables first, then the Keychain/file stores populated by
-`deepseek-crawl auth set [deepseek|firecrawl|gateway]`.
+`deepseek-crawl auth set [deepseek|firecrawl|gateway|pagesift]`.
 `deepseek-crawl auth import firecrawl` can copy an existing Firecrawl CLI login
 into that store while displaying only a masked hint.
 
@@ -77,6 +77,64 @@ gateway honors `Retry-After` or starts a 15-minute default cooldown. During that
 cooldown, common routes use DeepSeek; keyless-only routes return a structured
 `429 keyless_rate_limited` response. Remote gateways never use Keyless
 automatically.
+
+### Optional PageSift advanced backend
+
+PageSift is disabled by default and is never installed or managed by
+`deepseek-crawl`. Enable an existing service with:
+
+```bash
+deepseek-crawl gateway install --advanced
+deepseek-crawl gateway install --advanced-url https://pagesift.example.com
+deepseek-crawl gateway install --no-advanced
+```
+
+`--advanced` uses `http://127.0.0.1:3002/`.
+`DEEPSEEK_GATEWAY_ADVANCED_URL` supplies the URL in foreground mode or to
+`gateway install --advanced`. Non-loopback backends require HTTPS and a PageSift
+credential. Use `PAGESIFT_API_KEY` for foreground processes; managed services
+require `deepseek-crawl auth set pagesift` because the background service does
+not inherit the installer shell.
+
+Managed preflight and `gateway status` call PageSift `/healthz` and
+`GET /v2/crawl/active` with 2-second timeouts and no redirects. `/healthz`
+reports only whether an advanced provider is configured, not the URL or key.
+
+The only advanced fallback routes are:
+
+- `POST /v2/scrape` with the closed browser capability allowlist.
+- `POST` / `DELETE /v2/scrape/:id/interact` for a `ps_` session created through
+  PageSift.
+
+Supported Scrape formats are the string formats `markdown`, `html`, `rawHtml`,
+`links`, `images`, and `screenshot`. Object formats are rejected. Supported
+actions are `wait`, `click`, `write`, `press`, `scroll`, `screenshot`, `scrape`,
+and `pdf`. `executeJavascript`, JSON extraction, profiles, proxies, location,
+ZDR, Parse, standalone Browser Sandbox, Playwright code, CDP, live view, Extract,
+Agent, Monitor, and Batch Scrape are outside this release.
+
+PageSift Scrape creates an opaque public ID matching `ps_` plus 32 lowercase hex
+characters. The Gateway keeps at most 1,000 active mappings for 10 minutes from
+creation; reads do not refresh the TTL. Restarting the Gateway loses mappings.
+Responses are buffered up to 16 MiB with four concurrent buffers and a 64 MiB
+aggregate limit. Unsupported, unavailable, invalid, oversized, or unknown
+session requests fail with structured errors. In particular:
+
+- `advanced_backend_unavailable`
+- `advanced_session_capacity`
+- `advanced_session_not_found`
+- `advanced_backend_response_too_large`
+- `advanced_backend_invalid_response`
+- `advanced_backend_session_id_missing`
+
+Interact `prompt` requires the PageSift operator to configure an
+OpenAI-compatible LLM. Deterministic Interact action arrays do not. PageSift
+cluster gateways do not support kept sessions; advanced Scrape requires a
+standalone PageSift server with Chrome.
+
+`gateway stop` and `gateway uninstall` never stop, modify, or remove PageSift.
+PageSift advanced mode is not full Firecrawl compatibility and never takes over a
+Firecrawl-owned browser session.
 
 `gateway --credits-cooldown` or
 `DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` controls the `firecrawl-first`
@@ -241,6 +299,8 @@ CLI Map and Crawl request Sitemaps directly and accept only public HTTP(S) targe
 | `DEEPSEEK_GATEWAY_RUNTIME_DIR`              | platform runtime/cache      | Gateway instance state dir        |
 | `FIRECRAWL_API_KEY`                         | none                        | Firecrawl upstream credential     |
 | `FIRECRAWL_UPSTREAM_URL`                    | `https://api.firecrawl.dev` | Gateway Firecrawl upstream        |
+| `DEEPSEEK_GATEWAY_ADVANCED_URL`             | none                        | Optional PageSift root URL        |
+| `PAGESIFT_API_KEY`                          | none                        | Foreground PageSift credential    |
 | `DEEPSEEK_GATEWAY_PROVIDER_MODE`            | `firecrawl-first`           | Provider selection policy         |
 | `DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` | `60`                        | Firecrawl 402 cooldown seconds    |
 | `DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS`  | `100`                       | Concurrent HTTP requests          |

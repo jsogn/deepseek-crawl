@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add an opt-in PageSift advanced backend for browser-dependent Firecrawl
+  Scrape and Scrape-bound Interact, with bounded `ps_` sessions and automatic
+  fail-closed errors.
+
 ## 0.15.0 - 2026-11-15
 
 ### Added

@@ -190,6 +190,9 @@ describe("package documentation", () => {
       "Firecrawl-compatible",
       "gateway url",
       "gateway status",
+      "gateway install --advanced",
+      "DEEPSEEK_GATEWAY_ADVANCED_URL",
+      "PAGESIFT_API_KEY",
       "provider_mode",
       "credits_cooldown_seconds",
       "max_retained_crawl_bytes",
@@ -197,6 +200,22 @@ describe("package documentation", () => {
     ]) {
       expect(allDocumentation).toContain(text);
     }
+  });
+
+  it("documents the optional PageSift backend contract", async () => {
+    const [llms, skill, cliReference, operations] = await Promise.all([
+      readProjectFile("llms.txt"),
+      readProjectFile("skills/deepseek-crawl/SKILL.md"),
+      readProjectFile("skills/deepseek-crawl/references/cli-reference.md"),
+      readProjectFile("docs/operations.md"),
+    ]);
+
+    expect(llms).toContain("PageSift is not installed or managed");
+    expect(skill).toContain("deepseek-crawl gateway install --advanced");
+    expect(cliReference).toContain("--no-advanced");
+    expect(cliReference).toContain("DEEPSEEK_GATEWAY_ADVANCED_URL");
+    expect(cliReference).toContain("PAGESIFT_API_KEY");
+    expect(operations).toContain("advanced_session_not_found");
   });
 });
 
@@ -282,9 +301,13 @@ describe("deployment assets", () => {
       "DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS",
       "DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS",
       "DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES",
+      "DEEPSEEK_GATEWAY_ADVANCED_URL",
+      "PAGESIFT_API_KEY",
     ]) {
       expect(environmentExample).toContain(`${key}=`);
     }
+    expect(compose).toContain("DEEPSEEK_GATEWAY_ADVANCED_URL");
+    expect(compose).toContain("PAGESIFT_API_KEY");
     expect(dockerignore.split(/\r?\n/)).toContain(".env");
     expect(dockerignore.split(/\r?\n/)).toContain("!.env.example");
     expect(ciWorkflow).toContain("npm run smoke:docker");

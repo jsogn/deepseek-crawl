@@ -27,6 +27,8 @@ DEEPSEEK_GATEWAY_MAX_PROVIDER_REQUESTS=100
 DEEPSEEK_GATEWAY_MAX_CRAWL_JOBS=10
 DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_JOBS=100
 DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES=268435456
+DEEPSEEK_GATEWAY_ADVANCED_URL=
+PAGESIFT_API_KEY=
 ```
 
 Provider mode defaults to `firecrawl-first`. Set `deepseek-first` to avoid
@@ -41,6 +43,13 @@ Concurrency defaults are intentionally bounded. Lower
 when one gateway shares Provider rate limits with other workloads.
 The retained byte budget bounds process-local Crawl result memory; lower
 `DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES` for memory-constrained hosts.
+
+For the optional PageSift advanced backend, set
+`DEEPSEEK_GATEWAY_ADVANCED_URL` to an HTTPS service root and provide
+`PAGESIFT_API_KEY` when required. HTTP is accepted only for loopback addresses.
+A Docker-network URL such as `http://pagesift:3002` is non-loopback and is
+therefore rejected; expose PageSift through HTTPS or keep PageSift on the same
+loopback namespace as the Gateway.
 
 Keep the environment file private (`0600`). Never put these values in an image,
 Compose file, shell command, or repository.

@@ -54,7 +54,7 @@ deepseek-crawl gateway --remote
 
 默认 loopback 模式从 `8787` 开始自动寻找可用端口；显式 `--port` 和远程模式使用
 严格固定端口。Provider 凭据优先从环境变量读取，否则使用
-`deepseek-crawl auth set [deepseek|firecrawl|gateway]` 保存的 Keychain/file。
+`deepseek-crawl auth set [deepseek|firecrawl|gateway|pagesift]` 保存的 Keychain/file。
 `deepseek-crawl auth import firecrawl` 可以把已有的 Firecrawl CLI 登录导入这个
 store，只显示掩码提示。
 
@@ -76,6 +76,56 @@ Keyless 免费但按 Firecrawl 的公网 IP 每日限量。收到 `429` 时优�
 `Retry-After`，否则冷却 15 分钟。冷却期间，常用路由使用 DeepSeek；仅 Keyless
 支持的路由返回结构化的 `429 keyless_rate_limited`。远程网关不会自动使用
 Keyless。
+
+### 可选 PageSift 高级后端
+
+PageSift 默认关闭，`deepseek-crawl` 不会安装或管理它。连接已有服务：
+
+```bash
+deepseek-crawl gateway install --advanced
+deepseek-crawl gateway install --advanced-url https://pagesift.example.com
+deepseek-crawl gateway install --no-advanced
+```
+
+`--advanced` 使用 `http://127.0.0.1:3002/`。
+`DEEPSEEK_GATEWAY_ADVANCED_URL` 可用于前台模式或
+`gateway install --advanced`。非 loopback 后端必须使用 HTTPS 并配置 PageSift
+凭据。前台可使用 `PAGESIFT_API_KEY`；受管理后台服务不会继承安装 shell，因此必须
+使用 `deepseek-crawl auth set pagesift` 保存凭据。
+
+托管安装预检和 `gateway status` 会请求 PageSift `/healthz` 与
+`GET /v2/crawl/active`，每个请求超时 2 秒且不跟随重定向。`/healthz` 只报告是否
+配置了高级后端，不返回 URL 或 Key。
+
+高级回退只覆盖：
+
+- 带封闭浏览器能力 allowlist 的 `POST /v2/scrape`。
+- PageSift 创建的 `ps_` 会话的 `POST` / `DELETE /v2/scrape/:id/interact`。
+
+Scrape 只接受字符串格式 `markdown`、`html`、`rawHtml`、`links`、`images` 和
+`screenshot`，拒绝对象格式。支持的 action 为 `wait`、`click`、`write`、
+`press`、`scroll`、`screenshot`、`scrape` 和 `pdf`。`executeJavascript`、JSON
+提取、profile、proxy、location、ZDR、Parse、独立 Browser Sandbox、Playwright
+code、CDP、live view、Extract、Agent、Monitor 和 Batch Scrape 不在本期范围。
+
+PageSift Scrape 返回 `ps_` 加 32 位小写 hex 的公共 ID。网关最多保存 1,000 个活动
+映射，TTL 从创建时开始计 10 分钟，读取不会续期；网关重启会丢失映射。响应缓冲上限
+为单次 16 MiB、并发 4 个、总计 64 MiB。不支持、不可用、无效、超限或未知会话会返回
+结构化错误，包括：
+
+- `advanced_backend_unavailable`
+- `advanced_session_capacity`
+- `advanced_session_not_found`
+- `advanced_backend_response_too_large`
+- `advanced_backend_invalid_response`
+- `advanced_backend_session_id_missing`
+
+Interact `prompt` 要求 PageSift 运维方配置 OpenAI-compatible LLM；确定性的 action
+数组不需要 LLM。PageSift cluster 不支持 kept session，高级 Scrape 需要带 Chrome
+的 standalone PageSift 服务。
+
+`gateway stop` 和 `gateway uninstall` 不会停止、修改或删除 PageSift。PageSift
+高级模式不是完整 Firecrawl 兼容，也不会接管 Firecrawl 已创建的浏览器会话。
 
 `gateway --credits-cooldown` 或
 `DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` 控制 `firecrawl-first` 的额度熔断时间，
@@ -219,6 +269,8 @@ CLI Map 和 Crawl 直接请求目标站点的 Sitemap，仅接受公网 HTTP(S) 
 | `DEEPSEEK_GATEWAY_RUNTIME_DIR`              | 平台 runtime/cache          | Gateway 实例状态目录      |
 | `FIRECRAWL_API_KEY`                         | 无                          | Firecrawl upstream 凭据   |
 | `FIRECRAWL_UPSTREAM_URL`                    | `https://api.firecrawl.dev` | Gateway 的 Firecrawl 上游 |
+| `DEEPSEEK_GATEWAY_ADVANCED_URL`             | 无                          | 可选 PageSift 根地址      |
+| `PAGESIFT_API_KEY`                          | 无                          | 前台 PageSift 凭据        |
 | `DEEPSEEK_GATEWAY_PROVIDER_MODE`            | `firecrawl-first`           | Provider 选择策略         |
 | `DEEPSEEK_GATEWAY_CREDITS_COOLDOWN_SECONDS` | `60`                        | Firecrawl 402 熔断秒数    |
 | `DEEPSEEK_GATEWAY_MAX_CONCURRENT_REQUESTS`  | `100`                       | 并发 HTTP 请求            |

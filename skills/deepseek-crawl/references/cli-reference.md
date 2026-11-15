@@ -68,7 +68,7 @@ deepseek-crawl --version
 Credentials:
 
 - `DEEPSEEK_API_KEY`, or a key stored by `deepseek-crawl init` / `auth set`
-- `deepseek-crawl auth set [deepseek|firecrawl|gateway]`
+- `deepseek-crawl auth set [deepseek|firecrawl|gateway|pagesift]`
 - `deepseek-crawl auth import firecrawl --json`
 - `deepseek-crawl auth status [credential] --json`
 - `deepseek-crawl auth remove [credential] --json`
@@ -83,6 +83,7 @@ Optional environment:
 - `DEEPSEEK_MAX_RETRIES`
 - `DEEPSEEK_CACHE_DIR`
 - `FIRECRAWL_API_KEY` and `FIRECRAWL_UPSTREAM_URL` for the optional gateway
+- `DEEPSEEK_GATEWAY_ADVANCED_URL` and `PAGESIFT_API_KEY` for foreground PageSift
 
 ## Balance
 
@@ -125,10 +126,15 @@ deepseek-crawl gateway
   [--remote]
   [--host <host>]
   [--port <1..65535>]
+  [--advanced]
+  [--advanced-url <http(s)-url>]
 
 deepseek-crawl gateway install
   [--provider-mode <mode>]
   [--port <1..65535>]
+  [--advanced]
+  [--advanced-url <http(s)-url>]
+  [--no-advanced]
   [--json]
 
 deepseek-crawl gateway start|stop|uninstall
@@ -152,6 +158,7 @@ Defaults:
 - Remote mode: fixed `8787` unless `--port` is supplied
 - Upstream: `FIRECRAWL_UPSTREAM_URL` or `https://api.firecrawl.dev`
 - Provider mode: `firecrawl-first`, `deepseek-first`, or `no-fallback`
+- Advanced backend: disabled unless explicitly enabled
 - Firecrawl 402 cooldown: 60 seconds by default, configurable from 0–3600
 - Capacity: 100 HTTP requests, 100 Provider requests, 10 active Crawl jobs,
   100 retained Crawl jobs, and 256 MiB of retained Crawl documents by default
@@ -170,6 +177,19 @@ equivalent environment variables in non-interactive deployments. Set the
 Firecrawl SDK `apiKey` to the gateway token. The gateway removes that incoming
 Authorization value before requesting Firecrawl and uses its stored Firecrawl
 credential.
+
+`--advanced` enables an external PageSift service at
+`http://127.0.0.1:3002/`. `--advanced-url` enables an explicit service root and
+defaults the backend to PageSift. Non-loopback URLs require HTTPS and a PageSift
+credential. Foreground mode can use `PAGESIFT_API_KEY`; managed services require
+`auth set pagesift` because the background service does not inherit the
+installer shell. `--no-advanced` is install-only and removes a prior advanced
+configuration. Reinstalling without an advanced flag preserves the current
+setting.
+
+PageSift preflight calls `/healthz` and `GET /v2/crawl/active` with 2-second
+per-request timeouts and no redirects. Failed preflight leaves the managed
+installation and Firecrawl CLI configuration unchanged.
 
 Local loopback gateways in `firecrawl-first` mode also use Firecrawl Keyless for
 Scrape, Search, Parse, and Post-Scrape Interact. Keyless requests remove every
@@ -214,6 +234,34 @@ Fallback uses a closed allowlist: `actions`, waits, DOM filters, browser control
 and any other unmapped option return `400 unsupported_fallback_feature` before a
 DeepSeek call starts. Requests handled by Firecrawl continue to pass through
 unchanged.
+
+An enabled PageSift backend may additionally handle advanced browser Scrape and
+Scrape-bound Interact. Supported Scrape string formats are `markdown`, `html`,
+`rawHtml`, `links`, `images`, and `screenshot`; object formats are rejected.
+Supported actions are `wait`, `click`, `write`, `press`, `scroll`, `screenshot`,
+`scrape`, and `pdf`. `executeJavascript`, JSON extraction, profiles, proxies,
+location, ZDR, Parse, standalone Browser Sandbox, Playwright code, CDP/live
+view, Extract, Agent, Monitor, and Batch Scrape are not supported.
+
+PageSift Scrape IDs use `ps_` followed by 32 lowercase hex characters. The
+Gateway retains at most 1,000 mappings for 10 minutes, and a restart loses them.
+Successful advanced Scrape JSON is bounded to 16 MiB per response, four
+concurrent buffers, and 64 MiB total. Interact `prompt` requires the PageSift
+operator to configure an LLM. PageSift cluster gateways cannot provide kept
+sessions.
+
+Advanced session/error codes are:
+
+- `advanced_backend_unavailable`
+- `advanced_session_capacity`
+- `advanced_session_not_found`
+- `advanced_backend_response_too_large`
+- `advanced_backend_invalid_response`
+- `advanced_backend_session_id_missing`
+
+`gateway stop` and `gateway uninstall` never manage the external PageSift
+service.
+
 DeepSeek Crawl IDs use the `dsc_` prefix and remain process-local for 24 hours.
 Firecrawl-owned Crawl IDs continue to use the Firecrawl upstream.
 
@@ -226,13 +274,14 @@ export FIRECRAWL_API_URL="$(deepseek-crawl gateway url)"
 `gateway url` succeeds with exactly one healthy instance. If multiple instances
 exist, pass `--port`. `gateway status --json` lists all healthy instances and
 removes stale PID/state entries. It also reports nonsecret credential readiness
-for `deepseek`, `firecrawl`, and `gateway_auth`. Instance JSON uses
-`started_at`, `provider_mode`, `credits_cooldown_seconds`, and capacity fields
-including `max_retained_crawl_bytes`.
+for `deepseek`, `firecrawl`, `pagesift`, and `gateway_auth`. Instance JSON uses
+`started_at`, `provider_mode`, `advanced_backend`, `credits_cooldown_seconds`,
+and capacity fields including `max_retained_crawl_bytes`.
 
 `GET /healthz` is unauthenticated and returns only status, version, PID,
 local/remote mode, provider mode, credits cooldown, and capacity limits. It never
-returns provider keys or user content.
+returns provider keys, the PageSift URL, or user content. `advanced_backend`
+reports only provider/configured metadata.
 
 Use `--max-retained-crawl-bytes <bytes>` or
 `DEEPSEEK_GATEWAY_MAX_RETAINED_CRAWL_BYTES` to tune the retained document budget.

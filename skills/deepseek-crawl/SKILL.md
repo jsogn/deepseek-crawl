@@ -23,6 +23,10 @@ The execution workflow below is Path B unless the user explicitly selects Path
 A. Keyless is a tier inside Path A, not a third route. Do not infer a route from
 DeepSeek account availability.
 
+The CLI is the canonical execution surface. MCP is optional and should be used
+only when the calling client cannot execute the CLI or the user explicitly
+requests MCP.
+
 ## Before Searching
 
 Run:
@@ -84,6 +88,28 @@ restores the saved Firecrawl API URL; `uninstall` also removes all managed
 service and log files. Do not claim this covers SDK clients that hard-code their
 own `apiUrl`.
 
+For browser-dependent Firecrawl Scrape actions and Post-Scrape Interact, an
+existing external PageSift service can be enabled explicitly:
+
+```bash
+deepseek-crawl auth set pagesift  # only when PageSift requires a key
+deepseek-crawl gateway install --advanced
+deepseek-crawl gateway install --advanced-url https://pagesift.example.com
+deepseek-crawl gateway install --no-advanced
+```
+
+`--advanced` defaults to `http://127.0.0.1:3002`. PageSift is not installed,
+started, stopped, or removed by DeepSeek Crawl. Managed installation uses the
+stored `pagesift` credential; the installer shell's `PAGESIFT_API_KEY` is not
+assumed to reach the background service. Foreground mode may use that
+environment variable.
+
+Advanced mode covers only the validated browser Scrape capability allowlist and
+PageSift-owned `ps_` Interact sessions. It does not cover standalone Browser
+Sandbox, Playwright code, CDP/live view, JSON extraction, Parse, Extract, Agent,
+Monitor, or Batch Scrape. PageSift errors and unavailable backends fail
+explicitly; do not silently retry them through DeepSeek.
+
 `auth import firecrawl` prints only a masked hint. `FIRECRAWL_API_KEY` still takes
 precedence over the imported credential.
 
@@ -91,7 +117,8 @@ Point the Firecrawl client at the URL printed by the command. Local mode starts
 at `8787` and automatically chooses the next available port when occupied.
 Use `deepseek-crawl gateway url` from another terminal or script; use
 `gateway status --json` to list instances, prune stale runtime state, and inspect
-DeepSeek/Firecrawl/gateway-auth readiness plus provider mode and cooldown.
+DeepSeek/Firecrawl/PageSift/gateway-auth readiness plus provider mode, advanced
+backend readiness, and cooldown.
 
 Provider mode defaults to `firecrawl-first`. Use `deepseek-first` or
 `no-fallback` when the deployment must not switch providers automatically.

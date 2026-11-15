@@ -45,7 +45,7 @@
     - `remainingMs(nowMs: number): number`
     - `retryAfterSeconds(nowMs: number): number`
 
-- [ ] **Step 1: Write the failing Keyless policy tests**
+- [x] **Step 1: Write the failing Keyless policy tests**
 
 Create `test/unit/gateway-keyless.test.ts`:
 
@@ -127,7 +127,7 @@ describe("Firecrawl Keyless policy", () => {
 });
 ```
 
-- [ ] **Step 2: Run the policy test and verify it fails**
+- [x] **Step 2: Run the policy test and verify it fails**
 
 Run:
 
@@ -137,7 +137,7 @@ npm test -- test/unit/gateway-keyless.test.ts
 
 Expected: FAIL because `src/gateway/keyless.ts` does not exist.
 
-- [ ] **Step 3: Implement the Keyless policy module**
+- [x] **Step 3: Implement the Keyless policy module**
 
 Create `src/gateway/keyless.ts`:
 
@@ -205,7 +205,7 @@ export class KeylessCooldown {
 }
 ```
 
-- [ ] **Step 4: Run the focused test**
+- [x] **Step 4: Run the focused test**
 
 Run:
 
@@ -215,7 +215,7 @@ npm test -- test/unit/gateway-keyless.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Run type checks and formatting**
+- [x] **Step 5: Run type checks and formatting**
 
 ```bash
 npm run format:check
@@ -224,7 +224,7 @@ npm run typecheck
 npm run typecheck:test
 ```
 
-- [ ] **Step 6: Commit Keyless policy**
+- [x] **Step 6: Commit Keyless policy**
 
 ```bash
 git add src/gateway/keyless.ts test/unit/gateway-keyless.test.ts \

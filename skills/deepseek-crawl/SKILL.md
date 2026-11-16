@@ -85,8 +85,10 @@ deepseek-crawl gateway uninstall
 `install` starts a LaunchAgent on macOS or a per-user Scheduled Task on Windows,
 and points the Firecrawl CLI at the Gateway only after a health check. `stop`
 restores the saved Firecrawl API URL; `uninstall` also removes all managed
-service and log files. Do not claim this covers SDK clients that hard-code their
-own `apiUrl`.
+service and log files. `gateway status` reports CLI and running Gateway
+versions and flags a mismatch without treating an otherwise healthy service as
+unavailable. Do not claim this covers SDK clients that hard-code their own
+`apiUrl`.
 
 Use `gateway install --light` on resource-constrained managed hosts. It caps
 HTTP, Provider, and Crawl concurrency plus retained Crawl data without reducing

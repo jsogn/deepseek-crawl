@@ -12,6 +12,7 @@ import {
   stopGatewayService,
   uninstallGatewayService,
 } from "../../src/gateway/service.js";
+import { packageVersion } from "../../src/version.js";
 
 const CLOUD_API_URL = "https://api.firecrawl.dev";
 const LOCAL_API_URL = "http://127.0.0.1:8787";
@@ -172,6 +173,7 @@ async function fixture() {
     fetchImpl: async () =>
       Response.json({
         status: "ok",
+        version: packageVersion,
         pid: 4242,
         provider_mode: "deepseek-first",
       }),
@@ -208,6 +210,7 @@ async function windowsFixture() {
     fetchImpl: async () =>
       Response.json({
         status: "ok",
+        version: packageVersion,
         pid: 5151,
         provider_mode: "deepseek-first",
       }),
@@ -247,6 +250,9 @@ describe.skipIf(process.platform === "win32")("managed Gateway service", () => {
       healthy: true,
       client_targets_gateway: true,
       provider_mode: "deepseek-first",
+      cli_version: packageVersion,
+      gateway_version: packageVersion,
+      version_matches_cli: true,
       gateway_url: `${LOCAL_API_URL}/`,
     });
     expect(launchctl.calls.some((call) => call[1] === "bootstrap")).toBe(true);
@@ -550,6 +556,30 @@ describe.skipIf(process.platform === "win32")("managed Gateway service", () => {
       client_targets_gateway: true,
     });
     expect(status.issues.join(" ")).toMatch(/not running|unhealthy|unavailable/i);
+  });
+
+  it("reports version drift without marking a healthy service as unavailable", async () => {
+    const { context } = await fixture();
+    await installGatewayService(context, { providerMode: "deepseek-first", port: 8787 });
+    context.fetchImpl = async () =>
+      Response.json({
+        status: "ok",
+        version: "0.14.0",
+        pid: 4242,
+        provider_mode: "deepseek-first",
+      });
+
+    const status = await getGatewayServiceStatus(context);
+
+    expect(status).toMatchObject({
+      healthy: true,
+      cli_version: packageVersion,
+      gateway_version: "0.14.0",
+      version_matches_cli: false,
+    });
+    expect(status.issues.join(" ")).toMatch(
+      new RegExp(`gateway.*0\\.14\\.0.*cli.*${packageVersion.replaceAll(".", "\\.")}`, "i"),
+    );
   });
 
   it("waits for launchd to finish unloading before reporting stopped", async () => {

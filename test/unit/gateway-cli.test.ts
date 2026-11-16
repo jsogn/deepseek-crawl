@@ -6,6 +6,7 @@ import { type CliDependencies, runCli } from "../../src/cli/run.js";
 import type { CredentialName, CredentialStore } from "../../src/credentials/store.js";
 import { listGatewayRuntimeStates, writeGatewayRuntimeState } from "../../src/gateway/runtime.js";
 import type { GatewayServiceManager, GatewayServiceStatus } from "../../src/gateway/service.js";
+import { packageVersion } from "../../src/version.js";
 import { writer } from "../helpers/cli.js";
 
 function store(value?: string): CredentialStore {
@@ -80,6 +81,9 @@ function serviceStatus(overrides: Partial<GatewayServiceStatus> = {}): GatewaySe
     client_targets_gateway: true,
     provider_mode: "deepseek-first",
     capacity_profile: "standard",
+    cli_version: packageVersion,
+    gateway_version: packageVersion,
+    version_matches_cli: true,
     gateway_url: "http://127.0.0.1:8787/",
     client_api_url: "http://127.0.0.1:8787",
     service_path: "/tmp/com.jsogn.deepseek-crawl.gateway.plist",
@@ -227,6 +231,8 @@ describe("gateway discovery commands", () => {
     expect(await runCli(["gateway", "uninstall"], lifecycle.deps)).toBe(0);
     expect(calls).toEqual(["start", "stop", "uninstall"]);
     expect(lifecycle.stdout.value()).toContain("Gateway service started.");
+    expect(lifecycle.stdout.value()).toContain(`CLI version: ${packageVersion}`);
+    expect(lifecycle.stdout.value()).toContain(`Gateway version: ${packageVersion}`);
     expect(lifecycle.stdout.value()).toContain("Gateway service stopped.");
     expect(lifecycle.stdout.value()).toContain("Gateway service uninstalled.");
   });
@@ -318,6 +324,7 @@ describe("gateway discovery commands", () => {
     environment.deps.fetchImpl = (async () =>
       Response.json({
         status: "ok",
+        version: packageVersion,
         pid: process.pid,
         provider_mode: "deepseek-first",
         credits_cooldown_seconds: 0,
@@ -330,8 +337,11 @@ describe("gateway discovery commands", () => {
 
     expect(await runCli(["gateway", "status", "--json"], environment.deps)).toBe(0);
     expect(JSON.parse(environment.stdout.value())).toMatchObject({
+      cli_version: packageVersion,
       instances: [
         {
+          gateway_version: packageVersion,
+          version_matches_cli: true,
           provider_mode: "deepseek-first",
           credits_cooldown_seconds: 0,
           max_concurrent_requests: 200,
@@ -353,6 +363,7 @@ describe("gateway discovery commands", () => {
     expect(human.stdout.value()).toContain("crawl_jobs=5");
     expect(human.stdout.value()).toContain("retained_jobs=20");
     expect(human.stdout.value()).toContain("retained_bytes=1048576");
+    expect(human.stdout.value()).toContain(`version=${packageVersion}`);
   });
 
   it("reports managed service and Firecrawl client drift", async () => {

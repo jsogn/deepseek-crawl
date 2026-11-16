@@ -179,6 +179,13 @@ requests, 4 Provider requests, 2 active Crawl jobs, 4 retained Crawl jobs, and a
 current setting. `gateway install --no-light` restores standard limits.
 `gateway status --json` exposes the setting as `service.capacity_profile`.
 
+`gateway status` reports the current CLI version at the top level as
+`cli_version`. Each running instance includes `gateway_version` and
+`version_matches_cli`; the managed `service` object includes the same version
+comparison. A version mismatch is an issue but does not by itself change the
+Gateway health result. Reinstall the managed service to restart it on the CLI's
+version.
+
 Use `auth set firecrawl` to make Firecrawl-first local mode available; otherwise
 common routes use DeepSeek. Remote mode requires `auth set gateway`, or the
 equivalent environment variables in non-interactive deployments. Set the

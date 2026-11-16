@@ -3,6 +3,7 @@ import type { Dirent } from "node:fs";
 import { chmod, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { resolveCacheDirectory } from "../cache/paths.js";
+import { parseReportedVersion } from "../version.js";
 import type { GatewayProviderMode } from "./config.js";
 
 const RUNTIME_VERSION = 1;
@@ -13,6 +14,7 @@ export interface GatewayRuntimeState {
   url: string;
   mode: "local" | "remote";
   startedAt: string;
+  gatewayVersion?: string;
   providerMode?: GatewayProviderMode;
   creditsCooldownSeconds?: number;
   maxConcurrentRequests?: number;
@@ -88,12 +90,14 @@ function validateState(value: unknown): GatewayRuntimeState {
   }
   new URL(candidate.url);
   const advancedBackend = validateAdvancedBackend(candidate.advancedBackend);
+  const gatewayVersion = parseReportedVersion(candidate.gatewayVersion);
   return {
     version: 1,
     pid: candidate.pid as number,
     url: candidate.url,
     mode: candidate.mode as "local" | "remote",
     startedAt: candidate.startedAt,
+    ...(gatewayVersion === undefined ? {} : { gatewayVersion }),
     ...(advancedBackend === undefined ? {} : { advancedBackend }),
   };
 }
@@ -141,6 +145,7 @@ function processExists(pid: number): boolean {
 }
 
 interface GatewayRuntimeHealth {
+  gatewayVersion?: string;
   providerMode?: GatewayProviderMode;
   creditsCooldownSeconds?: number;
   maxConcurrentRequests?: number;
@@ -171,6 +176,7 @@ async function healthy(
     }
     const body = (await response.json()) as {
       status?: unknown;
+      version?: unknown;
       pid?: unknown;
       provider_mode?: unknown;
       credits_cooldown_seconds?: unknown;
@@ -183,6 +189,7 @@ async function healthy(
     if (body.status !== "ok" || body.pid !== state.pid) {
       return undefined;
     }
+    const gatewayVersion = parseReportedVersion(body.version);
     const providerMode = ["firecrawl-first", "deepseek-first", "no-fallback"].includes(
       String(body.provider_mode),
     )
@@ -199,6 +206,7 @@ async function healthy(
     const maxRetainedCrawlJobs = capacity(body.max_retained_crawl_jobs);
     const maxRetainedCrawlBytes = capacity(body.max_retained_crawl_bytes);
     return {
+      ...(gatewayVersion === undefined ? {} : { gatewayVersion }),
       ...(providerMode === undefined ? {} : { providerMode }),
       ...(creditsCooldownSeconds === undefined ? {} : { creditsCooldownSeconds }),
       ...(maxConcurrentRequests === undefined ? {} : { maxConcurrentRequests }),

@@ -645,6 +645,10 @@ function formatGatewayServiceStatus(
   if (status.capacity_profile) {
     lines.push(`Capacity profile: ${status.capacity_profile}`);
   }
+  lines.push(`CLI version: ${status.cli_version}`);
+  if (status.gateway_version) {
+    lines.push(`Gateway version: ${status.gateway_version}`);
+  }
   lines.push(
     status.advanced_backend.enabled
       ? `Advanced backend: pagesift (${status.advanced_backend.api_ready ? "ready" : "unavailable"})`
@@ -784,6 +788,9 @@ async function runGatewayStatus(
       url: state.url,
       mode: state.mode,
       started_at: state.startedAt,
+      gateway_version: state.gatewayVersion ?? null,
+      version_matches_cli:
+        state.gatewayVersion === undefined ? null : state.gatewayVersion === packageVersion,
       provider_mode: state.providerMode ?? null,
       credits_cooldown_seconds: state.creditsCooldownSeconds ?? null,
       max_concurrent_requests: state.maxConcurrentRequests ?? null,
@@ -796,6 +803,7 @@ async function runGatewayStatus(
   );
   const result = {
     version: 1 as const,
+    cli_version: packageVersion,
     running: running.length > 0,
     stale,
     instances,
@@ -810,12 +818,14 @@ async function runGatewayStatus(
         ? ["Gateway is not running."]
         : instances.map(
             (instance) =>
-              `${instance.mode}  ${instance.url}  pid=${instance.pid}  provider=${instance.provider_mode ?? "unknown"}  advanced=${instance.advanced_backend.enabled ? (instance.advanced_backend.api_ready ? "ready" : "unavailable") : "disabled"}  cooldown=${instance.credits_cooldown_seconds === null ? "unknown" : `${instance.credits_cooldown_seconds}s`}  http=${instance.max_concurrent_requests ?? "unknown"}  provider_requests=${instance.max_concurrent_provider_requests ?? "unknown"}  crawl_jobs=${instance.max_active_crawl_jobs ?? "unknown"}  retained_jobs=${instance.max_retained_crawl_jobs ?? "unknown"}  retained_bytes=${instance.max_retained_crawl_bytes ?? "unknown"}  started=${instance.started_at}`,
+              `${instance.mode}  ${instance.url}  pid=${instance.pid}  version=${instance.gateway_version ?? "unknown"}  provider=${instance.provider_mode ?? "unknown"}  advanced=${instance.advanced_backend.enabled ? (instance.advanced_backend.api_ready ? "ready" : "unavailable") : "disabled"}  cooldown=${instance.credits_cooldown_seconds === null ? "unknown" : `${instance.credits_cooldown_seconds}s`}  http=${instance.max_concurrent_requests ?? "unknown"}  provider_requests=${instance.max_concurrent_provider_requests ?? "unknown"}  crawl_jobs=${instance.max_active_crawl_jobs ?? "unknown"}  retained_jobs=${instance.max_retained_crawl_jobs ?? "unknown"}  retained_bytes=${instance.max_retained_crawl_bytes ?? "unknown"}  started=${instance.started_at}`,
           );
     lines.push(
       "",
       `Managed service: ${service.installed ? "installed" : "not installed"}`,
       `Capacity profile: ${service.capacity_profile ?? "unavailable"}`,
+      `CLI version: ${service.cli_version}`,
+      `Gateway version: ${service.gateway_version ?? "unavailable"}`,
       `Firecrawl CLI targets Gateway: ${service.client_targets_gateway ? "yes" : "no"}`,
       `DeepSeek: ${credentials.deepseek.configured ? `configured via ${credentials.deepseek.source}` : `not configured (${credentials.deepseek.backend})`}`,
       `Firecrawl: ${credentials.firecrawl.configured ? `configured via ${credentials.firecrawl.source}` : `not configured (${credentials.firecrawl.backend})`}`,

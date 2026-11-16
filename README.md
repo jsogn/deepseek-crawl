@@ -101,6 +101,9 @@ deepseek-crawl gateway install --no-light  # 恢复标准上限
 
 重新安装时省略两个选项会保留当前 profile；`gateway status` 会显示实际配置。
 
+`gateway status` 同时报告 CLI 与运行中网关的版本。后台服务仍在旧版本时，会提示
+版本不匹配并建议重新执行 `gateway install`；服务本身仍按真实健康状态报告。
+
 ### SDK、Linux 与手动网关
 
 受管理生命周期目前由 macOS `launchd` 和 Windows 用户级 Task Scheduler 提供。

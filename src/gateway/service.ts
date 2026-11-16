@@ -3,6 +3,7 @@ import { chmod, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CredentialName, CredentialStore } from "../credentials/store.js";
 import { writeFileAtomic } from "../output/files.js";
+import { packageVersion, parseReportedVersion } from "../version.js";
 import {
   type AdvancedBackendStatus,
   disabledAdvancedBackendStatus,
@@ -100,6 +101,9 @@ export interface GatewayServiceStatus {
   client_targets_gateway: boolean;
   provider_mode: GatewayProviderMode | null;
   capacity_profile: GatewayCapacityProfile | null;
+  cli_version: string;
+  gateway_version: string | null;
+  version_matches_cli: boolean | null;
   gateway_url: string | null;
   client_api_url: string | null;
   service_path: string | null;
@@ -853,6 +857,9 @@ function unsupportedStatus(): GatewayServiceStatus {
     client_targets_gateway: false,
     provider_mode: null,
     capacity_profile: null,
+    cli_version: packageVersion,
+    gateway_version: null,
+    version_matches_cli: null,
     gateway_url: null,
     client_api_url: null,
     service_path: null,
@@ -879,6 +886,9 @@ export async function getGatewayServiceStatus(
       client_targets_gateway: false,
       provider_mode: null,
       capacity_profile: null,
+      cli_version: packageVersion,
+      gateway_version: null,
+      version_matches_cli: null,
       gateway_url: null,
       client_api_url: normalizedUrl(await currentFirecrawlApiUrl(paths.firecrawlCredentialsPath)),
       service_path: null,
@@ -895,6 +905,7 @@ export async function getGatewayServiceStatus(
   ]);
   const expectedUrl = localGatewayUrl(state.port);
   let healthy = false;
+  let gatewayVersion: string | null = null;
   if (runtime.running) {
     try {
       const response = await (context.fetchImpl ?? fetch)(new URL("healthz", `${expectedUrl}/`), {
@@ -902,6 +913,7 @@ export async function getGatewayServiceStatus(
       });
       const health = (await response.json()) as {
         status?: unknown;
+        version?: unknown;
         pid?: unknown;
         provider_mode?: unknown;
       };
@@ -910,6 +922,9 @@ export async function getGatewayServiceStatus(
         health.status === "ok" &&
         (context.platform === "win32" || health.pid === runtime.pid) &&
         health.provider_mode === state.providerMode;
+      if (healthy) {
+        gatewayVersion = parseReportedVersion(health.version) ?? null;
+      }
     } catch {
       healthy = false;
     }
@@ -933,6 +948,12 @@ export async function getGatewayServiceStatus(
   if (!state.desiredRunning && runtime.running) {
     issues.push("Gateway service is running while marked as stopped.");
   }
+  const versionMatchesCli = gatewayVersion === null ? null : gatewayVersion === packageVersion;
+  if (healthy && versionMatchesCli === false) {
+    issues.push(
+      `Gateway version ${gatewayVersion} does not match CLI version ${packageVersion}. Run \`gateway install\` to restart the managed service.`,
+    );
+  }
   const advancedBackend = await serviceAdvancedStatus(context, state);
   if (advancedBackend.enabled && !advancedBackend.reachable) {
     issues.push("Advanced PageSift backend is unreachable.");
@@ -948,6 +969,9 @@ export async function getGatewayServiceStatus(
     client_targets_gateway: clientTargetsGateway,
     provider_mode: state.providerMode,
     capacity_profile: state.capacityProfile,
+    cli_version: packageVersion,
+    gateway_version: gatewayVersion,
+    version_matches_cli: versionMatchesCli,
     gateway_url: `${expectedUrl}/`,
     client_api_url: normalizedUrl(clientApiUrl),
     service_path: paths.serviceDefinitionPath,

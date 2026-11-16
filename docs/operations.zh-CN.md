@@ -94,6 +94,11 @@ deepseek-crawl gateway install --light
 `gateway status --json` 的 `service.capacity_profile` 报告当前设置，运行实例仍会
 列出实际采用的每个限制。
 
+`gateway status` 还会把 CLI 版本与 Gateway `/healthz` 报告的版本写入
+`cli_version`、`gateway_version` 和 `version_matches_cli`。受管理服务版本不一致时
+会添加 issue 并建议重新执行 `gateway install`，但不会把一个仍在正常响应健康检查的
+服务误判为不可用。Gateway 未报告版本时对应字段为 `null`，其余健康判断保持不变。
+
 ### 可选 PageSift 高级后端
 
 PageSift 默认关闭，`deepseek-crawl` 不会安装或管理它。连接已有服务：

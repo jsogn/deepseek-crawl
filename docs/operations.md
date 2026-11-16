@@ -96,6 +96,13 @@ limits with `deepseek-crawl gateway install --no-light`.
 `gateway status --json` reports the setting as `service.capacity_profile`, while
 runtime instances continue to expose each effective limit.
 
+`gateway status` also compares the CLI version with the version reported by the
+Gateway `/healthz` endpoint through `cli_version`, `gateway_version`, and
+`version_matches_cli`. A managed-service mismatch adds an issue that recommends
+reinstalling, without marking a service unhealthy when its other health checks
+still pass. If the Gateway reports no version, these fields use `null` and all
+other health semantics remain unchanged.
+
 ### Optional PageSift advanced backend
 
 PageSift is disabled by default and is never installed or managed by

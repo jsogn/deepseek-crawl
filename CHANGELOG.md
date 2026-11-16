@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Report CLI and running Gateway versions in `gateway status`, including
+  managed-service and per-instance mismatch indicators.
+
 ## 0.16.0 - 2026-11-16
 
 ### Added

@@ -111,6 +111,7 @@ or Batch Scrape.
 - Waits for a healthy gateway.
 - Backs up the Firecrawl CLI API URL and points it at the local gateway.
 - Does not modify `hosts`, DNS, system proxy settings, or TLS certificates.
+- Reports CLI and running Gateway versions; a mismatch recommends reinstalling.
 
 For a resource-constrained machine, use `gateway install --light`. It applies
 bounded managed-service limits without changing ordinary Search, Scrape, or Map

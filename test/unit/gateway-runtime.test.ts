@@ -43,6 +43,7 @@ describe("gateway runtime state", () => {
     const pruned = await pruneGatewayRuntimeStates(directory, async () =>
       Response.json({
         status: "ok",
+        version: "1.2.3",
         pid: process.pid,
         provider_mode: "no-fallback",
         credits_cooldown_seconds: 120,
@@ -62,6 +63,7 @@ describe("gateway runtime state", () => {
       running: [
         {
           ...active,
+          gatewayVersion: "1.2.3",
           providerMode: "no-fallback",
           creditsCooldownSeconds: 120,
           maxConcurrentRequests: 200,

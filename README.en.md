@@ -114,6 +114,10 @@ deepseek-crawl gateway install --no-light  # restore standard limits
 Reinstalling without either option preserves the current profile, and
 `gateway status` reports the active profile.
 
+`gateway status` also reports the CLI and running Gateway versions. If the
+managed service is still on an older version, it reports the mismatch and
+suggests reinstalling; the service's actual health status remains unchanged.
+
 ### SDKs, Linux, and manual gateways
 
 Managed lifecycle support currently uses macOS `launchd` and a Windows per-user

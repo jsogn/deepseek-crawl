@@ -23,6 +23,20 @@ const STOP_POLL_MS = 100;
 const STOP_TIMEOUT_MS = 5_000;
 const BOOTSTRAP_RETRY_MS = 100;
 const BOOTSTRAP_RETRY_TIMEOUT_MS = 5_000;
+const LIGHT_CAPACITY_ARGS = [
+  "--max-concurrent-requests",
+  "10",
+  "--max-provider-requests",
+  "4",
+  "--max-crawl-jobs",
+  "2",
+  "--max-retained-crawl-jobs",
+  "4",
+  "--max-retained-crawl-bytes",
+  "33554432",
+] as const;
+
+export type GatewayCapacityProfile = "standard" | "light";
 
 export interface GatewayCommandResult {
   exitCode: number;
@@ -67,6 +81,7 @@ interface GatewayServiceState {
   version: 1;
   providerMode: GatewayProviderMode;
   port: number;
+  capacityProfile: GatewayCapacityProfile;
   desiredRunning: boolean;
   installedAt: string;
   originalFirecrawlApiUrl: FirecrawlApiUrlSnapshot;
@@ -84,6 +99,7 @@ export interface GatewayServiceStatus {
   healthy: boolean;
   client_targets_gateway: boolean;
   provider_mode: GatewayProviderMode | null;
+  capacity_profile: GatewayCapacityProfile | null;
   gateway_url: string | null;
   client_api_url: string | null;
   service_path: string | null;
@@ -98,6 +114,8 @@ export interface GatewayServiceManager {
     advanced?: boolean;
     advancedUrl?: string;
     noAdvanced?: boolean;
+    light?: boolean;
+    noLight?: boolean;
   }): Promise<GatewayServiceStatus>;
   start(): Promise<GatewayServiceStatus>;
   stop(): Promise<GatewayServiceStatus>;
@@ -150,6 +168,10 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+function capacityLauncherArgs(profile: GatewayCapacityProfile): string {
+  return profile === "light" ? ` ${LIGHT_CAPACITY_ARGS.join(" ")}` : "";
+}
+
 function serviceGatewayEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const serviceEnv = { ...env };
   delete serviceEnv.PAGESIFT_API_KEY;
@@ -172,6 +194,16 @@ function validatePort(value: unknown): number {
     throw new Error("Gateway service state contains an invalid port.");
   }
   return value as number;
+}
+
+function validateCapacityProfile(value: unknown): GatewayCapacityProfile {
+  if (value === undefined || value === "standard") {
+    return "standard";
+  }
+  if (value === "light") {
+    return "light";
+  }
+  throw new Error("Gateway service state contains an invalid capacity profile.");
 }
 
 function validateAdvancedBackendState(value: unknown): GatewayServiceState["advancedBackend"] {
@@ -282,6 +314,7 @@ async function readServiceState(path: string): Promise<GatewayServiceState | und
     version: 1,
     providerMode: validateProviderMode(value.providerMode),
     port: validatePort(value.port),
+    capacityProfile: validateCapacityProfile(value.capacityProfile),
     desiredRunning: value.desiredRunning !== false,
     installedAt: value.installedAt,
     originalFirecrawlApiUrl: {
@@ -384,6 +417,7 @@ async function writeServiceFiles(
   const advancedArgs = state.advancedBackend
     ? ` --advanced --advanced-url ${shellQuote(state.advancedBackend.url)}`
     : "";
+  const capacityArgs = capacityLauncherArgs(state.capacityProfile);
   if (context.platform === "win32") {
     const windowsAdvancedArgs = state.advancedBackend
       ? ` --advanced --advanced-url "${state.advancedBackend.url}"`
@@ -392,7 +426,7 @@ async function writeServiceFiles(
       "@echo off",
       'set "DEEPSEEK_GATEWAY_ADVANCED_URL="',
       'set "PAGESIFT_API_KEY="',
-      `"${context.nodePath}" "${context.cliPath}" gateway --provider-mode ${state.providerMode} --port ${state.port}${windowsAdvancedArgs} 1>>"${join(paths.logsDirectory, "gateway.log")}" 2>>"${join(paths.logsDirectory, "gateway.err.log")}"`,
+      `"${context.nodePath}" "${context.cliPath}" gateway --provider-mode ${state.providerMode} --port ${state.port}${capacityArgs}${windowsAdvancedArgs} 1>>"${join(paths.logsDirectory, "gateway.log")}" 2>>"${join(paths.logsDirectory, "gateway.err.log")}"`,
       "",
     ].join("\r\n");
     await writeFileAtomic(paths.launcherPath, launcher, { mode: 0o600 });
@@ -460,7 +494,7 @@ async function writeServiceFiles(
     "#!/bin/sh",
     "set -eu",
     "umask 077",
-    `exec ${shellQuote(context.nodePath)} ${shellQuote(context.cliPath)} gateway --provider-mode ${shellQuote(state.providerMode)} --port ${state.port}${advancedArgs}`,
+    `exec ${shellQuote(context.nodePath)} ${shellQuote(context.cliPath)} gateway --provider-mode ${shellQuote(state.providerMode)} --port ${state.port}${capacityArgs}${advancedArgs}`,
     "",
   ].join("\n");
   await writeFileAtomic(paths.launcherPath, launcher, { mode: 0o700 });
@@ -818,6 +852,7 @@ function unsupportedStatus(): GatewayServiceStatus {
     healthy: false,
     client_targets_gateway: false,
     provider_mode: null,
+    capacity_profile: null,
     gateway_url: null,
     client_api_url: null,
     service_path: null,
@@ -843,6 +878,7 @@ export async function getGatewayServiceStatus(
       healthy: false,
       client_targets_gateway: false,
       provider_mode: null,
+      capacity_profile: null,
       gateway_url: null,
       client_api_url: normalizedUrl(await currentFirecrawlApiUrl(paths.firecrawlCredentialsPath)),
       service_path: null,
@@ -911,6 +947,7 @@ export async function getGatewayServiceStatus(
     healthy,
     client_targets_gateway: clientTargetsGateway,
     provider_mode: state.providerMode,
+    capacity_profile: state.capacityProfile,
     gateway_url: `${expectedUrl}/`,
     client_api_url: normalizedUrl(clientApiUrl),
     service_path: paths.serviceDefinitionPath,
@@ -927,6 +964,8 @@ export async function installGatewayService(
     advanced?: boolean;
     advancedUrl?: string;
     noAdvanced?: boolean;
+    light?: boolean;
+    noLight?: boolean;
   },
 ): Promise<GatewayServiceStatus> {
   if (context.platform !== "darwin" && context.platform !== "win32") {
@@ -935,6 +974,9 @@ export async function installGatewayService(
   const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const env = serviceGatewayEnvironment(context.env ?? process.env);
   const existing = await readServiceState(paths.statePath);
+  if (options.light && options.noLight) {
+    throw new Error("--light and --no-light are mutually exclusive.");
+  }
   const credentials = await readFirecrawlCredentials(paths.firecrawlCredentialsPath);
   if (!credentials) {
     throw new Error("Firecrawl CLI credentials were not found. Run `firecrawl config` first.");
@@ -980,6 +1022,11 @@ export async function installGatewayService(
     version: 1,
     providerMode: options.providerMode,
     port: options.port,
+    capacityProfile: options.noLight
+      ? "standard"
+      : options.light
+        ? "light"
+        : (existing?.capacityProfile ?? "standard"),
     desiredRunning: true,
     installedAt: existing?.installedAt ?? new Date().toISOString(),
     originalFirecrawlApiUrl:

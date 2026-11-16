@@ -518,6 +518,16 @@ describe("parseCli", () => {
       noAdvanced: true,
       json: false,
     });
+    expect(parseCli(["gateway", "install", "--light"])).toEqual({
+      kind: "gateway-install",
+      light: true,
+      json: false,
+    });
+    expect(parseCli(["gateway", "install", "--no-light"])).toEqual({
+      kind: "gateway-install",
+      noLight: true,
+      json: false,
+    });
     expect(parseCli(["gateway", "start", "--json"])).toEqual({
       kind: "gateway-start",
       json: true,
@@ -751,6 +761,7 @@ describe("parseCli", () => {
     [["gateway", "--max-retained-crawl-jobs", "1001"], /retained/i],
     [["gateway", "--max-retained-crawl-bytes", "0"], /retained/i],
     [["gateway", "install", "--advanced", "--no-advanced"], /mutually exclusive/i],
+    [["gateway", "install", "--light", "--no-light"], /mutually exclusive/i],
     [
       ["gateway", "install", "--advanced-url", "http://127.0.0.1:3002", "--no-advanced"],
       /mutually exclusive/i,

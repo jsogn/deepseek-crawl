@@ -279,6 +279,41 @@ describe.skipIf(process.platform === "win32")("managed Gateway service", () => {
     expect(calls.every((url) => !url.includes(":3002"))).toBe(true);
   });
 
+  it("installs a light capacity profile and can return to standard limits", async () => {
+    const { context, paths } = await fixture();
+
+    const light = await installGatewayService(context, {
+      providerMode: "deepseek-first",
+      port: 8787,
+      light: true,
+    });
+    const launcher = await readFile(paths.launcherPath, "utf8");
+
+    expect(light.capacity_profile).toBe("light");
+    expect(launcher).toContain(
+      "--max-concurrent-requests 10 --max-provider-requests 4 " +
+        "--max-crawl-jobs 2 --max-retained-crawl-jobs 4 " +
+        "--max-retained-crawl-bytes 33554432",
+    );
+    expect(JSON.parse(await readFile(paths.statePath, "utf8"))).toMatchObject({
+      capacityProfile: "light",
+    });
+
+    const preserved = await installGatewayService(context, {
+      providerMode: "deepseek-first",
+      port: 8787,
+    });
+    expect(preserved.capacity_profile).toBe("light");
+
+    const standard = await installGatewayService(context, {
+      providerMode: "deepseek-first",
+      port: 8787,
+      noLight: true,
+    });
+    expect(standard.capacity_profile).toBe("standard");
+    expect(await readFile(paths.launcherPath, "utf8")).not.toContain("--max-concurrent-requests");
+  });
+
   it("persists advanced settings and passes them to the managed process", async () => {
     const { context, paths } = await fixture();
     context.fetchImpl = advancedFetch(() =>
@@ -630,12 +665,18 @@ describe("managed Windows Gateway service", () => {
       port: 8787,
       advanced: true,
       advancedUrl: "http://127.0.0.1:3002",
+      light: true,
     });
 
     expect(await readFile(paths.launcherPath, "utf8")).toContain(
       '--advanced --advanced-url "http://127.0.0.1:3002/"',
     );
     const launcher = await readFile(paths.launcherPath, "utf8");
+    expect(launcher).toContain(
+      "--max-concurrent-requests 10 --max-provider-requests 4 " +
+        "--max-crawl-jobs 2 --max-retained-crawl-jobs 4 " +
+        "--max-retained-crawl-bytes 33554432",
+    );
     expect(launcher).toContain('set "DEEPSEEK_GATEWAY_ADVANCED_URL="');
     expect(launcher).toContain('set "PAGESIFT_API_KEY="');
   });

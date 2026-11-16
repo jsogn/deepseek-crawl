@@ -112,6 +112,11 @@ or Batch Scrape.
 - Backs up the Firecrawl CLI API URL and points it at the local gateway.
 - Does not modify `hosts`, DNS, system proxy settings, or TLS certificates.
 
+For a resource-constrained machine, use `gateway install --light`. It applies
+bounded managed-service limits without changing ordinary Search, Scrape, or Map
+capabilities. Reinstalling without either profile flag preserves the current
+profile; `gateway install --no-light` restores the standard limits.
+
 If the user's platform is Linux or the gateway must run in a container, do not
 claim managed lifecycle support. Start the documented foreground or deployment
 mode instead:

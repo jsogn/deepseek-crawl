@@ -102,6 +102,18 @@ deepseek-crawl gateway uninstall  # restore config and remove task, state, and l
 `uninstall` removes the managed service and local state. This flow never changes
 `hosts`, DNS, system proxy settings, or TLS certificates.
 
+Resource-constrained environments can use bounded light limits: 10 HTTP
+requests, 4 Provider requests, 2 active Crawl jobs, 4 retained Crawl jobs, and a
+32 MiB retained Crawl document budget:
+
+```bash
+deepseek-crawl gateway install --light
+deepseek-crawl gateway install --no-light  # restore standard limits
+```
+
+Reinstalling without either option preserves the current profile, and
+`gateway status` reports the active profile.
+
 ### SDKs, Linux, and manual gateways
 
 Managed lifecycle support currently uses macOS `launchd` and a Windows per-user

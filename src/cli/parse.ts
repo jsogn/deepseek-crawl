@@ -170,6 +170,8 @@ export type ParsedCommand =
       advanced?: boolean;
       advancedUrl?: string;
       noAdvanced?: boolean;
+      light?: boolean;
+      noLight?: boolean;
       json: boolean;
     }
   | { kind: "gateway-start"; json: boolean }
@@ -1025,6 +1027,8 @@ export function parseCli(argv: string[]): ParsedCommand {
               advanced: { type: "boolean" },
               "advanced-url": { type: "string" },
               "no-advanced": { type: "boolean" },
+              light: { type: "boolean" },
+              "no-light": { type: "boolean" },
               json: { type: "boolean" },
               help: { type: "boolean", short: "h" },
             },
@@ -1047,6 +1051,9 @@ export function parseCli(argv: string[]): ParsedCommand {
           ) {
             throw new CliUsageError("--no-advanced and advanced options are mutually exclusive.");
           }
+          if (parsed.values.light && parsed.values["no-light"]) {
+            throw new CliUsageError("--light and --no-light are mutually exclusive.");
+          }
           return {
             kind: "gateway-install",
             ...(providerMode === undefined ? {} : { providerMode }),
@@ -1054,6 +1061,8 @@ export function parseCli(argv: string[]): ParsedCommand {
             ...(parsed.values.advanced || advancedUrl !== undefined ? { advanced: true } : {}),
             ...(advancedUrl === undefined ? {} : { advancedUrl }),
             ...(parsed.values["no-advanced"] ? { noAdvanced: true } : {}),
+            ...(parsed.values.light ? { light: true } : {}),
+            ...(parsed.values["no-light"] ? { noLight: true } : {}),
             json: parsed.values.json ?? false,
           };
         }

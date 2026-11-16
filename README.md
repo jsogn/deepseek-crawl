@@ -91,6 +91,16 @@ deepseek-crawl gateway uninstall  # 恢复配置并清理任务、状态和日�
 `stop` 会避免 Firecrawl CLI 继续指向失效端口；`uninstall` 可移除受管理服务和
 本地状态。该流程不修改 `hosts`、DNS、系统代理或 TLS 证书。
 
+资源受限的环境可使用轻量上限：10 个 HTTP 请求、4 个 Provider 请求、2 个运行中
+Crawl、4 个保留 Crawl jobs，以及 32 MiB 的保留 Crawl 文档预算：
+
+```bash
+deepseek-crawl gateway install --light
+deepseek-crawl gateway install --no-light  # 恢复标准上限
+```
+
+重新安装时省略两个选项会保留当前 profile；`gateway status` 会显示实际配置。
+
 ### SDK、Linux 与手动网关
 
 受管理生命周期目前由 macOS `launchd` 和 Windows 用户级 Task Scheduler 提供。

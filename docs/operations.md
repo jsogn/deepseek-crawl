@@ -78,6 +78,24 @@ cooldown, common routes use DeepSeek; keyless-only routes return a structured
 `429 keyless_rate_limited` response. Remote gateways never use Keyless
 automatically.
 
+### Lightweight managed service
+
+Use the bounded light profile on resource-constrained macOS or Windows hosts:
+
+```bash
+deepseek-crawl gateway install --light
+```
+
+The `light` profile lowers the limits to 10 HTTP requests, 4 Provider requests,
+2 active Crawl jobs, 4 retained Crawl jobs, and a 32 MiB retained document
+budget. It changes pathological concurrency limits without reducing the result
+capabilities of ordinary single Search, Scrape, or Map calls.
+
+Reinstalling without `--light` preserves the current profile. Restore standard
+limits with `deepseek-crawl gateway install --no-light`.
+`gateway status --json` reports the setting as `service.capacity_profile`, while
+runtime instances continue to expose each effective limit.
+
 ### Optional PageSift advanced backend
 
 PageSift is disabled by default and is never installed or managed by

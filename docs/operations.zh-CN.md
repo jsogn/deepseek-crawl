@@ -77,6 +77,23 @@ Keyless 免费但按 Firecrawl 的公网 IP 每日限量。收到 `429` 时优�
 支持的路由返回结构化的 `429 keyless_rate_limited`。远程网关不会自动使用
 Keyless。
 
+### 轻量受管理服务
+
+资源受限的 macOS 或 Windows 安装可使用：
+
+```bash
+deepseek-crawl gateway install --light
+```
+
+`light` profile 将并发和内存边界降到 10 个 HTTP 请求、4 个 Provider 请求、
+2 个运行中 Crawl、4 个保留 Crawl jobs 和 32 MiB 保留文档预算。它改变的是异常
+并发时的峰值上限，不会降低普通单次 Search、Scrape 或 Map 的结果能力。
+
+重新安装时省略 `--light` 会保留当前 profile；使用
+`deepseek-crawl gateway install --no-light` 恢复标准上限。
+`gateway status --json` 的 `service.capacity_profile` 报告当前设置，运行实例仍会
+列出实际采用的每个限制。
+
 ### 可选 PageSift 高级后端
 
 PageSift 默认关闭，`deepseek-crawl` 不会安装或管理它。连接已有服务：

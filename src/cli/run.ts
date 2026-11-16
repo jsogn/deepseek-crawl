@@ -383,6 +383,8 @@ Options:
   --advanced-url <url>
                       Enable PageSift at an explicit HTTP(S) root URL
   --no-advanced       Disable a previously configured PageSift backend
+  --light             Use bounded low-memory concurrency and Crawl limits
+  --no-light          Restore standard limits
   --json              Print a stable machine-readable result
 `,
   "gateway start": `Usage: deepseek-crawl gateway start [--json]
@@ -640,6 +642,9 @@ function formatGatewayServiceStatus(
   if (status.provider_mode) {
     lines.push(`Provider mode: ${status.provider_mode}`);
   }
+  if (status.capacity_profile) {
+    lines.push(`Capacity profile: ${status.capacity_profile}`);
+  }
   lines.push(
     status.advanced_backend.enabled
       ? `Advanced backend: pagesift (${status.advanced_backend.api_ready ? "ready" : "unavailable"})`
@@ -661,6 +666,8 @@ async function runGatewayInstall(
     ...(command.advanced === undefined ? {} : { advanced: command.advanced }),
     ...(command.advancedUrl === undefined ? {} : { advancedUrl: command.advancedUrl }),
     ...(command.noAdvanced === undefined ? {} : { noAdvanced: command.noAdvanced }),
+    ...(command.light === undefined ? {} : { light: command.light }),
+    ...(command.noLight === undefined ? {} : { noLight: command.noLight }),
   });
   deps.stdout.write(
     command.json
@@ -808,6 +815,7 @@ async function runGatewayStatus(
     lines.push(
       "",
       `Managed service: ${service.installed ? "installed" : "not installed"}`,
+      `Capacity profile: ${service.capacity_profile ?? "unavailable"}`,
       `Firecrawl CLI targets Gateway: ${service.client_targets_gateway ? "yes" : "no"}`,
       `DeepSeek: ${credentials.deepseek.configured ? `configured via ${credentials.deepseek.source}` : `not configured (${credentials.deepseek.backend})`}`,
       `Firecrawl: ${credentials.firecrawl.configured ? `configured via ${credentials.firecrawl.source}` : `not configured (${credentials.firecrawl.backend})`}`,

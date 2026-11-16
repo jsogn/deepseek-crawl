@@ -88,6 +88,11 @@ restores the saved Firecrawl API URL; `uninstall` also removes all managed
 service and log files. Do not claim this covers SDK clients that hard-code their
 own `apiUrl`.
 
+Use `gateway install --light` on resource-constrained managed hosts. It caps
+HTTP, Provider, and Crawl concurrency plus retained Crawl data without reducing
+ordinary single-request capabilities. Reinstalling without either profile flag
+preserves the setting; `gateway install --no-light` restores standard limits.
+
 For browser-dependent Firecrawl Scrape actions and Post-Scrape Interact, an
 existing external PageSift service can be enabled explicitly:
 

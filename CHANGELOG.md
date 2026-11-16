@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add `gateway install --light` for a bounded low-memory managed Gateway
+  profile, with `--no-light` restoration and status reporting.
+
 ## 0.15.1 - 2026-11-15
 
 ### Fixed

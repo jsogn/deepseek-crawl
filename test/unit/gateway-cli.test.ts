@@ -57,6 +57,7 @@ function dependencies(
             healthy: false,
             client_targets_gateway: false,
             provider_mode: null,
+            capacity_profile: null,
             gateway_url: null,
             client_api_url: null,
             service_path: null,
@@ -78,6 +79,7 @@ function serviceStatus(overrides: Partial<GatewayServiceStatus> = {}): GatewaySe
     healthy: true,
     client_targets_gateway: true,
     provider_mode: "deepseek-first",
+    capacity_profile: "standard",
     gateway_url: "http://127.0.0.1:8787/",
     client_api_url: "http://127.0.0.1:8787",
     service_path: "/tmp/com.jsogn.deepseek-crawl.gateway.plist",
@@ -102,7 +104,7 @@ describe("gateway discovery commands", () => {
   it("installs the managed Gateway through one command", async () => {
     const directory = await runtimeDirectory();
     const lifecycle = dependencies(directory);
-    let installed: { providerMode: string; port: number } | undefined;
+    let installed: Parameters<GatewayServiceManager["install"]>[0] | undefined;
     lifecycle.deps.gatewayServiceManager = {
       async install(options) {
         installed = options;
@@ -124,11 +126,20 @@ describe("gateway discovery commands", () => {
 
     expect(
       await runCli(
-        ["gateway", "install", "--provider-mode", "deepseek-first", "--port", "8787", "--json"],
+        [
+          "gateway",
+          "install",
+          "--provider-mode",
+          "deepseek-first",
+          "--port",
+          "8787",
+          "--light",
+          "--json",
+        ],
         lifecycle.deps,
       ),
     ).toBe(0);
-    expect(installed).toEqual({ providerMode: "deepseek-first", port: 8787 });
+    expect(installed).toEqual({ providerMode: "deepseek-first", port: 8787, light: true });
     expect(JSON.parse(lifecycle.stdout.value())).toMatchObject({
       installed: true,
       running: true,
@@ -203,6 +214,7 @@ describe("gateway discovery commands", () => {
           client_targets_gateway: false,
           gateway_url: null,
           provider_mode: null,
+          capacity_profile: null,
         });
       },
       async status() {

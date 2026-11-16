@@ -135,6 +135,8 @@ deepseek-crawl gateway install
   [--advanced]
   [--advanced-url <http(s)-url>]
   [--no-advanced]
+  [--light]
+  [--no-light]
   [--json]
 
 deepseek-crawl gateway start|stop|uninstall
@@ -170,6 +172,12 @@ Capacity flags:
 - `--max-crawl-jobs <count>`
 - `--max-retained-crawl-jobs <count>`
 - `--max-retained-crawl-bytes <bytes>`
+
+`gateway install --light` is the managed-service low-memory profile: 10 HTTP
+requests, 4 Provider requests, 2 active Crawl jobs, 4 retained Crawl jobs, and a
+32 MiB retained document budget. Omit both profile flags to preserve the
+current setting. `gateway install --no-light` restores standard limits.
+`gateway status --json` exposes the setting as `service.capacity_profile`.
 
 Use `auth set firecrawl` to make Firecrawl-first local mode available; otherwise
 common routes use DeepSeek. Remote mode requires `auth set gateway`, or the

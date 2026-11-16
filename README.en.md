@@ -9,8 +9,8 @@ operations at a local gateway: use Firecrawl while credits are available, then
 switch to DeepSeek after a credit-exhaustion response. You can also use the
 built-in CLI, Agent Skill, and MCP directly as DeepSeek-native web tools.
 
-Current release: `0.15.1` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
-[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.15.1)
+Current release: `0.16.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
+[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.16.0)
 
 > [!IMPORTANT]
 > The gateway covers the most common Firecrawl routes and does not claim full API

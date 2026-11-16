@@ -1,11 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 - 2026-11-16
 
 ### Added
 
 - Add `gateway install --light` for a bounded low-memory managed Gateway
   profile, with `--no-light` restoration and status reporting.
+
+### Testing
+
+- Verify the light profile through CLI parsing, macOS and Windows launchers,
+  package installation, and a real Firecrawl Scrape through the managed Gateway.
 
 ## 0.15.1 - 2026-11-15
 

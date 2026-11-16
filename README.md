@@ -8,8 +8,8 @@
 时走 Firecrawl，收到额度耗尽响应后自动切换到 DeepSeek。也可以直接把本项目的
 CLI、Agent Skill 和 MCP 作为 DeepSeek 原生网页工具使用。
 
-当前版本：`0.15.1` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
-[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.15.1)
+当前版本：`0.16.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
+[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.16.0)
 
 > [!IMPORTANT]
 > 网关覆盖最常用的 Firecrawl 路由，不承诺完整 API 兼容。Firecrawl CLI 受管理配置

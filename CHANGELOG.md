@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.0 - 2026-11-16
 
 ### Added
 
@@ -18,6 +18,21 @@
 - Reposition the native route around Agent site workflows and deterministic
   execution, treating official DeepSeek Search and Fetch as upstream
   capabilities rather than the product's primary value.
+
+### Fixed
+
+- Treat an unloaded Linux unit discovered during first install as an idempotent
+  stop boundary instead of failing the managed service installation.
+- Emit `WorkingDirectory=` in Linux units using systemd's path syntax rather than
+  shell quoting, preventing systemd from rejecting the unit.
+- Disable the Linux user unit on `gateway stop` so it does not restart at the
+  next login, and re-enable it on `gateway start`.
+
+### Testing
+
+- Verify the managed lifecycle on Ubuntu 24.04 with a real `systemd --user`
+  manager, including install, health, metrics, stop/start, log rotation,
+  Firecrawl URL restoration, and uninstall cleanup.
 
 ## 0.16.0 - 2026-11-16
 

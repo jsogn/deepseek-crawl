@@ -9,8 +9,8 @@
 CLI、Agent Skill 和 MCP 用于需要 Map、批量读取、Crawl、监控和可恢复任务的 Agent
 工作流。
 
-当前版本：`0.16.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
-[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.16.0)
+当前版本：`0.17.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
+[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.17.0)
 
 > [!IMPORTANT]
 > 网关覆盖最常用的 Firecrawl 路由，不承诺完整 API 兼容。Firecrawl CLI 受管理配置

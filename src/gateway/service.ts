@@ -571,7 +571,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=/bin/sh ${systemdQuote(paths.launcherPath)}
-WorkingDirectory=${systemdQuote(paths.serviceDirectory)}
+WorkingDirectory=${systemdPath(paths.serviceDirectory)}
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGTERM
@@ -785,8 +785,11 @@ async function stopService(
     if (!info.exists) {
       return undefined;
     }
-    const result = await runner("systemctl", ["--user", "stop", LINUX_UNIT_NAME]);
-    if (result.exitCode !== 0) {
+    const result = await runner("systemctl", ["--user", "disable", "--now", LINUX_UNIT_NAME]);
+    if (
+      result.exitCode !== 0 &&
+      !/not loaded|not found|does not exist/i.test(`${result.stdout}\n${result.stderr}`)
+    ) {
       throw new Error(result.stderr.trim() || "Could not stop the Gateway service.");
     }
     return undefined;

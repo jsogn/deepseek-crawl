@@ -31,9 +31,11 @@ afterEach(async () => {
 class FakeSystemd {
   available = true;
   unitExists = false;
+  enabled = false;
   active = false;
   mainPid = 6161;
   failStart = false;
+  stopNotLoaded = false;
   readonly calls: string[][] = [];
 
   readonly run: GatewayCommandRunner = async (command, args) => {
@@ -51,6 +53,7 @@ class FakeSystemd {
     }
     if (args[1] === "enable") {
       this.unitExists = true;
+      this.enabled = true;
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     if (args[1] === "restart" || args[1] === "start") {
@@ -62,17 +65,39 @@ class FakeSystemd {
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     if (args[1] === "stop") {
+      if (this.stopNotLoaded) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: `Failed to stop ${LINUX_UNIT}: Unit ${LINUX_UNIT} not loaded.`,
+        };
+      }
       this.active = false;
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     if (args[1] === "disable") {
+      if (this.stopNotLoaded && !this.unitExists) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: `Unit ${LINUX_UNIT} not loaded.`,
+        };
+      }
       this.active = false;
+      this.enabled = false;
       this.unitExists = false;
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     if (args[1] === "show" && args[2] === LINUX_UNIT) {
       if (!this.available) {
         return { exitCode: 1, stdout: "", stderr: "Failed to connect to bus" };
+      }
+      if (this.stopNotLoaded && !this.unitExists) {
+        return {
+          exitCode: 0,
+          stdout: "LoadState=loaded\nActiveState=inactive\nMainPID=0\n",
+          stderr: "",
+        };
       }
       return {
         exitCode: 0,
@@ -164,6 +189,8 @@ describe("managed Linux Gateway service", () => {
     });
     expect(unit).toContain(`[Unit]`);
     expect(unit).toContain(`ExecStart=/bin/sh "${paths.launcherPath}"`);
+    expect(unit).toContain(`WorkingDirectory=${paths.serviceDirectory}`);
+    expect(unit).not.toContain(`WorkingDirectory="${paths.serviceDirectory}"`);
     expect(unit).toContain("Restart=on-failure");
     expect(unit).toContain(`StandardError=append:${join(paths.logsDirectory, "gateway.err.log")}`);
     expect(launcher).toContain(`export HOME='${context.home}'`);
@@ -177,6 +204,23 @@ describe("managed Linux Gateway service", () => {
     expect(JSON.parse(await readFile(paths.firecrawlCredentialsPath, "utf8"))).toMatchObject({
       apiKey: "fc-linux",
       apiUrl: LOCAL_API_URL,
+    });
+  });
+
+  it("tolerates an unloaded unit discovered during first install", async () => {
+    const { context, systemd } = await fixture();
+    systemd.stopNotLoaded = true;
+
+    const status = await installGatewayService(context, {
+      providerMode: "deepseek-first",
+      port: 8787,
+    });
+
+    expect(status).toMatchObject({
+      installed: true,
+      running: true,
+      healthy: true,
+      issues: [],
     });
   });
 
@@ -194,6 +238,7 @@ describe("managed Linux Gateway service", () => {
     expect(JSON.parse(await readFile(paths.firecrawlCredentialsPath, "utf8")).apiUrl).toBe(
       CLOUD_API_URL,
     );
+    expect(systemd.enabled).toBe(false);
 
     const started = await startGatewayService(context);
     expect(started).toMatchObject({
@@ -202,6 +247,7 @@ describe("managed Linux Gateway service", () => {
       healthy: true,
       client_targets_gateway: true,
     });
+    expect(systemd.enabled).toBe(true);
 
     const uninstalled = await uninstallGatewayService(context);
     expect(uninstalled).toMatchObject({

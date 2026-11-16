@@ -13,6 +13,12 @@
 - Add process-local Gateway request, provider, fallback, and error metrics to
   `/healthz` and `gateway status`.
 
+### Changed
+
+- Reposition the native route around Agent site workflows and deterministic
+  execution, treating official DeepSeek Search and Fetch as upstream
+  capabilities rather than the product's primary value.
+
 ## 0.16.0 - 2026-11-16
 
 ### Added

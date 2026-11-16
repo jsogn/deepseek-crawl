@@ -7,7 +7,8 @@
 Point existing Firecrawl CLI/Skill calls for common Search, Scrape, Map, and Crawl
 operations at a local gateway: use Firecrawl while credits are available, then
 switch to DeepSeek after a credit-exhaustion response. You can also use the
-built-in CLI, Agent Skill, and MCP directly as DeepSeek-native web tools.
+built-in CLI, Agent Skill, and MCP for Agent workflows that need mapping, batch
+reads, bounded Crawl, monitoring, and resumable jobs.
 
 Current release: `0.16.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
 [GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.16.0)
@@ -23,10 +24,10 @@ Current release: `0.16.0` · [npm](https://www.npmjs.com/package/deepseek-crawl)
 Both routes share Search, Fetch, Map, Crawl, caching, safety boundaries, and the
 DeepSeek execution core, but they make different external promises:
 
-| Route                  | Priority                          | External contract                                                                          |
-| ---------------------- | --------------------------------- | ------------------------------------------------------------------------------------------ |
-| A: Transparent gateway | Compatibility and transparency    | Preserve existing Firecrawl calls where possible; switch backends only when fidelity holds |
-| B: Native replacement  | Simplicity and independent design | Use the DeepSeek-native CLI/MCP contract without requiring Firecrawl API compatibility     |
+| Route                  | Priority                           | External contract                                                                          |
+| ---------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| A: Transparent gateway | Compatibility and transparency     | Preserve existing Firecrawl calls where possible; switch backends only when fidelity holds |
+| B: Agent workflow      | Bounded automation and determinism | DeepSeek-native CLI/MCP without requiring Firecrawl API compatibility                      |
 
 Keyless is a Firecrawl transport tier inside Route A, not a third product route.
 Only local `firecrawl-first` gateways use it; remote gateways never try it
@@ -34,13 +35,13 @@ automatically.
 
 ### Choose a route
 
-| Your situation                                                | Recommended path                                                         |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| You use the `firecrawl` CLI, or an Agent Skill invokes it     | [Transparent gateway](#path-a-keep-firecrawl-with-a-transparent-gateway) |
-| Your Firecrawl SDK can set `apiUrl`                           | Start the gateway and set the SDK `apiUrl`                               |
-| You deploy on Linux, in a container, or remotely              | Foreground/remote gateway plus `FIRECRAWL_API_URL`                       |
-| You want DeepSeek-native Search, Fetch, Map, or bounded Crawl | [DeepSeek CLI](#path-b-use-the-deepseek-cli-directly)                    |
-| You only need to read known URLs                              | DeepSeek CLI plus `fetch`                                                |
+| Your situation                                                     | Recommended path                                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| You use the `firecrawl` CLI, or an Agent Skill invokes it          | [Transparent gateway](#path-a-keep-firecrawl-with-a-transparent-gateway) |
+| Your Firecrawl SDK can set `apiUrl`                                | Start the gateway and set the SDK `apiUrl`                               |
+| You deploy on Linux, in a container, or remotely                   | Foreground/remote gateway plus `FIRECRAWL_API_URL`                       |
+| You need mapping, batch reads, bounded Crawl, Retry, or monitoring | [DeepSeek CLI](#path-b-agent-native-site-workflows)                      |
+| You only need one ordinary search or URL read                      | Prefer DeepSeek's official web tools or APIs                             |
 
 ## Let an AI install it
 
@@ -176,10 +177,12 @@ Gateway fails explicitly instead of silently returning a DeepSeek result. Use
 `gateway install --no-advanced` to disable the configured backend.
 Screenshots are available through the `screenshot` action, not as a format.
 
-## Path B: Use the DeepSeek CLI directly
+## Path B: Agent-native site workflows
 
-Choose this path for a new Agent workflow that does not need Firecrawl API
-compatibility.
+DeepSeek's official Search and Fetch APIs already provide basic web access. This
+path does not wrap that layer again; it adds Map, Batch Fetch, bounded Crawl,
+Retry, caching, resumable jobs, and change monitoring for stable, deterministic,
+auditable Agent workflows.
 
 ```bash
 npm install -g deepseek-crawl
@@ -258,8 +261,9 @@ automatically.
   service endpoint.
 - DeepSeek Crawl jobs live only in the current gateway process and expire after
   24 hours. Restarting the gateway loses those jobs.
-- Linux currently uses manual startup or container deployment; it does not have
-  the same managed lifecycle as macOS and Windows.
+- Containers and Linux hosts without a reachable `systemctl --user` manager use
+  manual startup; managed Linux services require the current user's systemd
+  manager.
 
 For full limits, failure behavior, environment variables, remote
 authentication, and logging, see

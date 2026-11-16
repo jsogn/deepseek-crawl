@@ -1,7 +1,7 @@
 ---
 
 name: deepseek-crawl
-description: Use for DeepSeek-native live web search, page reading, site mapping, bounded crawling, and page-change checks through the deepseek-crawl CLI, or to configure the bundled transparent Firecrawl-compatible gateway. Choose the native CLI for new workflows and the gateway only when existing Firecrawl clients should remain unchanged. Do not use for local files, browser interaction, login, or complete Firecrawl API compatibility.
+description: Use when an Agent needs site mapping, batch page reading, bounded crawling, resumable jobs, page-change checks, or a transparent Firecrawl-compatible gateway. Do not use merely for one web search or URL read when native DeepSeek web tools already suffice. Do not use for local files, browser interaction, login, OCR, ASR, or complete Firecrawl API compatibility.
 allowed-tools:
 
 - Bash(deepseek-crawl *)
@@ -15,13 +15,18 @@ This package has two product routes with separate contracts:
 - **Path A: transparent Firecrawl gateway.** Preserve existing Firecrawl
   CLI/SDK/Agent calls and fall back only where the documented DeepSeek mapping is
   faithful.
-- **Path B: DeepSeek-native replacement.** Use the simpler
-  `deepseek-crawl` CLI and optional MCP interface without Firecrawl API
-  compatibility.
+- **Path B: DeepSeek-native Agent workflow.** Use the CLI and optional MCP
+  interface for mapping, batch reads, bounded crawling, retries, resumable
+  jobs, and change monitoring. Treat official Search and Fetch as upstream
+  capabilities rather than the product's primary value.
 
 The execution workflow below is Path B unless the user explicitly selects Path
 A. Keyless is a tier inside Path A, not a third route. Do not infer a route from
 DeepSeek account availability.
+
+If the task is only one ordinary web search or one known-URL read and the calling
+Agent already has DeepSeek's native web tools, use those tools directly. Choose
+this Skill when stable CLI automation or a broader site workflow adds value.
 
 The CLI is the canonical execution surface. MCP is optional and should be used
 only when the calling client cannot execute the CLI or the user explicitly

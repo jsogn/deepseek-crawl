@@ -1,12 +1,11 @@
 # DeepSeek Crawl
 
 > DeepSeek Crawl is a Firecrawl-compatible local gateway for common web routes
-> with DeepSeek fallback, plus an Agent-native Search, Fetch, Map, and bounded
-> Crawl CLI. Existing Firecrawl CLI calls can remain unchanged on macOS and
-> Windows, or use an explicit gateway URL on Linux and in containers.
+> with DeepSeek fallback, plus an Agent-native workflow CLI for mapping, batch
+> reads, bounded Crawl, Retry, resumable jobs, and change monitoring.
 >
 > Treat these as two product routes with separate contracts: a transparent
-> Firecrawl gateway and a DeepSeek-native replacement. Keyless is a transport
+> Firecrawl gateway and a DeepSeek-native Agent workflow. Keyless is a transport
 > tier inside the gateway route, not a third route. Do not claim complete
 > Firecrawl API compatibility.
 
@@ -21,9 +20,11 @@ path on the user's behalf. Follow these rules:
 
 1. Ask about the user's environment before changing files or installing
    software.
-2. Choose exactly one path. If the Firecrawl CLI is already installed, prefer
-   the transparent gateway. Otherwise, prefer the DeepSeek-native CLI unless the
-   user explicitly wants the Firecrawl route.
+2. Choose exactly one path. If the Firecrawl CLI is already installed and the
+   user wants transparent fallback, prefer the gateway. If only a single search
+   or URL read is needed and native DeepSeek tools are available, do not install
+   this package. Otherwise prefer the native workflow CLI for mapping, batch
+   reads, bounded Crawl, Retry, resumable jobs, or monitoring.
 3. Preserve unrelated files and configuration. Do not manually rewrite the
    Firecrawl CLI configuration; let `gateway install` manage it.
 4. Never ask the user to paste a secret into chat. Use the CLI's hidden prompt,
@@ -136,7 +137,7 @@ From another terminal, clients can use:
 export FIRECRAWL_API_URL="$(deepseek-crawl gateway url)"
 ```
 
-## Path B: DeepSeek-native CLI
+## Path B: DeepSeek-native Agent workflow
 
 Choose this path when the Firecrawl CLI is absent or the user wants a standalone
 Agent web-data CLI.

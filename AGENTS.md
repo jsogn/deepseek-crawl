@@ -60,15 +60,20 @@ consistency.
   incoming `Authorization` header, and never rotate IPs or bypass rate limits.
 - Remote gateways do not use Keyless automatically.
 
-### Route B: DeepSeek-Native Replacement
+### Route B: DeepSeek-Native Agent Workflow
 
-- Provide a CLI-first Search, Fetch, Map, Batch Fetch, and bounded Crawl
-  experience for AI agents. MCP is optional for clients that cannot execute the
-  CLI.
-- Optimize for the native DeepSeek workflow rather than copying Firecrawl's API.
-  This route does not need Firecrawl wire compatibility.
-- Keep its own output, failure, persistence, and safety contracts. Do not weaken
-  them merely to imitate Firecrawl.
+- Treat DeepSeek's official Search and Fetch APIs and model-facing web tools as
+  upstream capabilities. Do not position this project primarily as a wrapper
+  for a single web search or URL read.
+- Provide a CLI-first Map, Batch Fetch, bounded Crawl, Retry, cache, resumable
+  jobs, and change-monitor experience. MCP is optional for clients that cannot
+  execute the CLI.
+- Optimize for deterministic Agent workflows rather than copying Firecrawl's
+  API. This route does not need Firecrawl wire compatibility.
+- Do not duplicate model-facing `deepseek_web_search`, `deepseek_read_url`,
+  OCR, ASR, TTS, or chat-response generation without an explicit product scope.
+- Keep this route's own output, failure, persistence, and safety contracts. Do
+  not weaken them merely to imitate Firecrawl.
 
 ### Shared Constraints
 
@@ -197,9 +202,9 @@ fresh output as evidence.
 ## Documentation
 
 - Keep `README.md` and `README.en.md` structurally aligned.
-- Describe the transparent Firecrawl Gateway and DeepSeek-native replacement as
-  two product routes with separate contracts. Never present Keyless as a third
-  route.
+- Describe the transparent Firecrawl Gateway and DeepSeek-native Agent workflow
+  as two product routes with separate contracts. Never present Keyless as a
+  third route.
 - Use the README for onboarding, command selection, and documentation routing.
 - Put detailed Crawl workflows in `docs/workflows*.md`.
 - Put gateway compatibility boundaries, operational limits, security, MCP, and

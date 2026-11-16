@@ -6,7 +6,8 @@
 
 保留现有 Firecrawl CLI/Skill 的常用 Search、Scrape、Map 和 Crawl 调用：额度可用
 时走 Firecrawl，收到额度耗尽响应后自动切换到 DeepSeek。也可以直接把本项目的
-CLI、Agent Skill 和 MCP 作为 DeepSeek 原生网页工具使用。
+CLI、Agent Skill 和 MCP 用于需要 Map、批量读取、Crawl、监控和可恢复任务的 Agent
+工作流。
 
 当前版本：`0.16.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
 [GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.16.0)
@@ -20,23 +21,23 @@ CLI、Agent Skill 和 MCP 作为 DeepSeek 原生网页工具使用。
 两条路线共享 Search、Fetch、Map、Crawl、缓存、安全边界和 DeepSeek 执行核心，但对
 外承诺不同：
 
-| 路线        | 优先级             | 对外契约                                                  |
-| ----------- | ------------------ | --------------------------------------------------------- |
-| A：透明代理 | 兼容与无感优先     | 尽量保持现有 Firecrawl 调用；仅在能力可保真时自动切换后端 |
-| B：原生替代 | 简化与自主演进优先 | 使用 DeepSeek 原生 CLI/MCP 契约，不要求兼容 Firecrawl API |
+| 路线            | 优先级                 | 对外契约                                                  |
+| --------------- | ---------------------- | --------------------------------------------------------- |
+| A：透明代理     | 兼容与无感优先         | 尽量保持现有 Firecrawl 调用；仅在能力可保真时自动切换后端 |
+| B：Agent 工作流 | 有界自动化与确定性优先 | DeepSeek 原生 CLI/MCP；不要求兼容 Firecrawl API           |
 
 Keyless 是路线 A 内部的 Firecrawl 传输层，不是第三条产品路线。只有本机
 `firecrawl-first` 网关会使用它，远程网关不会自动尝试。
 
 ### 怎么选
 
-| 你的情况                                             | 推荐路线                                      |
-| ---------------------------------------------------- | --------------------------------------------- |
-| 已在用 `firecrawl` CLI，或 Agent Skill 会调用该 CLI  | [透明网关](#路线-a保留-firecrawl使用透明网关) |
-| Firecrawl SDK 可以配置 `apiUrl`                      | 启动网关并设置 SDK `apiUrl`                   |
-| Linux、容器或远程部署                                | 前台/远程网关 + `FIRECRAWL_API_URL`           |
-| 想直接用 DeepSeek 做 Search、Fetch、Map 或受限 Crawl | [DeepSeek CLI](#路线-b直接使用-deepseek-cli)  |
-| 只需要已知 URL 的页面读取                            | DeepSeek CLI + `fetch`                        |
+| 你的情况                                            | 推荐路线                                       |
+| --------------------------------------------------- | ---------------------------------------------- |
+| 已在用 `firecrawl` CLI，或 Agent Skill 会调用该 CLI | [透明网关](#路线-a保留-firecrawl使用透明网关)  |
+| Firecrawl SDK 可以配置 `apiUrl`                     | 启动网关并设置 SDK `apiUrl`                    |
+| Linux、容器或远程部署                               | 前台/远程网关 + `FIRECRAWL_API_URL`            |
+| 需要 Map、批量读取、受限 Crawl、重试或变化监控      | [DeepSeek CLI](#路线-b面向-agent-的网站工作流) |
+| 只需要一次普通搜索或读取单个 URL                    | 优先使用 DeepSeek 官方 Web Tools / API         |
 
 ## 让 AI 自己安装
 
@@ -155,9 +156,11 @@ Monitor、Batch Scrape 或 Parse。PageSift 不可用或能力不匹配时明确
 降低为 DeepSeek 结果。`gateway install --no-advanced` 可撤销此配置。
 截图只能通过 `actions` 中的 `screenshot` 获取，不能作为单独的 format。
 
-## 路线 B：直接使用 DeepSeek CLI
+## 路线 B：面向 Agent 的网站工作流
 
-适合新 Agent 工作流，不需要 Firecrawl API 兼容层。
+DeepSeek 官方 Search/Fetch 已经提供基础网页能力；本路线不重复包装这一层，而是补充
+Map、批量读取、有界 Crawl、失败重试、缓存、可恢复任务和变化监控。适合需要稳定、
+确定性和可审计执行的新 Agent 工作流。
 
 ```bash
 npm install -g deepseek-crawl
@@ -224,7 +227,8 @@ IP 每日限量，出现 `429` 后默认冷却 15 分钟。远程网关不会自
   远程服务的请求地址。
 - DeepSeek Crawl job 只保存在当前网关进程内，24 小时后过期；网关重启会丢失这些
   job。
-- Linux 当前使用手动启动或容器部署，不提供 macOS/Windows 同等的受管理生命周期。
+- 容器或没有可用 `systemctl --user` 的 Linux 使用手动启动；受管理 Linux 服务要求
+  当前用户的 systemd user manager。
 
 完整限制、失败语义、环境变量、远程鉴权和日志说明见
 [运行、安全、MCP 与网关](https://github.com/jsogn/deepseek-crawl/blob/main/docs/operations.zh-CN.md)。

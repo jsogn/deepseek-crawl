@@ -417,6 +417,12 @@ describe("parseCli", () => {
       advanced: false,
       creditsCooldownSeconds: 120,
     });
+    expect(parseCli(["gateway", "--log-file", "/tmp/gateway.jsonl"])).toEqual({
+      kind: "gateway",
+      remote: false,
+      advanced: false,
+      logFile: "/tmp/gateway.jsonl",
+    });
     expect(
       parseCli([
         "gateway",
@@ -751,6 +757,7 @@ describe("parseCli", () => {
     [["gateway", "--port", "65536"], /port/i],
     [["gateway", "extra"], /argument/i],
     [["gateway", "--host", "   "], /host/i],
+    [["gateway", "--log-file", "   "], /log file/i],
     [["gateway", "--advanced-url", "   "], /advanced URL/i],
     [["gateway", "--provider-mode", "sometimes"], /provider mode/i],
     [["gateway", "--credits-cooldown", "-1"], /cooldown/i],

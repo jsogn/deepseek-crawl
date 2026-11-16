@@ -6,6 +6,12 @@
 
 - Report CLI and running Gateway versions in `gateway status`, including
   managed-service and per-instance mismatch indicators.
+- Add Linux `systemd --user` support to the managed Gateway lifecycle without
+  requiring root or changing linger settings.
+- Add bounded rotating JSON request logs and restart-scoped startup logs for
+  managed Gateways.
+- Add process-local Gateway request, provider, fallback, and error metrics to
+  `/healthz` and `gateway status`.
 
 ## 0.16.0 - 2026-11-16
 

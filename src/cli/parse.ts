@@ -154,6 +154,7 @@ export type ParsedCommand =
       advanced: boolean;
       host?: string;
       port?: number;
+      logFile?: string;
       advancedUrl?: string;
       providerMode?: GatewayProviderMode;
       creditsCooldownSeconds?: number;
@@ -1132,6 +1133,7 @@ export function parseCli(argv: string[]): ParsedCommand {
           options: {
             host: { type: "string" },
             port: { type: "string" },
+            "log-file": { type: "string" },
             "provider-mode": { type: "string" },
             "credits-cooldown": { type: "string" },
             "max-concurrent-requests": { type: "string" },
@@ -1152,6 +1154,10 @@ export function parseCli(argv: string[]): ParsedCommand {
         const host = parsed.values.host?.trim();
         if (parsed.values.host !== undefined && !host) {
           throw new CliUsageError("Gateway host is required.");
+        }
+        const logFile = parsed.values["log-file"]?.trim();
+        if (parsed.values["log-file"] !== undefined && !logFile) {
+          throw new CliUsageError("Gateway log file is required.");
         }
         const port =
           parsed.values.port === undefined
@@ -1212,6 +1218,7 @@ export function parseCli(argv: string[]): ParsedCommand {
           advanced: parsed.values.advanced ?? advancedUrl !== undefined,
           ...(host === undefined ? {} : { host }),
           ...(port === undefined ? {} : { port }),
+          ...(logFile === undefined ? {} : { logFile }),
           ...(advancedUrl === undefined ? {} : { advancedUrl }),
           ...(providerMode === undefined ? {} : { providerMode }),
           ...(creditsCooldownSeconds === undefined ? {} : { creditsCooldownSeconds }),

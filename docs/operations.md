@@ -183,10 +183,14 @@ credential upstream. Never configure the gateway token as the Firecrawl upstream
 key. Upstream responses are streamed, and gateway shutdown cancels active
 process-local Crawl jobs.
 
-CLI gateway stderr uses one JSON object per request with `x-request-id`,
-normalized `route`, status, duration, provider, and fallback reason. API keys,
-request bodies, query strings, and full URLs are excluded. Add global rate limits
-and trusted source handling at a reverse proxy when deployed behind one.
+Foreground Gateway stderr uses one JSON object per request. Managed services use
+`--log-file <path>` to write requests to `gateway.jsonl`, rotating at 10 MiB with
+at most the current file and two historical files. Before each managed service
+restart, `gateway.log` and `gateway.err.log` rotate to retain only the current
+and previous run. Each record contains `x-request-id`, normalized `route`,
+status, duration, provider, and fallback reason. API keys, request bodies, query
+strings, and full URLs are excluded. Add global rate limits and trusted source
+handling at a reverse proxy when deployed behind one.
 
 The WebSocket `Watcher` is outside the supported compatibility surface. Upgrade
 requests receive `426 websocket_not_supported`; the official SDK emits `error`
@@ -237,6 +241,13 @@ the PID through public `/healthz` without exposing provider keys, request data,
 or cache contents. It also summarizes each instance's provider mode and
 cooldown, plus DeepSeek, Firecrawl, and gateway-auth readiness and source without
 credential values.
+
+`/healthz` and `gateway status` also expose process-local aggregate metrics:
+`requests_total`, per-provider request counts, `fallback_requests`,
+`client_errors`, `server_errors`, and the latest `last_fallback_reason`. Health
+requests themselves are not counted. Metrics live only in the current process,
+reset when the Gateway restarts, and never include request content, queries,
+URLs, or credentials.
 
 ## Local cache
 
@@ -353,13 +364,16 @@ terminal pages before failing; it retains no rejected page. Expiration and
 eviction release the accounted bytes immediately. The retained job limit must
 be greater than or equal to the active Crawl job limit.
 
-## Managed macOS and Windows Gateway
+## Managed macOS, Windows, and Linux Gateway
 
 `deepseek-crawl gateway install` creates one user-level background task, a
 stable launcher, logs, and a managed state file containing the original Firecrawl
-CLI API URL. macOS uses `launchd`; Windows uses Task Scheduler. It modifies
-`credentials.json` only after the Gateway passes its health check. API keys are
-preserved and never copied into service state or logs.
+CLI API URL. macOS uses `launchd`; Windows uses Task Scheduler; Linux uses the
+current user's `systemd --user` manager. Linux installation requires no root,
+writes the unit under the XDG config root, keeps state and logs in user
+directories, requires a reachable user manager, and never changes linger. It
+modifies `credentials.json` only after the Gateway passes its health check. API
+keys are preserved and never copied into service state or logs.
 
 `gateway stop` stops and disables the background task, then restores the saved
 Firecrawl API URL. `gateway uninstall` performs the same restoration and removes

@@ -96,6 +96,10 @@ docker compose down
 
 ## systemd
 
+`deepseek-crawl gateway install` also manages a current-user `systemd --user`
+service. The production flow below uses a dedicated system user and
+system-level boot integration. Do not use both managers for the same instance.
+
 Install the built package under `/opt/deepseek-crawl`, create a dedicated
 `deepseek-crawl` user, and place the environment file at
 `/etc/deepseek-crawl/gateway.env` with mode `0600`.

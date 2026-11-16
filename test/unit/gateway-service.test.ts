@@ -259,6 +259,9 @@ describe.skipIf(process.platform === "win32")("managed Gateway service", () => {
     expect(await readFile(paths.launcherPath, "utf8")).toContain(
       "/Users/Test User/.nvm/versions/node/v22.23.4/bin/node",
     );
+    expect(await readFile(paths.launcherPath, "utf8")).toContain(
+      `--log-file '${join(paths.logsDirectory, "gateway.jsonl")}'`,
+    );
     expect(await readFile(paths.serviceDefinitionPath, "utf8")).toContain("<key>KeepAlive</key>");
     expect(await readFile(paths.statePath, "utf8")).not.toContain("fc-secret");
     expect((await stat(paths.firecrawlCredentialsPath)).mode & 0o777).toBe(0o600);
@@ -515,6 +518,20 @@ describe.skipIf(process.platform === "win32")("managed Gateway service", () => {
     );
   });
 
+  it("rotates managed startup logs before restarting the service", async () => {
+    const { context, paths } = await fixture();
+    await installGatewayService(context, { providerMode: "deepseek-first", port: 8787 });
+    await writeFile(join(paths.logsDirectory, "gateway.log"), "old stdout\n", "utf8");
+    await writeFile(join(paths.logsDirectory, "gateway.err.log"), "old stderr\n", "utf8");
+
+    await startGatewayService(context);
+
+    expect(await readFile(join(paths.logsDirectory, "gateway.log.1"), "utf8")).toBe("old stdout\n");
+    expect(await readFile(join(paths.logsDirectory, "gateway.err.log.1"), "utf8")).toBe(
+      "old stderr\n",
+    );
+  });
+
   it("removes managed service, state, and logs during uninstall", async () => {
     const { context, paths } = await fixture();
     await installGatewayService(context, { providerMode: "deepseek-first", port: 8787 });
@@ -707,6 +724,7 @@ describe("managed Windows Gateway service", () => {
         "--max-crawl-jobs 2 --max-retained-crawl-jobs 4 " +
         "--max-retained-crawl-bytes 33554432",
     );
+    expect(launcher).toContain(`--log-file "${join(paths.logsDirectory, "gateway.jsonl")}"`);
     expect(launcher).toContain('set "DEEPSEEK_GATEWAY_ADVANCED_URL="');
     expect(launcher).toContain('set "PAGESIFT_API_KEY="');
   });

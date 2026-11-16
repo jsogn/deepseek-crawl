@@ -168,7 +168,10 @@ fallback 请求和后台 Crawl jobs。
 不要把网关 Token 配置成 Firecrawl upstream Key。上游响应采用流式传输；网关关闭
 时会取消仍在运行的本地 Crawl jobs。
 
-CLI 网关的 stderr 采用单行 JSON 日志。每条请求包含 `x-request-id`、规范化
+前台 CLI 网关的 stderr 采用单行 JSON 日志；受管理服务使用
+`--log-file <path>` 将请求日志写入 `gateway.jsonl`。单文件达到 10 MiB 后轮转，
+最多保留当前文件和两份历史文件。每次受管理服务重启前还会滚动 `gateway.log` 与
+`gateway.err.log`，只保留当前和上一份。每条请求包含 `x-request-id`、规范化
 `route`、status、耗时、Provider 和 fallback 原因；不会写 API Key、请求体、查询
 字符串或完整 URL。反向代理部署应在代理层再配置全局限流和可信来源处理。
 
@@ -209,6 +212,12 @@ job 丢失。一个网关进程可以服务本机多个 Firecrawl 客户端。
 启动时间和模式。`gateway status` 通过公开的 `/healthz` 验证 PID，不返回 Provider
 Key、请求内容或缓存内容。它还会汇总每个实例的 Provider mode 和 cooldown，以及
 DeepSeek、Firecrawl 和 gateway auth 是否已配置及来源，不输出凭据值。
+
+`/healthz` 和 `gateway status` 还暴露进程内聚合运行统计：
+`requests_total`、按 Provider 的请求数、`fallback_requests`、
+`client_errors`、`server_errors` 和最后一次 `last_fallback_reason`。健康检查
+请求本身不计入统计。统计只保存在当前进程，Gateway 重启后归零，不写请求内容、
+查询、URL 或凭据。
 
 ## 本地缓存
 
@@ -316,12 +325,14 @@ HTTPS。API Key 不接受 CLI 参数或 MCP 参数。
 时才失败，且不保留被拒绝的页面。任务过期或被淘汰时立即释放对应字节额度。保留任务
 上限必须大于或等于运行中 Crawl 任务上限。
 
-## macOS / Windows 受管理 Gateway
+## macOS / Windows / Linux 受管理 Gateway
 
 `deepseek-crawl gateway install` 会创建一个当前用户的后台任务、稳定启动器、日志
 和记录原 Firecrawl CLI API URL 的受管理状态文件。macOS 使用 `launchd`，Windows
-使用 Task Scheduler。只有 Gateway 健康检查通过后才会修改 `credentials.json`；
-API Key 会原样保留，也不会写入服务状态或日志。
+使用 Task Scheduler，Linux 使用当前用户的 `systemd --user`。Linux 安装不需要
+root，unit 位于 XDG config 目录，状态和日志使用当前用户目录；需要可连接的用户
+systemd manager，不自动修改 linger。只有 Gateway 健康检查通过后才会修改
+`credentials.json`；API Key 会原样保留，也不会写入服务状态或日志。
 
 `gateway stop` 会停止并禁用后台任务，然后恢复原 Firecrawl API URL。
 `gateway uninstall` 还会删除受管理任务、启动器、状态和日志。整个流程不修改 DNS、

@@ -71,8 +71,9 @@ deepseek-crawl auth set firecrawl   # optional when already configured
 deepseek-crawl gateway
 ```
 
-On macOS or Windows, use the managed lifecycle when the user wants transparent
-CLI/Skill traffic after the current shell exits:
+On macOS, Windows, or Linux with a reachable `systemctl --user` manager, use the
+managed lifecycle when the user wants transparent CLI/Skill traffic after the
+current shell exits:
 
 ```bash
 deepseek-crawl gateway install
@@ -82,18 +83,27 @@ deepseek-crawl gateway start
 deepseek-crawl gateway uninstall
 ```
 
-`install` starts a LaunchAgent on macOS or a per-user Scheduled Task on Windows,
-and points the Firecrawl CLI at the Gateway only after a health check. `stop`
-restores the saved Firecrawl API URL; `uninstall` also removes all managed
-service and log files. `gateway status` reports CLI and running Gateway
-versions and flags a mismatch without treating an otherwise healthy service as
-unavailable. Do not claim this covers SDK clients that hard-code their own
-`apiUrl`.
+`install` starts a LaunchAgent on macOS, a per-user Scheduled Task on Windows,
+or a `systemd --user` unit on Linux. Linux requires no root or linger change,
+only an available user manager. It points the Firecrawl CLI at the Gateway only
+after a health check. `stop` restores the saved Firecrawl API URL; `uninstall`
+also removes all managed service and log files. `gateway status` reports CLI and
+running Gateway versions and flags a mismatch without treating an otherwise
+healthy service as unavailable. Do not claim this covers SDK clients that
+hard-code their own `apiUrl`.
 
 Use `gateway install --light` on resource-constrained managed hosts. It caps
 HTTP, Provider, and Crawl concurrency plus retained Crawl data without reducing
 ordinary single-request capabilities. Reinstalling without either profile flag
 preserves the setting; `gateway install --no-light` restores standard limits.
+
+Managed JSON request logs rotate at 10 MiB and keep the current file plus two
+historical files. Service startup and crash logs rotate before each restart and
+retain the current and previous run. `gateway uninstall` removes them.
+
+`gateway status` exposes per-process provider, fallback, and error counters.
+They contain no request content and reset on Gateway restart; do not present
+them as durable analytics or billing records.
 
 For browser-dependent Firecrawl Scrape actions and Post-Scrape Interact, an
 existing external PageSift service can be enabled explicitly:

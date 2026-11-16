@@ -48,6 +48,7 @@ import { isKeylessEnabled, isKeylessRoute, KeylessCooldown } from "./keyless.js"
 import { LimitedDeepSeekGateway, ProviderRequestLimiter } from "./provider-request-limiter.js";
 import {
   type GatewayLogger,
+  GatewayMetrics,
   type GatewayRequestLog,
   gatewayRequestId,
   normalizeGatewayRoute,
@@ -460,6 +461,7 @@ export function createGatewayHandler(
       }
     : undefined;
   const logger = dependencies.logger;
+  const metrics = new GatewayMetrics();
 
   const resolveRawDeepSeekClient = (): DeepSeekGateway => {
     if (!deepseekClient) {
@@ -497,22 +499,27 @@ export function createGatewayHandler(
     let fallbackReason: string | undefined;
     let logged = false;
     const logRequest = () => {
-      if (logged || normalizedRoute === "/healthz" || !logger) {
+      if (logged || normalizedRoute === "/healthz") {
         return;
       }
       logged = true;
+      const event: GatewayRequestLog = {
+        event: "gateway_request",
+        request_id: requestId,
+        method: request.method ?? "GET",
+        route: normalizedRoute,
+        status: response.statusCode,
+        duration_ms: Math.round(performance.now() - startedAt),
+        provider,
+        fallback,
+        ...(fallbackReason === undefined ? {} : { fallback_reason: fallbackReason }),
+      };
+      metrics.record(event);
+      if (!logger) {
+        return;
+      }
       try {
-        logger({
-          event: "gateway_request",
-          request_id: requestId,
-          method: request.method ?? "GET",
-          route: normalizedRoute,
-          status: response.statusCode,
-          duration_ms: Math.round(performance.now() - startedAt),
-          provider,
-          fallback,
-          ...(fallbackReason === undefined ? {} : { fallback_reason: fallbackReason }),
-        });
+        logger(event);
       } catch {
         // Logging must not affect request handling.
       }
@@ -546,6 +553,7 @@ export function createGatewayHandler(
           max_retained_crawl_bytes:
             dependencies.config.maxRetainedCrawlBytes ??
             GATEWAY_CAPACITY_DEFAULTS.maxRetainedCrawlBytes,
+          metrics: metrics.snapshot(),
           advanced_backend: dependencies.config.advancedBackend
             ? { provider: "pagesift", configured: true }
             : { provider: null, configured: false },

@@ -333,6 +333,18 @@ describe("gateway discovery commands", () => {
         max_active_crawl_jobs: 5,
         max_retained_crawl_jobs: 20,
         max_retained_crawl_bytes: 1048576,
+        metrics: {
+          requests_total: 3,
+          firecrawl_requests: 1,
+          firecrawl_keyless_requests: 1,
+          deepseek_requests: 1,
+          pagesift_requests: 0,
+          none_requests: 0,
+          fallback_requests: 1,
+          client_errors: 0,
+          server_errors: 0,
+          last_fallback_reason: "firecrawl_credits_exhausted",
+        },
       })) as typeof fetch;
 
     expect(await runCli(["gateway", "status", "--json"], environment.deps)).toBe(0);
@@ -349,6 +361,13 @@ describe("gateway discovery commands", () => {
           max_active_crawl_jobs: 5,
           max_retained_crawl_jobs: 20,
           max_retained_crawl_bytes: 1_048_576,
+          metrics: {
+            requests_total: 3,
+            firecrawl_requests: 1,
+            firecrawl_keyless_requests: 1,
+            deepseek_requests: 1,
+            fallback_requests: 1,
+          },
         },
       ],
     });
@@ -364,6 +383,8 @@ describe("gateway discovery commands", () => {
     expect(human.stdout.value()).toContain("retained_jobs=20");
     expect(human.stdout.value()).toContain("retained_bytes=1048576");
     expect(human.stdout.value()).toContain(`version=${packageVersion}`);
+    expect(human.stdout.value()).toContain("requests=3");
+    expect(human.stdout.value()).toContain("fallbacks=1");
   });
 
   it("reports managed service and Firecrawl client drift", async () => {

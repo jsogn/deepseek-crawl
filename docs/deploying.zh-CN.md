@@ -91,6 +91,10 @@ docker compose down
 
 ## systemd
 
+`deepseek-crawl gateway install` 还提供当前用户的 `systemd --user` 管理方式。
+以下流程用于需要专用系统用户、系统级开机启动和反向代理的生产部署，两者不要同时
+管理同一实例。
+
 将构建后的包安装到 `/opt/deepseek-crawl`，创建专用 `deepseek-crawl` 用户，并将
 环境文件放在 `/etc/deepseek-crawl/gateway.env`，权限设为 `0600`。
 

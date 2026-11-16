@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { resolveCacheDirectory } from "../cache/paths.js";
 import { parseReportedVersion } from "../version.js";
 import type { GatewayProviderMode } from "./config.js";
+import { type GatewayMetricsSnapshot, parseGatewayMetrics } from "./telemetry.js";
 
 const RUNTIME_VERSION = 1;
 
@@ -22,6 +23,7 @@ export interface GatewayRuntimeState {
   maxActiveCrawlJobs?: number;
   maxRetainedCrawlJobs?: number;
   maxRetainedCrawlBytes?: number;
+  metrics?: GatewayMetricsSnapshot;
   advancedBackend?: {
     provider: "pagesift";
     url: string;
@@ -91,6 +93,7 @@ function validateState(value: unknown): GatewayRuntimeState {
   new URL(candidate.url);
   const advancedBackend = validateAdvancedBackend(candidate.advancedBackend);
   const gatewayVersion = parseReportedVersion(candidate.gatewayVersion);
+  const metrics = parseGatewayMetrics(candidate.metrics);
   return {
     version: 1,
     pid: candidate.pid as number,
@@ -98,6 +101,7 @@ function validateState(value: unknown): GatewayRuntimeState {
     mode: candidate.mode as "local" | "remote",
     startedAt: candidate.startedAt,
     ...(gatewayVersion === undefined ? {} : { gatewayVersion }),
+    ...(metrics === undefined ? {} : { metrics }),
     ...(advancedBackend === undefined ? {} : { advancedBackend }),
   };
 }
@@ -153,6 +157,7 @@ interface GatewayRuntimeHealth {
   maxActiveCrawlJobs?: number;
   maxRetainedCrawlJobs?: number;
   maxRetainedCrawlBytes?: number;
+  metrics?: GatewayMetricsSnapshot;
 }
 
 function capacity(value: unknown): number | undefined {
@@ -185,6 +190,7 @@ async function healthy(
       max_active_crawl_jobs?: unknown;
       max_retained_crawl_jobs?: unknown;
       max_retained_crawl_bytes?: unknown;
+      metrics?: unknown;
     };
     if (body.status !== "ok" || body.pid !== state.pid) {
       return undefined;
@@ -205,6 +211,7 @@ async function healthy(
     const maxActiveCrawlJobs = capacity(body.max_active_crawl_jobs);
     const maxRetainedCrawlJobs = capacity(body.max_retained_crawl_jobs);
     const maxRetainedCrawlBytes = capacity(body.max_retained_crawl_bytes);
+    const metrics = parseGatewayMetrics(body.metrics);
     return {
       ...(gatewayVersion === undefined ? {} : { gatewayVersion }),
       ...(providerMode === undefined ? {} : { providerMode }),
@@ -214,6 +221,7 @@ async function healthy(
       ...(maxActiveCrawlJobs === undefined ? {} : { maxActiveCrawlJobs }),
       ...(maxRetainedCrawlJobs === undefined ? {} : { maxRetainedCrawlJobs }),
       ...(maxRetainedCrawlBytes === undefined ? {} : { maxRetainedCrawlBytes }),
+      ...(metrics === undefined ? {} : { metrics }),
     };
   } catch {
     return undefined;

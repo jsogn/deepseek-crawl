@@ -66,8 +66,8 @@ Requirements:
 - Node.js `22.12` or newer.
 - An installed, working [Firecrawl CLI](https://docs.firecrawl.dev/cli).
 - A [DeepSeek API key](https://platform.deepseek.com/api_keys).
-- Managed lifecycle support on macOS and Windows; Linux uses the manual gateway
-  workflow.
+- Managed lifecycle support on macOS, Windows, and Linux with `systemd --user`;
+  containers and Linux hosts without a user manager use the manual workflow.
 
 ### Quick start
 
@@ -102,6 +102,11 @@ deepseek-crawl gateway uninstall  # restore config and remove task, state, and l
 `uninstall` removes the managed service and local state. This flow never changes
 `hosts`, DNS, system proxy settings, or TLS certificates.
 
+Managed JSON request logs use `gateway.jsonl`, rotating at 10 MiB with at most
+the current file and two historical files. Startup and crash logs rotate before
+each service restart, retaining only the current and previous run.
+`gateway uninstall` removes these logs.
+
 Resource-constrained environments can use bounded light limits: 10 HTTP
 requests, 4 Provider requests, 2 active Crawl jobs, 4 retained Crawl jobs, and a
 32 MiB retained Crawl document budget:
@@ -118,11 +123,17 @@ Reinstalling without either option preserves the current profile, and
 managed service is still on an older version, it reports the mismatch and
 suggests reinstalling; the service's actual health status remains unchanged.
 
+Each running instance also reports process-local aggregate counts for total,
+Firecrawl, Keyless, DeepSeek, and PageSift requests, fallbacks, client errors,
+and server errors. Counts contain no request content and reset on restart.
+
 ### SDKs, Linux, and manual gateways
 
-Managed lifecycle support currently uses macOS `launchd` and a Windows per-user
-Task Scheduler task. On Linux, in containers, and for other clients, start a
-foreground gateway in one terminal:
+Managed lifecycle support uses macOS `launchd`, a Windows per-user Task
+Scheduler task, and Linux `systemd --user`. Linux installation requires no root
+and writes a current-user unit, launcher, state, and logs. In containers, on
+Linux hosts without a user manager, and for other clients, start a foreground
+gateway in one terminal:
 
 ```bash
 deepseek-crawl gateway

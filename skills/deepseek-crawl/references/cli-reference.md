@@ -126,6 +126,7 @@ deepseek-crawl gateway
   [--remote]
   [--host <host>]
   [--port <1..65535>]
+  [--log-file <path>]
   [--advanced]
   [--advanced-url <http(s)-url>]
 
@@ -165,6 +166,11 @@ Defaults:
 - Capacity: 100 HTTP requests, 100 Provider requests, 10 active Crawl jobs,
   100 retained Crawl jobs, and 256 MiB of retained Crawl documents by default
 
+`--log-file` redirects JSON request logs from stderr to a rotating file. The
+active file rotates at 10 MiB and retains the current file plus two historical
+files. Managed services point this at `gateway.jsonl`; on each restart, startup
+and crash logs retain only the current and previous run.
+
 Capacity flags:
 
 - `--max-concurrent-requests <count>`
@@ -185,6 +191,12 @@ current setting. `gateway install --no-light` restores standard limits.
 comparison. A version mismatch is an issue but does not by itself change the
 Gateway health result. Reinstall the managed service to restart it on the CLI's
 version.
+
+Each instance also includes process-local `metrics`: total requests, provider
+counts for Firecrawl, Keyless, DeepSeek, PageSift, and unresolved routes,
+fallback requests, client/server error counts, and the latest fallback reason.
+Health probes are excluded. Metrics reset when the process restarts and contain
+no request content.
 
 Use `auth set firecrawl` to make Firecrawl-first local mode available; otherwise
 common routes use DeepSeek. Remote mode requires `auth set gateway`, or the
@@ -216,12 +228,14 @@ honors `Retry-After` or starts a 15-minute default cooldown. Keyless is never
 used by remote gateways, `deepseek-first`, or `no-fallback`, and it does not
 cover Crawl, Map, Extract, Batch Scrape, Agent, or job status.
 
-`gateway install` creates a user LaunchAgent on macOS or a per-user Scheduled
-Task on Windows, starts the service, waits for `/healthz`, and then points the
+`gateway install` creates a user LaunchAgent on macOS, a per-user Scheduled Task
+on Windows, or a `systemd --user` unit on Linux. The Linux path requires no root
+or running Docker container, but it requires a reachable user systemd manager.
+The command starts the service, waits for `/healthz`, and then points the
 Firecrawl CLI persistent `apiUrl` at the managed Gateway. The original API URL
 is stored in managed state. `gateway stop` restores that URL, while
-`gateway uninstall` also removes the task, launcher, state, and logs. This
-lifecycle changes no DNS, `hosts`, system proxy, or TLS settings.
+`gateway uninstall` also removes the service definition, launcher, state, and
+logs. This lifecycle changes no DNS, `hosts`, system proxy, or TLS settings.
 
 The gateway supports these common routes:
 

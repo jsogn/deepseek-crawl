@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { chmod, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CredentialName, CredentialStore } from "../credentials/store.js";
 import { writeFileAtomic } from "../output/files.js";
@@ -17,6 +17,7 @@ import {
 
 const SERVICE_LABEL = "com.jsogn.deepseek-crawl.gateway";
 const WINDOWS_TASK_NAME = "DeepSeek Crawl Gateway";
+const LINUX_UNIT_NAME = "deepseek-crawl-gateway.service";
 const CLOUD_API_URL = "https://api.firecrawl.dev";
 const HEALTH_POLL_MS = 250;
 const DEFAULT_HEALTH_TIMEOUT_MS = 15_000;
@@ -172,8 +173,35 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+function systemdPath(value: string): string {
+  return value.replaceAll("%", "%%");
+}
+
+function systemdQuote(value: string): string {
+  return `"${systemdPath(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
 function capacityLauncherArgs(profile: GatewayCapacityProfile): string {
   return profile === "light" ? ` ${LIGHT_CAPACITY_ARGS.join(" ")}` : "";
+}
+
+function linuxLauncherEnvironment(context: GatewayServiceContext): string[] {
+  const environment: Record<string, string> = {
+    HOME: context.home,
+  };
+  for (const name of [
+    "XDG_CONFIG_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_STATE_HOME",
+    "XDG_RUNTIME_DIR",
+    "DEEPSEEK_GATEWAY_RUNTIME_DIR",
+  ]) {
+    const value = context.env?.[name]?.trim();
+    if (value) {
+      environment[name] = value;
+    }
+  }
+  return Object.entries(environment).map(([name, value]) => `export ${name}=${shellQuote(value)}`);
 }
 
 function serviceGatewayEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -276,7 +304,20 @@ export function resolveGatewayServicePaths(
       firecrawlCredentialsPath: join(appData, "firecrawl-cli", "credentials.json"),
     };
   }
-  throw new Error("Managed Gateway services are supported on macOS and Windows only.");
+  if (platform === "linux") {
+    const configRoot = env.XDG_CONFIG_HOME?.trim() || join(home, ".config");
+    const stateRoot = env.XDG_STATE_HOME?.trim() || join(home, ".local", "state");
+    const serviceDirectory = join(configRoot, "deepseek-crawl", "gateway");
+    return {
+      serviceDirectory,
+      launcherPath: join(serviceDirectory, "gateway-service.sh"),
+      statePath: join(serviceDirectory, "service.json"),
+      serviceDefinitionPath: join(configRoot, "systemd", "user", LINUX_UNIT_NAME),
+      logsDirectory: join(stateRoot, "deepseek-crawl", "logs"),
+      firecrawlCredentialsPath: join(configRoot, "firecrawl-cli", "credentials.json"),
+    };
+  }
+  throw new Error("Managed Gateway services are supported on macOS, Windows, and Linux only.");
 }
 
 async function fileExists(path: string): Promise<boolean> {
@@ -411,6 +452,21 @@ async function writeServiceState(path: string, state: GatewayServiceState): Prom
   await writeFileAtomic(path, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
 }
 
+async function rotateBootstrapLogs(paths: GatewayServicePaths): Promise<void> {
+  await mkdir(paths.logsDirectory, { recursive: true, mode: 0o700 });
+  await Promise.all(
+    ["gateway.log", "gateway.err.log"].map(async (name) => {
+      const path = join(paths.logsDirectory, name);
+      await rm(`${path}.1`, { force: true });
+      await rename(path, `${path}.1`).catch((error) => {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+      });
+    }),
+  );
+}
+
 async function writeServiceFiles(
   context: GatewayServiceContext,
   paths: GatewayServicePaths,
@@ -422,6 +478,7 @@ async function writeServiceFiles(
     ? ` --advanced --advanced-url ${shellQuote(state.advancedBackend.url)}`
     : "";
   const capacityArgs = capacityLauncherArgs(state.capacityProfile);
+  const requestLogPath = join(paths.logsDirectory, "gateway.jsonl");
   if (context.platform === "win32") {
     const windowsAdvancedArgs = state.advancedBackend
       ? ` --advanced --advanced-url "${state.advancedBackend.url}"`
@@ -430,7 +487,7 @@ async function writeServiceFiles(
       "@echo off",
       'set "DEEPSEEK_GATEWAY_ADVANCED_URL="',
       'set "PAGESIFT_API_KEY="',
-      `"${context.nodePath}" "${context.cliPath}" gateway --provider-mode ${state.providerMode} --port ${state.port}${capacityArgs}${windowsAdvancedArgs} 1>>"${join(paths.logsDirectory, "gateway.log")}" 2>>"${join(paths.logsDirectory, "gateway.err.log")}"`,
+      `"${context.nodePath}" "${context.cliPath}" gateway --provider-mode ${state.providerMode} --port ${state.port} --log-file "${requestLogPath}"${capacityArgs}${windowsAdvancedArgs} 1>>"${join(paths.logsDirectory, "gateway.log")}" 2>>"${join(paths.logsDirectory, "gateway.err.log")}"`,
       "",
     ].join("\r\n");
     await writeFileAtomic(paths.launcherPath, launcher, { mode: 0o600 });
@@ -494,11 +551,47 @@ async function writeServiceFiles(
     return;
   }
 
+  if (context.platform === "linux") {
+    const launcher = [
+      "#!/bin/sh",
+      "set -eu",
+      "umask 077",
+      ...linuxLauncherEnvironment(context),
+      `exec ${shellQuote(context.nodePath)} ${shellQuote(context.cliPath)} gateway --provider-mode ${shellQuote(state.providerMode)} --port ${state.port} --log-file ${shellQuote(requestLogPath)}${capacityArgs}${advancedArgs}`,
+      "",
+    ].join("\n");
+    await writeFileAtomic(paths.launcherPath, launcher, { mode: 0o700 });
+    await chmod(paths.launcherPath, 0o700);
+
+    const unit = `[Unit]
+Description=DeepSeek Crawl Firecrawl-compatible Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/sh ${systemdQuote(paths.launcherPath)}
+WorkingDirectory=${systemdQuote(paths.serviceDirectory)}
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=append:${systemdPath(join(paths.logsDirectory, "gateway.log"))}
+StandardError=append:${systemdPath(join(paths.logsDirectory, "gateway.err.log"))}
+
+[Install]
+WantedBy=default.target
+`;
+    await writeFileAtomic(paths.serviceDefinitionPath, unit, { mode: 0o644 });
+    await writeServiceState(paths.statePath, state);
+    return;
+  }
+
   const launcher = [
     "#!/bin/sh",
     "set -eu",
     "umask 077",
-    `exec ${shellQuote(context.nodePath)} ${shellQuote(context.cliPath)} gateway --provider-mode ${shellQuote(state.providerMode)} --port ${state.port}${capacityArgs}${advancedArgs}`,
+    `exec ${shellQuote(context.nodePath)} ${shellQuote(context.cliPath)} gateway --provider-mode ${shellQuote(state.providerMode)} --port ${state.port} --log-file ${shellQuote(requestLogPath)}${capacityArgs}${advancedArgs}`,
     "",
   ].join("\n");
   await writeFileAtomic(paths.launcherPath, launcher, { mode: 0o700 });
@@ -547,6 +640,17 @@ async function commandRunner(context: GatewayServiceContext): Promise<GatewayCom
   return context.runCommand ?? runCommand;
 }
 
+async function systemdUserAvailable(context: GatewayServiceContext): Promise<boolean> {
+  const result = await (await commandRunner(context))("systemctl", ["--user", "show-environment"]);
+  return result.exitCode === 0;
+}
+
+async function ensureSystemdUser(context: GatewayServiceContext): Promise<void> {
+  if (!(await systemdUserAvailable(context))) {
+    throw new Error("Linux managed Gateway services require a running systemd --user manager.");
+  }
+}
+
 interface ServiceRuntimeInfo {
   exists: boolean;
   running: boolean;
@@ -568,6 +672,32 @@ async function serviceRuntimeInfo(context: GatewayServiceContext): Promise<Servi
     return {
       exists: true,
       running: state === "running",
+    };
+  }
+
+  if (context.platform === "linux") {
+    const result = await (await commandRunner(context))("systemctl", [
+      "--user",
+      "show",
+      LINUX_UNIT_NAME,
+      "--property=LoadState,ActiveState,MainPID",
+    ]);
+    if (result.exitCode !== 0) {
+      return { exists: false, running: false };
+    }
+    const values = new Map(
+      result.stdout
+        .split(/\r?\n/)
+        .map((line) => line.split("=", 2))
+        .filter((parts): parts is [string, string] => parts.length === 2),
+    );
+    const loadState = values.get("LoadState");
+    const activeState = values.get("ActiveState");
+    const pid = Number(values.get("MainPID"));
+    return {
+      exists: loadState !== undefined && loadState !== "not-found",
+      running: activeState === "active",
+      ...(Number.isSafeInteger(pid) && pid > 0 ? { pid } : {}),
     };
   }
 
@@ -650,6 +780,18 @@ async function stopService(
     return pid;
   }
 
+  if (context.platform === "linux") {
+    const info = await serviceRuntimeInfo(context);
+    if (!info.exists) {
+      return undefined;
+    }
+    const result = await runner("systemctl", ["--user", "stop", LINUX_UNIT_NAME]);
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr.trim() || "Could not stop the Gateway service.");
+    }
+    return undefined;
+  }
+
   const result = await runner("launchctl", ["bootout", launchctlTarget(context)]);
   if (
     result.exitCode !== 0 &&
@@ -714,6 +856,21 @@ async function startService(
     return;
   }
 
+  if (context.platform === "linux") {
+    const commands = [
+      ["daemon-reload"],
+      ["enable", LINUX_UNIT_NAME],
+      ["restart", LINUX_UNIT_NAME],
+    ] as const;
+    for (const args of commands) {
+      const result = await runner("systemctl", ["--user", ...args]);
+      if (result.exitCode !== 0) {
+        throw new Error(result.stderr.trim() || `Could not run systemctl ${args.join(" ")}.`);
+      }
+    }
+    return;
+  }
+
   const retryUntil = Date.now() + BOOTSTRAP_RETRY_TIMEOUT_MS;
   while (true) {
     const started = await runner("launchctl", [
@@ -732,6 +889,24 @@ async function startService(
 }
 
 async function deleteRegisteredService(context: GatewayServiceContext): Promise<void> {
+  if (context.platform === "linux") {
+    if (!(await systemdUserAvailable(context))) {
+      return;
+    }
+    const runner = await commandRunner(context);
+    const disabled = await runner("systemctl", ["--user", "disable", LINUX_UNIT_NAME]);
+    if (
+      disabled.exitCode !== 0 &&
+      !/not loaded|not found|does not exist/i.test(`${disabled.stdout}\n${disabled.stderr}`)
+    ) {
+      throw new Error(disabled.stderr.trim() || "Could not disable the Gateway service.");
+    }
+    const reloaded = await runner("systemctl", ["--user", "daemon-reload"]);
+    if (reloaded.exitCode !== 0) {
+      throw new Error(reloaded.stderr.trim() || "Could not reload the systemd user manager.");
+    }
+    return;
+  }
   if (context.platform !== "win32") {
     return;
   }
@@ -796,6 +971,7 @@ async function startFromState(
   state.desiredRunning = true;
   await writeServiceFiles(context, paths, state);
   await bootoutAndWait(context, previousPort ?? state.port);
+  await rotateBootstrapLogs(paths);
   await startService(context, paths);
   try {
     await waitForHealthy(context, state.port, state.providerMode);
@@ -847,7 +1023,9 @@ async function serviceAdvancedStatus(
   }
 }
 
-function unsupportedStatus(): GatewayServiceStatus {
+function unsupportedStatus(
+  issue = "Managed Gateway services are supported on macOS, Windows, and Linux with systemd --user only.",
+): GatewayServiceStatus {
   return {
     supported: false,
     installed: false,
@@ -864,15 +1042,20 @@ function unsupportedStatus(): GatewayServiceStatus {
     client_api_url: null,
     service_path: null,
     advanced_backend: disabledAdvancedBackendStatus(),
-    issues: ["Managed Gateway services are supported on macOS and Windows only."],
+    issues: [issue],
   };
 }
 
 export async function getGatewayServiceStatus(
   context: GatewayServiceContext,
 ): Promise<GatewayServiceStatus> {
-  if (context.platform !== "darwin" && context.platform !== "win32") {
+  if (!["darwin", "win32", "linux"].includes(context.platform)) {
     return unsupportedStatus();
+  }
+  if (context.platform === "linux" && !(await systemdUserAvailable(context))) {
+    return unsupportedStatus(
+      "Linux managed Gateway services require a running systemd --user manager.",
+    );
   }
   const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const state = await readServiceState(paths.statePath);
@@ -992,8 +1175,11 @@ export async function installGatewayService(
     noLight?: boolean;
   },
 ): Promise<GatewayServiceStatus> {
-  if (context.platform !== "darwin" && context.platform !== "win32") {
-    throw new Error("Managed Gateway services are supported on macOS and Windows only.");
+  if (!["darwin", "win32", "linux"].includes(context.platform)) {
+    throw new Error("Managed Gateway services are supported on macOS, Windows, and Linux only.");
+  }
+  if (context.platform === "linux") {
+    await ensureSystemdUser(context);
   }
   const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const env = serviceGatewayEnvironment(context.env ?? process.env);
@@ -1077,8 +1263,11 @@ export async function installGatewayService(
 export async function startGatewayService(
   context: GatewayServiceContext,
 ): Promise<GatewayServiceStatus> {
-  if (context.platform !== "darwin" && context.platform !== "win32") {
-    throw new Error("Managed Gateway services are supported on macOS and Windows only.");
+  if (!["darwin", "win32", "linux"].includes(context.platform)) {
+    throw new Error("Managed Gateway services are supported on macOS, Windows, and Linux only.");
+  }
+  if (context.platform === "linux") {
+    await ensureSystemdUser(context);
   }
   const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const state = await readServiceState(paths.statePath);
@@ -1091,8 +1280,8 @@ export async function startGatewayService(
 export async function stopGatewayService(
   context: GatewayServiceContext,
 ): Promise<GatewayServiceStatus> {
-  if (context.platform !== "darwin" && context.platform !== "win32") {
-    throw new Error("Managed Gateway services are supported on macOS and Windows only.");
+  if (!["darwin", "win32", "linux"].includes(context.platform)) {
+    throw new Error("Managed Gateway services are supported on macOS, Windows, and Linux only.");
   }
   const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const state = await readServiceState(paths.statePath);
@@ -1112,8 +1301,8 @@ export async function stopGatewayService(
 export async function uninstallGatewayService(
   context: GatewayServiceContext,
 ): Promise<GatewayServiceStatus> {
-  if (context.platform !== "darwin" && context.platform !== "win32") {
-    throw new Error("Managed Gateway services are supported on macOS and Windows only.");
+  if (!["darwin", "win32", "linux"].includes(context.platform)) {
+    throw new Error("Managed Gateway services are supported on macOS, Windows, and Linux only.");
   }
   const paths = resolveGatewayServicePaths(context.home, context.platform, context.env);
   const state = await readServiceState(paths.statePath);

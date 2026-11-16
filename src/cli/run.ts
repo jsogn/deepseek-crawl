@@ -59,6 +59,7 @@ import type { DeepSeekBalanceGateway, DeepSeekGateway } from "../deepseek/gatewa
 import { errorMessage as genericErrorMessage } from "../error-message.js";
 import { disabledAdvancedBackendStatus, probePageSift } from "../gateway/advanced-backend.js";
 import { GATEWAY_CAPACITY_DEFAULTS, loadGatewayConfig } from "../gateway/config.js";
+import { RotatingLogFileWriter } from "../gateway/log-file.js";
 import {
   type GatewayRuntimeState,
   pruneGatewayRuntimeStates,
@@ -338,6 +339,7 @@ Start a Firecrawl-compatible HTTP gateway.
 Options:
   --host <host>       Listener host (default: 127.0.0.1)
   --port <1..65535>   Fixed listener port (default locally: auto from 8787)
+  --log-file <path>   Write JSON request logs to a rotating file (10 MiB x 3)
   --provider-mode <mode>
                       firecrawl-first (default), deepseek-first, or no-fallback
   --credits-cooldown <seconds>
@@ -371,9 +373,9 @@ actual SDK apiUrl after choosing an available port.
 `,
   "gateway install": `Usage: deepseek-crawl gateway install [options]
 
-Install and start a managed background Gateway on macOS or Windows, then point
-the Firecrawl CLI at it. The original Firecrawl CLI API URL is saved so stop and
-uninstall can restore it.
+Install and start a managed background Gateway on macOS, Windows, or Linux with
+systemd --user, then point the Firecrawl CLI at it. The original Firecrawl CLI
+API URL is saved so stop and uninstall can restore it.
 
 Options:
   --provider-mode <mode>
@@ -400,7 +402,7 @@ time.
   "gateway uninstall": `Usage: deepseek-crawl gateway uninstall [--json]
 
 Stop the managed Gateway, restore the Firecrawl CLI API URL, and remove the
-managed LaunchAgent, launcher, state, and logs.
+managed service definition, launcher, state, and logs.
 `,
   "gateway status": `Usage: deepseek-crawl gateway status [--json]
 
@@ -561,6 +563,7 @@ async function runGateway(
     env: deps.env,
     ...(deps.credentialStores === undefined ? {} : { credentialStores: deps.credentialStores }),
   });
+  const logWriter = command.logFile ? new RotatingLogFileWriter(command.logFile) : undefined;
   const server = await startGatewayServer({
     config,
     env: deps.env,
@@ -570,7 +573,14 @@ async function runGateway(
         deps.gatewayRuntimeDirectory ?? resolveGatewayRuntimeDirectory(deps.env, homedir()),
       mode: command.remote ? "remote" : "local",
     },
-    logger: (event) => deps.stderr.write(`${JSON.stringify(event)}\n`),
+    logger: (event) => {
+      const line = `${JSON.stringify(event)}\n`;
+      if (logWriter) {
+        logWriter.write(line);
+      } else {
+        deps.stderr.write(line);
+      }
+    },
   });
   deps.stdout.write(`Firecrawl gateway listening on ${server.url.href}\n`);
   deps.stdout.write(
@@ -599,6 +609,7 @@ async function runGateway(
     await waitForAbort(deps.signal);
   } finally {
     await server.close();
+    await logWriter?.close();
   }
   return 0;
 }
@@ -798,6 +809,7 @@ async function runGatewayStatus(
       max_active_crawl_jobs: state.maxActiveCrawlJobs ?? null,
       max_retained_crawl_jobs: state.maxRetainedCrawlJobs ?? null,
       max_retained_crawl_bytes: state.maxRetainedCrawlBytes ?? null,
+      metrics: state.metrics ?? null,
       advanced_backend: await gatewayAdvancedStatus(state, deps),
     })),
   );
@@ -818,7 +830,7 @@ async function runGatewayStatus(
         ? ["Gateway is not running."]
         : instances.map(
             (instance) =>
-              `${instance.mode}  ${instance.url}  pid=${instance.pid}  version=${instance.gateway_version ?? "unknown"}  provider=${instance.provider_mode ?? "unknown"}  advanced=${instance.advanced_backend.enabled ? (instance.advanced_backend.api_ready ? "ready" : "unavailable") : "disabled"}  cooldown=${instance.credits_cooldown_seconds === null ? "unknown" : `${instance.credits_cooldown_seconds}s`}  http=${instance.max_concurrent_requests ?? "unknown"}  provider_requests=${instance.max_concurrent_provider_requests ?? "unknown"}  crawl_jobs=${instance.max_active_crawl_jobs ?? "unknown"}  retained_jobs=${instance.max_retained_crawl_jobs ?? "unknown"}  retained_bytes=${instance.max_retained_crawl_bytes ?? "unknown"}  started=${instance.started_at}`,
+              `${instance.mode}  ${instance.url}  pid=${instance.pid}  version=${instance.gateway_version ?? "unknown"}  provider=${instance.provider_mode ?? "unknown"}  advanced=${instance.advanced_backend.enabled ? (instance.advanced_backend.api_ready ? "ready" : "unavailable") : "disabled"}  cooldown=${instance.credits_cooldown_seconds === null ? "unknown" : `${instance.credits_cooldown_seconds}s`}  http=${instance.max_concurrent_requests ?? "unknown"}  provider_requests=${instance.max_concurrent_provider_requests ?? "unknown"}  crawl_jobs=${instance.max_active_crawl_jobs ?? "unknown"}  retained_jobs=${instance.max_retained_crawl_jobs ?? "unknown"}  retained_bytes=${instance.max_retained_crawl_bytes ?? "unknown"}  requests=${instance.metrics?.requests_total ?? "unknown"}  firecrawl=${instance.metrics?.firecrawl_requests ?? "unknown"}  keyless=${instance.metrics?.firecrawl_keyless_requests ?? "unknown"}  deepseek=${instance.metrics?.deepseek_requests ?? "unknown"}  fallbacks=${instance.metrics?.fallback_requests ?? "unknown"}  errors=${instance.metrics ? instance.metrics.client_errors + instance.metrics.server_errors : "unknown"}  started=${instance.started_at}`,
           );
     lines.push(
       "",

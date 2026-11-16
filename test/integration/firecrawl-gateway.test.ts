@@ -154,6 +154,18 @@ describe("Firecrawl-compatible gateway", () => {
       max_active_crawl_jobs: 3,
       max_retained_crawl_jobs: 9,
       max_retained_crawl_bytes: 12_345_678,
+      metrics: {
+        requests_total: 0,
+        firecrawl_requests: 0,
+        firecrawl_keyless_requests: 0,
+        deepseek_requests: 0,
+        pagesift_requests: 0,
+        none_requests: 0,
+        fallback_requests: 0,
+        client_errors: 0,
+        server_errors: 0,
+        last_fallback_reason: null,
+      },
     });
     const serialized = JSON.stringify(health);
     expect(serialized).not.toContain("gateway-token");
@@ -2331,6 +2343,18 @@ describe("Firecrawl-compatible gateway", () => {
     expect(serialized).not.toContain("do-not-log");
     expect(serialized).not.toContain("secret-page");
     expect(serialized).not.toContain("fc-upstream");
+
+    const health = (await (await fetch(new URL("/healthz", server.url))).json()) as {
+      metrics: Record<string, unknown>;
+    };
+    expect(health.metrics).toMatchObject({
+      requests_total: 1,
+      firecrawl_requests: 1,
+      fallback_requests: 0,
+      client_errors: 0,
+      server_errors: 0,
+      last_fallback_reason: null,
+    });
   });
 
   it("logs the provider fallback reason without request content", async () => {

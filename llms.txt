@@ -107,20 +107,24 @@ or Batch Scrape.
 `gateway install`:
 
 - Uses the default `firecrawl-first` provider mode.
-- Starts a managed user service: `launchd` on macOS or Task Scheduler on Windows.
+- Starts a managed user service: `launchd` on macOS, Task Scheduler on Windows,
+  or `systemd --user` on Linux.
 - Waits for a healthy gateway.
 - Backs up the Firecrawl CLI API URL and points it at the local gateway.
 - Does not modify `hosts`, DNS, system proxy settings, or TLS certificates.
 - Reports CLI and running Gateway versions; a mismatch recommends reinstalling.
+- Rotates managed JSON request logs at 10 MiB with two historical files.
+- Reports process-local provider, fallback, and error counters without request
+  content; counters reset when the Gateway restarts.
 
 For a resource-constrained machine, use `gateway install --light`. It applies
 bounded managed-service limits without changing ordinary Search, Scrape, or Map
 capabilities. Reinstalling without either profile flag preserves the current
 profile; `gateway install --no-light` restores the standard limits.
 
-If the user's platform is Linux or the gateway must run in a container, do not
-claim managed lifecycle support. Start the documented foreground or deployment
-mode instead:
+On Linux, managed lifecycle requires an available `systemctl --user` manager;
+do not request root or enable linger. If the user manager is unavailable or the
+gateway must run in a container, use foreground or deployment mode instead:
 
 ```bash
 deepseek-crawl gateway

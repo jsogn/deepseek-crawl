@@ -59,7 +59,8 @@ Keyless 是路线 A 内部的 Firecrawl 传输层，不是第三条产品路线�
 - Node.js `22.12` 或更高版本。
 - 已安装并可使用 [Firecrawl CLI](https://docs.firecrawl.dev/cli)。
 - [DeepSeek API Key](https://platform.deepseek.com/api_keys)。
-- macOS 或 Windows 可使用受管理服务；Linux 使用手动网关方式。
+- macOS、Windows 或带 `systemd --user` 的 Linux 可使用受管理服务；容器和无
+  user manager 的 Linux 使用手动网关方式。
 
 ### 快速开始
 
@@ -91,6 +92,10 @@ deepseek-crawl gateway uninstall  # 恢复配置并清理任务、状态和日�
 `stop` 会避免 Firecrawl CLI 继续指向失效端口；`uninstall` 可移除受管理服务和
 本地状态。该流程不修改 `hosts`、DNS、系统代理或 TLS 证书。
 
+受管理服务的 JSON 请求日志写入 `gateway.jsonl`，单文件达到 10 MiB 后轮转，最多
+保留当前文件和两份历史文件。每次服务重启前还会滚动启动/崩溃日志，只保留当前和
+上一份。`gateway uninstall` 会删除这些日志。
+
 资源受限的环境可使用轻量上限：10 个 HTTP 请求、4 个 Provider 请求、2 个运行中
 Crawl、4 个保留 Crawl jobs，以及 32 MiB 的保留 Crawl 文档预算：
 
@@ -104,10 +109,15 @@ deepseek-crawl gateway install --no-light  # 恢复标准上限
 `gateway status` 同时报告 CLI 与运行中网关的版本。后台服务仍在旧版本时，会提示
 版本不匹配并建议重新执行 `gateway install`；服务本身仍按真实健康状态报告。
 
+运行实例还会报告进程内聚合统计：总请求、Firecrawl、Keyless、DeepSeek、PageSift、
+fallback、客户端错误和服务端错误数量。统计不含请求内容，Gateway 重启后归零。
+
 ### SDK、Linux 与手动网关
 
-受管理生命周期目前由 macOS `launchd` 和 Windows 用户级 Task Scheduler 提供。
-Linux、容器和其他客户端可在一个终端启动前台网关：
+受管理生命周期由 macOS `launchd`、Windows 用户级 Task Scheduler 和 Linux
+`systemd --user` 提供。Linux 安装不需要 root，会写入当前用户的 systemd unit、
+启动器、状态和日志。容器、没有可用 user manager 的 Linux 和其他客户端可在一个
+终端启动前台网关：
 
 ```bash
 deepseek-crawl gateway

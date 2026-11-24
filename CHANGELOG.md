@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.17.1 - 2026-11-24
+
+### Fixed
+
+- Continue `firecrawl-first` fallback to DeepSeek when local Firecrawl Keyless
+  returns `401` or `403`, and cool down Keyless so repeated requests do not
+  retry a denied transport.
+
 ## 0.17.0 - 2026-11-16
 
 ### Added

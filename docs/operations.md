@@ -72,11 +72,11 @@ gateway credential. It covers Scrape, Search, Parse, and Post-Scrape Interact.
 Keyless Crawl, Map, Extract, Batch Scrape, Agent, and job-status routes are not
 attempted.
 
-Keyless usage is free but rate-limited by Firecrawl per public IP. On `429`, the
-gateway honors `Retry-After` or starts a 15-minute default cooldown. During that
-cooldown, common routes use DeepSeek; keyless-only routes return a structured
-`429 keyless_rate_limited` response. Remote gateways never use Keyless
-automatically.
+Keyless usage is free but rate-limited by Firecrawl per public IP. On `401`,
+`403`, or `429`, the gateway honors `Retry-After` or starts a 15-minute default
+cooldown. During that cooldown, common routes use DeepSeek; keyless-only routes
+retain the upstream error and return a structured `429 keyless_rate_limited`
+response during the cooldown. Remote gateways never use Keyless automatically.
 
 ### Lightweight managed service
 
@@ -208,13 +208,14 @@ formats return `400 unsupported_fallback_feature` rather than being silently
 ignored. Firecrawl requests that remain on the upstream path still pass through
 unchanged.
 
-In the default `firecrawl-first` mode, the gateway switches to DeepSeek only
-after a Firecrawl `402`, while exhausted credits are in the short local
-cooldown, or when no Firecrawl credential is configured. `deepseek-first` skips
+In the default `firecrawl-first` mode, the gateway switches to DeepSeek after a
+Firecrawl `402`, while exhausted credits are in the short local cooldown, or
+when no Firecrawl credential is configured. Local Keyless `401/403/429` also
+continues to DeepSeek on supported common routes. `deepseek-first` skips
 Firecrawl for common routes; `no-fallback` passes Firecrawl errors through.
-`429`, `401/403`, invalid requests, and `5xx` retain Firecrawl behavior.
-Advanced Firecrawl capabilities return a structured error instead of pretending
-a DeepSeek fallback succeeded.
+Keyed Firecrawl `429`, `401/403`, invalid requests, and `5xx` retain Firecrawl
+behavior. Advanced Firecrawl capabilities return a structured error instead of
+pretending a DeepSeek fallback succeeded.
 
 If Firecrawl cannot be reached or times out before returning a response, the
 gateway returns `502 upstream_unavailable` without switching providers. This

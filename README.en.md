@@ -10,8 +10,8 @@ switch to DeepSeek after a credit-exhaustion response. You can also use the
 built-in CLI, Agent Skill, and MCP for Agent workflows that need mapping, batch
 reads, bounded Crawl, monitoring, and resumable jobs.
 
-Current release: `0.17.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
-[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.17.0)
+Current release: `0.17.1` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
+[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.17.1)
 
 > [!IMPORTANT]
 > The gateway covers the most common Firecrawl routes and does not claim full API
@@ -81,9 +81,12 @@ firecrawl scrape https://example.com
 ```
 
 `gateway install` uses the default `firecrawl-first` policy: common requests
-prefer Firecrawl and switch to DeepSeek after a `402`, during the credit
-cooldown, or when no Firecrawl credential is configured. `429`, authentication
-errors, invalid requests, and `5xx` responses never switch providers silently.
+prefer Firecrawl and try local Keyless, then DeepSeek, after a `402`, during the
+credit cooldown, or when no Firecrawl credential is configured. Keyed Firecrawl
+`429`, authentication errors, invalid requests, and `5xx` responses never switch
+providers silently. Keyless `401/403/429` responses mark Keyless unavailable and
+continue to DeepSeek on supported common routes; keyless-only routes retain the
+upstream error.
 
 After installation, Agents and Skills that invoke the local `firecrawl` command
 need no call-site changes. The gateway starts looking for a free port at `8787`,
@@ -233,9 +236,10 @@ DeepSeek fallback covers `POST /v2/search`, `POST /v2/scrape`, `POST /v2/map`,
 
 Local `firecrawl-first` gateways also try Firecrawl Keyless after a keyed `402`,
 during the keyed credit cooldown, or when no Firecrawl credential exists.
-Keyless requires no API key but is rate-limited per public IP each day. A `429`
-starts a 15-minute default cooldown. Remote gateways never use Keyless
-automatically.
+Keyless requires no API key but is rate-limited per public IP each day. A
+`401/403/429` starts a 15-minute default cooldown; supported common routes then
+use DeepSeek, while keyless-only routes retain the Keyless error or a structured
+`429`. Remote gateways never use Keyless automatically.
 
 ## Compatibility boundaries
 

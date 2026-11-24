@@ -72,10 +72,10 @@ Keyless 是传输层，不是新的 Provider mode。只有 loopback 网关且处
 后 Interact，不会尝试 Keyless Crawl、Map、Extract、Batch Scrape、Agent 或 Job
 Status。
 
-Keyless 免费但按 Firecrawl 的公网 IP 每日限量。收到 `429` 时优先遵守
-`Retry-After`，否则冷却 15 分钟。冷却期间，常用路由使用 DeepSeek；仅 Keyless
-支持的路由返回结构化的 `429 keyless_rate_limited`。远程网关不会自动使用
-Keyless。
+Keyless 免费但按 Firecrawl 的公网 IP 每日限量。收到 `401`、`403` 或 `429` 时
+优先遵守 `Retry-After`，否则冷却 15 分钟。冷却期间，支持 DeepSeek 的常用路由
+回退到 DeepSeek；仅 Keyless 支持的路由保留上游错误，冷却中返回结构化的
+`429 keyless_rate_limited`。远程网关不会自动使用 Keyless。
 
 ### 轻量受管理服务
 
@@ -187,11 +187,12 @@ Fallback 使用封闭能力 allowlist，只接受具有明确且语义保真的 
 `400 unsupported_fallback_feature`，不会被静默忽略。仍由 Firecrawl 处理的请求
 继续原样透传。
 
-默认 `firecrawl-first` 模式只在 Firecrawl `402`、余额耗尽后的短期熔断状态或
-未配置 Firecrawl 凭据时切换 DeepSeek。`deepseek-first` 的常用路由跳过
-Firecrawl；`no-fallback` 原样返回 Firecrawl 错误。`429`、`401/403`、无效请求
-和 `5xx` 保持 Firecrawl 行为。高级 Firecrawl 功能没有 DeepSeek 等价能力时
-返回结构化错误，不会伪造成功。
+默认 `firecrawl-first` 模式在 Firecrawl `402`、余额耗尽后的短期熔断状态或
+未配置 Firecrawl 凭据时切换 DeepSeek；本地 Keyless 传输层返回 `401/403/429`
+时，也继续回退到支持 DeepSeek 的常用路由。`deepseek-first` 的常用路由跳过
+Firecrawl；`no-fallback` 原样返回 Firecrawl 错误。带 Key Firecrawl 的
+`429`、`401/403`、无效请求和 `5xx` 保持 Firecrawl 行为。高级 Firecrawl
+功能没有 DeepSeek 等价能力时返回结构化错误，不会伪造成功。
 
 如果 Firecrawl 在返回响应前连接失败或超时，网关返回 `502 upstream_unavailable`，
 不会切换 Provider。这样临时上游故障不会静默改变 Provider 或响应结构。

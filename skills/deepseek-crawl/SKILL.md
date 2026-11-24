@@ -152,8 +152,10 @@ request should retry Firecrawl.
 Local `firecrawl-first` gateways try Firecrawl Keyless before DeepSeek for
 Scrape, Search, Parse, and Post-Scrape Interact routes. Keyless removes every
 incoming `Authorization` header and never inherits another credential. It is
-rate-limited by Firecrawl; respect `429` and never rotate IPs or add a bypass.
-Remote gateways and non-`firecrawl-first` modes do not use Keyless.
+rate-limited by Firecrawl; a `401/403/429` response marks Keyless unavailable,
+and supported common routes fall back to DeepSeek. Respect `429` and never
+rotate IPs or add a bypass. Remote gateways and non-`firecrawl-first` modes do
+not use Keyless.
 
 Gateway Provider requests and background Crawl jobs have separate global limits.
 Retained Crawl jobs and serialized result bytes are also bounded. Capacity first

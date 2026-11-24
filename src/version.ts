@@ -1,4 +1,4 @@
-export const packageVersion = "0.17.0";
+export const packageVersion = "0.17.1";
 
 export function parseReportedVersion(value: unknown): string | undefined {
   if (typeof value !== "string") {

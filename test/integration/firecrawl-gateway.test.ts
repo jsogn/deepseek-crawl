@@ -1376,6 +1376,56 @@ describe("Firecrawl-compatible gateway", () => {
     expect(deepSeekCalls).toBe(0);
   });
 
+  it("uses DeepSeek after keyless 403 and does not retry Keyless during cooldown", async () => {
+    const events: GatewayRequestLog[] = [];
+    let keyedCalls = 0;
+    let keylessCalls = 0;
+    let deepSeekCalls = 0;
+    const server = await startGatewayServer({
+      config: testConfig(),
+      env: { FIRECRAWL_API_KEY: "fc-test" },
+      deepseekClient: {
+        async search() {
+          throw new Error("Unexpected Search call.");
+        },
+        async fetch() {
+          deepSeekCalls += 1;
+          return { title: "Example", content: "# DeepSeek" };
+        },
+      },
+      fetchImpl: async (_input, init) => {
+        if (new Headers(init?.headers).has("authorization")) {
+          keyedCalls += 1;
+          return Response.json({ success: false, error: "Payment required." }, { status: 402 });
+        }
+        keylessCalls += 1;
+        return Response.json({ success: false, error: "Forbidden." }, { status: 403 });
+      },
+      logger: (event) => events.push(event),
+    });
+    servers.push(server);
+
+    const body = JSON.stringify({ url: "https://example.com/", formats: ["markdown"] });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(new URL("/v2/scrape", server.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      expect(response.status).toBe(200);
+    }
+
+    expect(keyedCalls).toBe(1);
+    expect(keylessCalls).toBe(1);
+    expect(deepSeekCalls).toBe(2);
+    expect(events[0]).toMatchObject({
+      provider: "deepseek",
+      fallback: true,
+      fallback_reason: "firecrawl_keyless_denied",
+      status: 200,
+    });
+  });
+
   it("uses DeepSeek after keyless 429 and does not retry Keyless during cooldown", async () => {
     let keylessCalls = 0;
     let deepSeekCalls = 0;

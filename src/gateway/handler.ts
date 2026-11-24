@@ -815,7 +815,9 @@ export function createGatewayHandler(
             : "firecrawl_keyless_no_credential";
           try {
             const upstream = await requestUpstream("keyless");
-            if (upstream.status === 429) {
+            const keylessUnavailable =
+              upstream.status === 401 || upstream.status === 403 || upstream.status === 429;
+            if (keylessUnavailable) {
               keylessCooldown.block(now(), upstream.headers.get("retry-after"));
               if (route === undefined) {
                 await sendUpstream(response, upstream);
@@ -824,7 +826,10 @@ export function createGatewayHandler(
               await upstream.body?.cancel().catch(() => undefined);
               provider = "deepseek";
               shouldTryDeepSeek = true;
-              fallbackReason = "firecrawl_keyless_rate_limited";
+              fallbackReason =
+                upstream.status === 429
+                  ? "firecrawl_keyless_rate_limited"
+                  : "firecrawl_keyless_denied";
             } else {
               await sendUpstream(response, upstream);
               return;

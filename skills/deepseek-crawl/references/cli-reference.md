@@ -223,10 +223,12 @@ installation and Firecrawl CLI configuration unchanged.
 
 Local loopback gateways in `firecrawl-first` mode also use Firecrawl Keyless for
 Scrape, Search, Parse, and Post-Scrape Interact. Keyless requests remove every
-Authorization header. They are free but rate-limited by Firecrawl per IP; `429`
-honors `Retry-After` or starts a 15-minute default cooldown. Keyless is never
-used by remote gateways, `deepseek-first`, or `no-fallback`, and it does not
-cover Crawl, Map, Extract, Batch Scrape, Agent, or job status.
+Authorization header. They are free but rate-limited by Firecrawl per IP; a
+`401/403/429` response honors `Retry-After` or starts a 15-minute default
+cooldown. Supported common routes then fall back to DeepSeek, while keyless-only
+routes retain the Keyless error. Keyless is never used by remote gateways,
+`deepseek-first`, or `no-fallback`, and it does not cover Crawl, Map, Extract,
+Batch Scrape, Agent, or job status.
 
 `gateway install` creates a user LaunchAgent on macOS, a per-user Scheduled Task
 on Windows, or a `systemd --user` unit on Linux. The Linux path requires no root
@@ -251,10 +253,11 @@ DELETE /v2/crawl/:id
 
 In the default `firecrawl-first` mode it first uses Firecrawl and switches to
 DeepSeek when Firecrawl returns `402`, the local exhausted-credit cooldown is
-active, or no Firecrawl credential is available. `deepseek-first` skips
+active, or no Firecrawl credential is available. Local Keyless `401/403/429`
+also continues to DeepSeek on supported common routes. `deepseek-first` skips
 Firecrawl for common routes; `no-fallback` passes Firecrawl errors through.
-`429`, authentication errors, invalid requests, and `5xx` are returned without
-provider switching.
+Keyed Firecrawl `429`, authentication errors, invalid requests, and `5xx` are
+returned without provider switching.
 
 Firecrawl connection failures and timeouts before a response return
 `502 upstream_unavailable`; the gateway does not switch providers.

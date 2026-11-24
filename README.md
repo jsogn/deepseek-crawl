@@ -9,8 +9,8 @@
 CLI、Agent Skill 和 MCP 用于需要 Map、批量读取、Crawl、监控和可恢复任务的 Agent
 工作流。
 
-当前版本：`0.17.0` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
-[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.17.0)
+当前版本：`0.17.1` · [npm](https://www.npmjs.com/package/deepseek-crawl) ·
+[GitHub Release](https://github.com/jsogn/deepseek-crawl/releases/tag/v0.17.1)
 
 > [!IMPORTANT]
 > 网关覆盖最常用的 Firecrawl 路由，不承诺完整 API 兼容。Firecrawl CLI 受管理配置
@@ -74,8 +74,10 @@ firecrawl scrape https://example.com
 ```
 
 `gateway install` 使用默认的 `firecrawl-first` 策略：常用请求优先发送给
-Firecrawl；收到 `402`、处于额度冷却期，或没有 Firecrawl 凭据时切换到 DeepSeek。
-`429`、认证失败、无效请求和 `5xx` 不会静默切换 Provider。
+Firecrawl；收到 `402`、处于额度冷却期，或没有 Firecrawl 凭据时，依次尝试本地
+Keyless 和 DeepSeek。带 Key Firecrawl 的 `429`、认证失败、无效请求和 `5xx`
+不会静默切换 Provider；Keyless 的 `401/403/429` 视为该传输层不可用，支持
+DeepSeek 的常用路由继续回退，Keyless-only 路由原样返回错误。
 
 安装成功后，依赖本机 `firecrawl` 命令的 Agent 和 Skill 不需要修改调用方式。网关
 从 `8787` 开始寻找可用端口，健康检查通过后才把当前用户的 Firecrawl CLI
@@ -208,7 +210,9 @@ DeepSeek fallback 覆盖 `POST /v2/search`、`POST /v2/scrape`、`POST /v2/map`�
 
 本地 `firecrawl-first` 网关还会在带 Key Firecrawl 返回 `402`、处于额度冷却期或
 没有 Firecrawl 凭据时，尝试 Firecrawl Keyless。Keyless 不需要 API Key，但按公网
-IP 每日限量，出现 `429` 后默认冷却 15 分钟。远程网关不会自动使用 Keyless。
+IP 每日限量，出现 `401/403/429` 后默认冷却 15 分钟；冷却期间支持 DeepSeek 的
+常用路由直接回退，Keyless-only 路由返回 Keyless 错误或结构化 `429`。
+远程网关不会自动使用 Keyless。
 
 ## 兼容边界
 

@@ -82,9 +82,10 @@ will provide `FIRECRAWL_API_KEY` or does not need the Firecrawl-first route.
 
 For a local loopback gateway, Firecrawl Keyless can serve Scrape, Search, Parse,
 and Post-Scrape Interact without a Firecrawl key. It is rate-limited per public
-IP; respect `429` and do not rotate IPs. Crawl, Map, Extract, Batch Scrape,
-Agent, and job-status routes require a Firecrawl API key. Remote gateways do
-not use Keyless automatically.
+IP; a `401/403/429` response marks it unavailable, and supported common routes
+fall back to DeepSeek. Respect `429` and do not rotate IPs. Crawl, Map, Extract,
+Batch Scrape, Agent, and job-status routes require a Firecrawl API key. Remote
+gateways do not use Keyless automatically.
 
 PageSift is not installed or managed by DeepSeek Crawl. If the user already runs
 PageSift and explicitly needs browser-dependent advanced Scrape or Post-Scrape
